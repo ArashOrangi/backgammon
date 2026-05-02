@@ -1,4 +1,4 @@
-import { ClientMessage, ServerMessage } from "./protocol";
+import { ClientMessage } from "./protocol";
 import { SocketContext } from "./socket-context";
 import { RoomManager } from "./room-manager";
 import {
@@ -10,6 +10,11 @@ import { validateMove } from "@/game/rule-validator";
 import { Value } from "@sinclair/typebox/value";
 import { MovePieceSchema } from "@/validations/game.move";
 
+import {
+  onValidationSocketResponse,
+  onErrorSocketResponse,
+} from "@/responses/response-builder";
+
 type Handler<TPayload = any> = (
   ctx: SocketContext,
   payload: TPayload,
@@ -17,73 +22,74 @@ type Handler<TPayload = any> = (
 ) => void;
 
 export class MessageRouter {
-  private handlers = new Map<string, Handler>();
+  private handlers = new Map<ClientMessage["type"], Handler>();
 
   constructor(private rooms: RoomManager) {}
 
-  register<TPayload = any>(type: string, handler: Handler<TPayload>) {
+  register<TPayload>(type: ClientMessage["type"], handler: Handler<TPayload>) {
     this.handlers.set(type, handler as Handler);
   }
-  //TODO refactor needed
-  dispatch(ctx: SocketContext, message: any) {
-    switch (message.type) {
-      case "game.join":
-        if (!validateJoin(message.payload)) {
-          return ctx.send({
-            type: "game.error",
-            payload: { message: "Invalid join payload" },
-          });
-        }
-        return this.handlers.get("game.join")?.(
-          ctx,
-          message.payload,
-          this.rooms,
-        );
 
-      case "game.roll":
-        if (!validateRoll(message.payload)) {
-          return ctx.send({
-            type: "game.error",
-            payload: { message: "Invalid roll payload" },
-          });
-        }
-        return this.handlers.get("game.roll")?.(
-          ctx,
-          message.payload,
-          this.rooms,
-        );
+  dispatch(ctx: SocketContext, rawMessage: unknown) {
+    try {
+      const message = rawMessage as ClientMessage;
 
-      case "game.move":
-        if (!Value.Check(MovePieceSchema, message.payload)) {
-          return ctx.send({
-            type: "game.error",
-            payload: { message: "Invalid move payload" },
-          });
-        }
-        return this.handlers.get("game.move")?.(
-          ctx,
-          message.payload,
-          this.rooms,
-        );
-
-      case "player.leave":
-        if (!validateLeave(message.payload)) {
-          return ctx.send({
-            type: "game.error",
-            payload: { message: "Invalid leave payload" },
-          });
-        }
-        return this.handlers.get("player.leave")?.(
-          ctx,
-          message.payload,
-          this.rooms,
-        );
-
-      default:
+      if (!message?.type || !message?.payload) {
         return ctx.send({
           type: "game.error",
-          payload: { message: "Unknown message type" },
+          payload: onValidationSocketResponse("Invalid message structure"),
         });
+      }
+
+      const handler = this.handlers.get(message.type);
+
+      if (!handler) {
+        return ctx.send({
+          type: "game.error",
+          payload: onValidationSocketResponse("Unknown message type"),
+        });
+      }
+
+      // Validation Layer
+      const isValid = this.validateMessage(message);
+
+      if (!isValid) {
+        return ctx.send({
+          type: "game.error",
+          payload: onValidationSocketResponse(
+            `Invalid ${message.type} payload`,
+          ),
+        });
+      }
+
+      // Safe handler execution
+      handler(ctx, message.payload as any, this.rooms);
+    } catch (error) {
+      console.error("MessageRouter Error:", error);
+
+      return ctx.send({
+        type: "game.error",
+        payload: onErrorSocketResponse("Internal server error"),
+      });
+    }
+  }
+
+  private validateMessage(message: ClientMessage): boolean {
+    switch (message.type) {
+      case "game.join":
+        return validateJoin(message.payload);
+
+      case "game.roll":
+        return validateRoll(message.payload);
+
+      case "game.move":
+        return Value.Check(MovePieceSchema, message.payload);
+
+      case "player.leave":
+        return validateLeave(message.payload);
+
+      default:
+        return false;
     }
   }
 }

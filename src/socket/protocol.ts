@@ -1,4 +1,5 @@
 import { GameState } from "@/game/types";
+import { IDataResponse } from "@/responses/ResponseStates";
 
 export type ClientMessage =
   | {
@@ -31,25 +32,17 @@ export type ClientMessage =
 export type ServerMessage =
   | {
       type: "game.state";
-      payload: GameState;
+      payload: IDataResponse<GameState, undefined>;
     }
   | {
       type: "game.roll";
-      payload: {
-        dice: number[];
-      };
+      payload: IDataResponse<{ dice: number[] }, undefined>;
     }
   | {
       type: "game.join";
-      payload: {
-        success: boolean;
-        message: string;
-        game?: GameState;
-      };
+      payload: IDataResponse<GameState, undefined>;
     }
   | {
       type: "game.error";
-      payload: {
-        message: string;
-      };
+      payload: IDataResponse<unknown, unknown>;
     };

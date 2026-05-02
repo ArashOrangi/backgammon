@@ -20,12 +20,17 @@ export function onOkSocketResponse<T = undefined, X = undefined>(
 
 // Validation errors
 export function onValidationSocketResponse(
-  validations: IValidations,
-  message = "Validation error",
+  validations: IValidations | string,
 ): IDataResponse {
+  if (typeof validations === "string") {
+    return {
+      responseState: ResponseStates.Validations,
+      message: validations,
+    };
+  }
+
   return {
     responseState: ResponseStates.Validations,
-    message,
     validations,
   };
 }

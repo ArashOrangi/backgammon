@@ -5,6 +5,11 @@ import { applyMove } from "../../game/game.engine";
 import { validateMove } from "../../game/rule-validator";
 import { MovePayload } from "../../validations/game.move";
 
+import {
+  onErrorSocketResponse,
+  onOkSocketResponse,
+} from "@/responses/response-builder";
+
 export function handleMove(
   ctx: SocketContext,
   payload: MovePayload,
@@ -15,22 +20,20 @@ export function handleMove(
   const game = getGame(gameId);
 
   if (!game) {
-    ctx.send({
+    return ctx.send({
       type: "game.error",
-      payload: { message: "Game not found" },
+      payload: onErrorSocketResponse("Game not found"),
     });
-    return;
   }
 
-  // ✅ Rule-level validation (جای درستش اینجاست)
+  // Rule validation
   const { valid, reason } = validateMove(game, ctx.id, from, to);
 
   if (!valid) {
-    ctx.send({
+    return ctx.send({
       type: "game.error",
-      payload: { message: reason ?? "Invalid move" },
+      payload: onErrorSocketResponse(reason ?? "Invalid move"),
     });
-    return;
   }
 
   try {
@@ -40,14 +43,14 @@ export function handleMove(
 
     rooms.broadcast(game.id, {
       type: "game.state",
-      payload: game,
+      payload: onOkSocketResponse(game),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to make move";
 
     ctx.send({
       type: "game.error",
-      payload: { message },
+      payload: onErrorSocketResponse(message),
     });
   }
 }

@@ -9,13 +9,20 @@ export function createGame(id: string, playerId: string): GameState {
     turn: playerId,
     board: {
       points: Array.from({ length: 24 }, () => ({ owner: null, count: 0 })),
-      bar: {},
-      borneOff: {},
+      bar: {
+        white: 0,
+        black: 0,
+      },
+      borneOff: {
+        white: 0,
+        black: 0,
+      },
     },
     createdAt: Date.now(),
   };
 
   games.set(id, game);
+
   return game;
 }
 
@@ -27,11 +34,11 @@ export function saveGame(game: GameState) {
   games.set(game.id, game);
 }
 
-export function removeGame(id: string) {
+export function deleteGame(id: string) {
   games.delete(id);
 }
 
-export function listGames() {
+export function listGames(): GameState[] {
   return Array.from(games.values());
 }
 

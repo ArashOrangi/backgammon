@@ -8,7 +8,12 @@ import { handleJoin } from "./handlers/join";
 import { handleRoll } from "./handlers/roll";
 import { handleMove } from "./handlers/move";
 import { handleLeave } from "./handlers/leave";
-import { getGame, saveGame } from "@/game/game.store";
+
+import { getGame, saveGame, deleteGame } from "@/game/game.store";
+import {
+  onErrorSocketResponse,
+  onOkSocketResponse,
+} from "@/responses/response-builder";
 
 export function registerSocketHandlers(wss: WebSocketServer) {
   const rooms = new RoomManager();
@@ -22,7 +27,7 @@ export function registerSocketHandlers(wss: WebSocketServer) {
   wss.on("connection", (ws) => {
     const ctx = new SocketContext(ws);
 
-    console.log(`✅ Player connected: ${ctx.id}`);
+    console.log(`Player connected: ${ctx.id}`);
 
     ws.on("message", (raw) => {
       try {
@@ -31,7 +36,7 @@ export function registerSocketHandlers(wss: WebSocketServer) {
       } catch {
         ctx.send({
           type: "game.error",
-          payload: { message: "Invalid JSON format" },
+          payload: onErrorSocketResponse("Invalid JSON format"),
         });
       }
     });
@@ -44,12 +49,17 @@ export function registerSocketHandlers(wss: WebSocketServer) {
 
         if (game) {
           game.players = game.players.filter((p) => p !== ctx.id);
-          saveGame(game);
 
-          rooms.broadcast(game.id, {
-            type: "game.state",
-            payload: game,
-          });
+          if (game.players.length === 0) {
+            deleteGame(game.id);
+          } else {
+            saveGame(game);
+
+            rooms.broadcast(game.id, {
+              type: "game.state",
+              payload: onOkSocketResponse(game),
+            });
+          }
         }
       }
 

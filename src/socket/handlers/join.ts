@@ -1,6 +1,10 @@
 import { addPlayerToGame, getGame } from "../../game/game.store";
 import { SocketContext } from "../socket-context";
 import { RoomManager } from "../room-manager";
+import {
+  onErrorSocketResponse,
+  onOkSocketResponse,
+} from "@/responses/response-builder";
 
 type JoinPayload = {
   gameId: string;
@@ -12,14 +16,14 @@ export function handleJoin(
   rooms: RoomManager,
 ) {
   const { gameId } = payload;
+
   const game = getGame(gameId);
 
   if (!game) {
-    ctx.send({
+    return ctx.send({
       type: "game.error",
-      payload: { message: "Game not found" },
+      payload: onErrorSocketResponse("Game not found"),
     });
-    return;
   }
 
   try {
@@ -27,24 +31,23 @@ export function handleJoin(
 
     rooms.join(game.id, ctx);
 
+    // اطلاع به اتاق که بازیکن join شد
     rooms.broadcast(game.id, {
       type: "game.join",
-      payload: {
-        success: true,
-        message: "Player joined",
-      },
+      payload: onOkSocketResponse(updatedGame, "Player joined"),
     });
 
+    // ارسال state جدید بازی
     rooms.broadcast(game.id, {
       type: "game.state",
-      payload: updatedGame,
+      payload: onOkSocketResponse(updatedGame),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to join game";
 
     ctx.send({
       type: "game.error",
-      payload: { message },
+      payload: onErrorSocketResponse(message),
     });
   }
 }

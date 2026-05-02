@@ -1,5 +1,10 @@
-import crypto from "crypto";
+import { GameState } from "@/game/types";
 
-export function rollDice(): number[] {
-  return [crypto.randomInt(1, 7), crypto.randomInt(1, 7)];
+export function rollDice(game: GameState): number[] {
+  const d1 = Math.floor(Math.random() * 6) + 1;
+  const d2 = Math.floor(Math.random() * 6) + 1;
+
+  const dice = d1 === d2 ? [d1, d1, d1, d1] : [d1, d2];
+
+  return dice;
 }

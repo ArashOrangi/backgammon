@@ -3,6 +3,11 @@ import { rollDice } from "../../game/game.engine";
 import { SocketContext } from "../socket-context";
 import { RoomManager } from "../room-manager";
 
+import {
+  onErrorSocketResponse,
+  onOkSocketResponse,
+} from "@/responses/response-builder";
+
 type RollPayload = {
   gameId: string;
 };
@@ -13,35 +18,52 @@ export function handleRoll(
   rooms: RoomManager,
 ) {
   const { gameId } = payload;
+
   const game = getGame(gameId);
 
   if (!game) {
-    ctx.send({
+    return ctx.send({
       type: "game.error",
-      payload: { message: "Game not found" },
+      payload: onErrorSocketResponse("Game not found"),
     });
-    return;
+  }
+
+  const isPlayer = game.players.includes(ctx.id);
+
+  if (!isPlayer) {
+    return ctx.send({
+      type: "game.error",
+      payload: onErrorSocketResponse("Player not in game"),
+    });
+  }
+
+  if (game.turn !== ctx.id) {
+    return ctx.send({
+      type: "game.error",
+      payload: onErrorSocketResponse("Not your turn"),
+    });
   }
 
   try {
     const dice = rollDice(game);
+
     saveGame(game);
 
     rooms.broadcast(game.id, {
       type: "game.roll",
-      payload: { dice },
+      payload: onOkSocketResponse({ dice }),
     });
 
     rooms.broadcast(game.id, {
       type: "game.state",
-      payload: game,
+      payload: onOkSocketResponse(game),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to roll dice";
 
     ctx.send({
       type: "game.error",
-      payload: { message },
+      payload: onErrorSocketResponse(message),
     });
   }
 }

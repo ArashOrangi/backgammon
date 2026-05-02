@@ -1,8 +1,12 @@
-export function rollDice(game: any) {
+import { GameState } from "./types";
+
+export function rollDice(game: GameState): number[] {
   const d1 = Math.floor(Math.random() * 6) + 1;
   const d2 = Math.floor(Math.random() * 6) + 1;
-  game.dice = [d1, d2];
-  return game.dice;
+
+  const dice = d1 === d2 ? [d1, d1, d1, d1] : [d1, d2];
+
+  return dice;
 }
 
 export function applyMove(
