@@ -1,23 +1,110 @@
-// src/game/move-generator.ts
+import {
+  onErrorSocketResponse,
+  onOkSocketResponse,
+} from "@/responses/response-builder";
+import { RoomManager } from "@/socket/room-manager";
+import { SocketContext } from "@/socket/socket-context";
+import { MovePayload } from "@/validations/game.move";
+import { getGame, saveGame } from "./game.store";
+import { hasLegalMoves, validateMove } from "./rule-validator";
+import { applyMove, switchTurn } from "./game.engine";
 
-import { TypedSocket, TypedIo } from "../socket/typed-socket";
-import { applyMove } from "./game.engine";
-import { getGame } from "./game.store";
+/**
+ * Handle player move
+ */
+export function handleMove(
+  ctx: SocketContext,
+  payload: MovePayload,
+  rooms: RoomManager,
+) {
+  const { gameId, from, to } = payload;
 
-export function onMove(socket: TypedSocket, io: TypedIo) {
-  socket.on("game.move", ({ gameId, from, to }) => {
-    const game = getGame(gameId);
+  const game = getGame(gameId);
 
-    if (!game) {
-      return socket.emit("game.error", { message: "Game not found" });
+  if (!game) {
+    return ctx.send({
+      type: "game.error",
+      payload: onErrorSocketResponse("Game not found"),
+    });
+  }
+
+  if (!game.players.includes(ctx.id)) {
+    return ctx.send({
+      type: "game.error",
+      payload: onErrorSocketResponse("Player not in game"),
+    });
+  }
+
+  // --- Turn Validation ---
+  if (game.turn !== ctx.id) {
+    return ctx.send({
+      type: "game.error",
+      payload: onErrorSocketResponse("It's not your turn"),
+    });
+  }
+
+  // --- Dice must exist before any move ---
+  if (!game.dice || game.dice.length === 0) {
+    return ctx.send({
+      type: "game.error",
+      payload: onErrorSocketResponse("Roll dice first"),
+    });
+  }
+
+  // --- Rule Validation ---
+  const { valid, reason } = validateMove(game, ctx.id, from, to);
+
+  if (!valid) {
+    return ctx.send({
+      type: "game.error",
+      payload: onErrorSocketResponse(reason ?? "Invalid move"),
+    });
+  }
+
+  try {
+    // --- Apply Move ---
+    applyMove(game, ctx.id, from, to);
+
+    // --- Game End Check ---
+    if (game.board.borneOff[ctx.id] === 15) {
+      saveGame(game);
+
+      rooms.broadcast(game.id, {
+        type: "game.state",
+        payload: onOkSocketResponse(game, "Game finished"),
+      });
+
+      return;
     }
 
-    try {
-      applyMove(game, socket.id, from, to);
+    // --- Turn Management (dice logic) ---
+    const noDiceLeft = game.dice.length === 0;
 
-      io.to(game.id).emit("game.state", game);
-    } catch (err: any) {
-      socket.emit("game.error", { message: err.message });
+    if (noDiceLeft) {
+      // No dice → switch turn
+      switchTurn(game);
+      game.dice = undefined;
+    } else if (!hasLegalMoves(game, ctx.id)) {
+      // Dice remain but no legal moves
+      switchTurn(game);
+      game.dice = undefined;
     }
-  });
+
+    // --- Persist state ---
+    saveGame(game);
+
+    // --- Broadcast Updated State ---
+    rooms.broadcast(game.id, {
+      type: "game.state",
+      payload: onOkSocketResponse(game),
+    });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Failed to process move";
+
+    ctx.send({
+      type: "game.error",
+      payload: onErrorSocketResponse(message),
+    });
+  }
 }
