@@ -12,7 +12,7 @@ export enum Genders {
 }
 
 export enum FollowStates {
-  Submitted = "SUBMITED",
+  Submitted = "SUBMITTED",
   Requested = "REQUESTED",
   Rejected = "REJECTED",
 }
@@ -54,4 +54,11 @@ export enum Errors {
   Route = "Route",
   Extra = "Extra",
   JustLog = "JustLog",
+}
+
+export enum STATUS {
+  waiting = "waiting",
+  starting = "starting",
+  inProgress = "in-progress",
+  finished = "finished",
 }

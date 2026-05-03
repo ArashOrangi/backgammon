@@ -1,56 +1,73 @@
-import { Board, GameState, PlayerId } from "./types";
+import { GameState, PlayerId } from "./types";
 import { canBearOff } from "./rule-validator";
+import { rollDie, rollDice as rollDiceUtil } from "../utils/dice";
 
-/**
- * تاس ریختن: دابل → ۴ تاس
- */
+/* -------------------------------------------------- */
+/* 🎲 NORMAL ROLL */
+/* -------------------------------------------------- */
+
 export function rollDice(game: GameState): number[] {
-  const d1 = Math.floor(Math.random() * 6) + 1;
-  const d2 = Math.floor(Math.random() * 6) + 1;
-  const dice = d1 === d2 ? [d1, d1, d1, d1] : [d1, d2];
-
+  const dice = rollDiceUtil();
   game.dice = dice;
   return dice;
 }
 
+/* -------------------------------------------------- */
+/* 🔄 TURN MANAGEMENT */
+/* -------------------------------------------------- */
+
 export function switchTurn(game: GameState) {
-  const idx = game.players.indexOf(game.turn);
+  const idx = game.players.findIndex((p) => p.id === game.turn);
+
   if (idx === -1) {
     throw new Error("Current turn player not found");
   }
-  const nextIndex = (idx + 1) % game.players.length;
-  game.turn = game.players[nextIndex];
+
+  const next = (idx + 1) % game.players.length;
+
+  game.turn = game.players[next].id;
+  game.turnStartedAt = Date.now();
 }
 
-/**
- * حذف یکی از تاس‌ها که با distance استفاده شده
- */
+/* -------------------------------------------------- */
+/* 🎯 DIE CONSUMPTION (ENGINE‑LEVEL STRICT) */
+/* -------------------------------------------------- */
+
 function consumeDie(game: GameState, distance: number) {
-  if (!game.dice) return;
-  // اول تلاش می‌کنیم تاس دقیقا برابر distance را حذف کنیم
-  let idx = game.dice.findIndex((d) => d === distance);
-  if (idx === -1) {
-    // اگر نبود، تاس بزرگ‌تر (برای bearer off) را حذف می‌کنیم
-    idx = game.dice.findIndex((d) => d > distance);
+  if (!game.dice || game.dice.length === 0) {
+    throw new Error("No dice available");
   }
-  if (idx !== -1) {
-    game.dice.splice(idx, 1);
+
+  const exact = game.dice.findIndex((d) => d === distance);
+  if (exact !== -1) {
+    game.dice.splice(exact, 1);
+    return;
   }
+
+  throw new Error("No matching die for this move");
 }
 
-/**
- * به دست آوردن جهت حرکت بازیکن
- */
+/* -------------------------------------------------- */
+/* 🧭 MOVEMENT DIRECTION */
+/* -------------------------------------------------- */
+
 function getDirection(game: GameState, playerId: PlayerId): 1 | -1 {
-  if (playerId === game.players[0]) return -1;
-  if (playerId === game.players[1]) return 1;
-  throw new Error("Unknown playerId in getDirection");
+  const player = game.players.find((p) => p.id === playerId);
+
+  if (!player) {
+    throw new Error("Player not found");
+  }
+
+  // white moves 23 → 0  (reverse)
+  // black moves 0 → 23  (forward)
+  return player.color === "white" ? -1 : 1;
 }
 
-/**
- * تابع کمکی: به‌دست آوردن distance مشابه rule-validator
- */
-function computeDistanceForApply(
+/* -------------------------------------------------- */
+/* 📏 DISTANCE CALCULATION */
+/* -------------------------------------------------- */
+
+function computeDistance(
   game: GameState,
   playerId: PlayerId,
   from: number | "bar",
@@ -59,109 +76,192 @@ function computeDistanceForApply(
   const dir = getDirection(game, playerId);
 
   if (from === "bar") {
-    const entry = playerId === game.players[0] ? 23 : 0;
-    if (typeof to !== "number") {
-      throw new Error("Invalid 'to' for move from bar");
-    }
-    if (dir === -1) {
-      if (to > entry) throw new Error("Invalid move direction from bar");
-      return entry - to;
-    } else {
-      if (to < entry) throw new Error("Invalid move direction from bar");
-      return to - entry;
-    }
+    const entry = dir === -1 ? 23 : 0;
+    if (typeof to !== "number") throw new Error("Invalid bar entry");
+    return dir === -1 ? entry - to : to - entry;
   }
 
   if (to === "off") {
-    if (!canBearOff(game, playerId)) {
-      throw new Error("Cannot bear off");
-    }
-    if (playerId === game.players[0]) {
-      // 0..5
-      if (typeof from !== "number") throw new Error("Invalid 'from' for off");
-      return from + 1;
-    } else {
-      if (typeof from !== "number") throw new Error("Invalid 'from' for off");
-      return 24 - from;
-    }
+    if (!canBearOff(game, playerId)) throw new Error("Cannot bear off yet");
+    return dir === -1 ? (from as number) + 1 : 24 - (from as number);
   }
 
   if (typeof from === "number" && typeof to === "number") {
-    if (dir === -1) {
-      if (to > from) throw new Error("Invalid move direction");
-      return from - to;
-    } else {
-      if (to < from) throw new Error("Invalid move direction");
-      return to - from;
-    }
+    return dir === -1 ? from - to : to - from;
   }
 
-  throw new Error("Invalid from/to combination");
+  throw new Error("Invalid move calculation");
 }
 
-/**
- * اعمال یک حرکت (فرض بر این است که validateMove قبلا آن را تایید کرده)
- */
+/* -------------------------------------------------- */
+/* 🏎 APPLY MOVE */
+/* -------------------------------------------------- */
+
 export function applyMove(
   game: GameState,
   playerId: PlayerId,
   from: number | "bar",
   to: number | "off",
-) {
-  const { board } = game;
-  const { points, bar, borneOff } = board;
+): { hit: boolean; borneOff: boolean; dieUsed: number } {
+  const { points, bar, borneOff } = game.board;
+  const distance = computeDistance(game, playerId, from, to);
 
-  // محاسبه distance برای consumeDice
-  const distance = computeDistanceForApply(game, playerId, from, to);
-
-  // کم کردن از مبدأ
+  /* --- REMOVE CHECKER FROM SOURCE --- */
   if (from === "bar") {
-    if (!bar[playerId] || bar[playerId] <= 0) {
-      throw new Error("No checkers on bar to move");
-    }
-    bar[playerId] -= 1;
+    if (!bar[playerId] || bar[playerId] <= 0)
+      throw new Error("No checker on bar");
+    bar[playerId]--;
   } else {
+    if (from < 0 || from > 23) throw new Error("Source out of range");
+
     const src = points[from];
-    if (!src || src.owner !== playerId || src.count <= 0) {
-      throw new Error("Invalid source point for applyMove");
-    }
-    src.count -= 1;
-    if (src.count === 0) {
-      src.owner = null;
-    }
+    if (!src || src.owner !== playerId || src.count === 0)
+      throw new Error("Invalid source point");
+
+    src.count--;
+    if (src.count === 0) src.owner = null;
   }
 
-  // اگر به off می‌رود → borneOff افزایش می‌یابد
+  /* --- BEAR OFF --- */
   if (to === "off") {
     borneOff[playerId] = (borneOff[playerId] ?? 0) + 1;
     consumeDie(game, distance);
+    return { hit: false, borneOff: true, dieUsed: distance };
+  }
+
+  /* --- NORMAL MOVE --- */
+  if (to < 0 || to > 23) throw new Error("Destination out of range");
+
+  const dest = points[to];
+  if (dest.owner && dest.owner !== playerId && dest.count > 1)
+    throw new Error("Point blocked");
+
+  let hit = false;
+  if (dest.owner && dest.owner !== playerId && dest.count === 1) {
+    const opponent = dest.owner;
+    bar[opponent] = (bar[opponent] ?? 0) + 1;
+    dest.owner = playerId;
+    dest.count = 1;
+    hit = true;
+  } else if (!dest.owner) {
+    dest.owner = playerId;
+    dest.count = 1;
+  } else if (dest.owner === playerId) {
+    dest.count++;
+  }
+
+  consumeDie(game, distance);
+  return { hit, borneOff: false, dieUsed: distance };
+}
+
+/* -------------------------------------------------- */
+/* ⏪ UNDO MOVE (Perfect reverse of applyMove) */
+/* -------------------------------------------------- */
+
+export function undoMove(
+  game: GameState,
+  playerId: PlayerId,
+  moveInfo: { hit: boolean; borneOff: boolean; dieUsed: number },
+  from: number | "bar",
+  to: number | "off",
+) {
+  const { points, bar, borneOff } = game.board;
+  const { hit, borneOff: wasBorneOff, dieUsed } = moveInfo;
+
+  // Restore die
+  if (!game.dice) game.dice = [];
+  game.dice.push(dieUsed);
+
+  /* --- BEAR OFF UNDO --- */
+  if (to === "off") {
+    if (!wasBorneOff) throw new Error("Undo mismatch: not a bear-off move");
+    borneOff[playerId] = Math.max(0, (borneOff[playerId] ?? 0) - 1);
+
+    const src = points[from as number];
+    src.owner = playerId;
+    src.count++;
     return;
   }
 
-  // به نقطه روی تخته:
-  const dest = points[to];
+  /* --- NORMAL MOVE UNDO --- */
+  const dest = points[to as number];
+  if (hit) {
+    // restore opponent checker back to destination
+    const opponent = game.players.find((p) => p.id !== playerId)?.id;
+    if (!opponent) throw new Error("Opponent not found during undo");
 
-  // اگر مهره حریف تنها است → hit
-  if (dest.owner && dest.owner !== playerId && dest.count === 1) {
-    const opponent = dest.owner;
-    // مهره حریف به bar
-    bar[opponent] = (bar[opponent] ?? 0) + 1;
-    // نقطه الان خالی می‌شود و مهره ما را می‌گیرد
-    dest.owner = playerId;
+    dest.owner = opponent;
     dest.count = 1;
+
+    // remove opponent from bar
+    bar[opponent] = Math.max(0, (bar[opponent] ?? 0) - 1);
   } else {
-    // خانه خالی یا متعلق به خودمان
-    if (!dest.owner) {
-      dest.owner = playerId;
-      dest.count = 1;
-    } else if (dest.owner === playerId) {
-      dest.count += 1;
-    } else {
-      // این حالت اصولاً در validateMove رد شده، ولی برای ایمنی:
-      throw new Error("Destination point is blocked");
+    // destination had our checker; revert it
+    if (dest.owner !== playerId)
+      throw new Error("Undo mismatch: unexpected owner on dest");
+
+    dest.count--;
+    if (dest.count <= 0) {
+      dest.count = 0;
+      dest.owner = null;
     }
   }
 
-  // مصرف تاس
-  consumeDie(game, distance);
+  // restore checker to original location
+  if (from === "bar") {
+    bar[playerId] = (bar[playerId] ?? 0) + 1;
+  } else {
+    const src = points[from as number];
+    src.owner = playerId;
+    src.count++;
+  }
+}
+
+/* -------------------------------------------------- */
+/* 🏁 GAME OVER CHECK */
+/* -------------------------------------------------- */
+
+export function isGameOver(game: GameState): boolean {
+  return game.players.some((p) => (game.board.borneOff[p.id] ?? 0) >= 15);
+}
+
+/* -------------------------------------------------- */
+/* ⭐ STARTING PHASE LOGIC */
+/* -------------------------------------------------- */
+
+export function rollStartingDie(game: GameState, playerId: PlayerId): number {
+  if (game.status !== "starting") throw new Error("Game not in starting phase");
+
+  if (!game.startingDice) game.startingDice = {};
+
+  if (game.startingDice[playerId])
+    throw new Error("Player already rolled starting die");
+
+  const value = rollDie();
+  game.startingDice[playerId] = value;
+  return value;
+}
+
+export function tryResolveStartingRoll(game: GameState) {
+  if (game.status !== "starting") return;
+
+  const players = game.players.map((p) => p.id);
+  if (players.length < 2) return;
+
+  const [p1, p2] = players;
+  const d1 = game.startingDice?.[p1];
+  const d2 = game.startingDice?.[p2];
+  if (!d1 || !d2) return;
+
+  if (d1 === d2) {
+    game.startingDice = {};
+    return;
+  }
+
+  const starter = d1 > d2 ? p1 : p2;
+  game.turn = starter;
+  game.dice = [d1, d2];
+  game.status = "in-progress";
+  delete game.startingDice;
+  game.turnStartedAt = Date.now();
 }

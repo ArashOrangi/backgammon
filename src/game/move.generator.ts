@@ -1,16 +1,24 @@
 import { GameState, PlayerId } from "./types";
 import { validateMove } from "./rule-validator";
-import { applyMove } from "./game.engine";
+import { applyMove, undoMove } from "./game.engine";
+
+/* -------------------------------------------------- */
+/* TYPES */
+/* -------------------------------------------------- */
 
 export interface Move {
   from: number | "bar";
   to: number | "off" | number;
-  die: number;
+  die: number; // die actually used (validated by rule-validator)
 }
 
 export interface MoveSequence {
   moves: Move[];
 }
+
+/* -------------------------------------------------- */
+/* MAIN ENTRY */
+/* -------------------------------------------------- */
 
 export function generateMoveSequences(
   game: GameState,
@@ -19,22 +27,27 @@ export function generateMoveSequences(
   if (!game.dice || game.dice.length === 0) return [];
 
   const dice = normalizeDice(game.dice);
-
   const results: MoveSequence[] = [];
 
-  recurse(cloneGame(game), playerId, dice, [], results);
+  // DFS با تکنیک apply/undo سریع
+  recurse(game, playerId, dice, [], results);
 
   if (results.length === 0) return [];
 
-  const maxLength = Math.max(...results.map((r) => r.moves.length));
-  let filtered = results.filter((r) => r.moves.length === maxLength);
+  /* -------------------------------------------------- */
+  /* RULE: Max Dice Usage (longest sequences only) */
+  /* -------------------------------------------------- */
+  const maxLen = Math.max(...results.map((r) => r.moves.length));
+  let filtered = results.filter((r) => r.moves.length === maxLen);
 
-  // enforce higher die rule (only when exactly 1 move possible)
-  if (maxLength === 1 && dice.length === 2 && dice[0] !== dice[1]) {
+  /* -------------------------------------------------- */
+  /* RULE: Higher Die Rule (only in single-move scenarios) */
+  /* -------------------------------------------------- */
+  if (maxLen === 1 && dice.length === 2 && dice[0] !== dice[1]) {
     const higher = Math.max(...dice);
-    const higherPlayable = filtered.some((seq) => seq.moves[0].die === higher);
+    const hasHigher = filtered.some((seq) => seq.moves[0].die === higher);
 
-    if (higherPlayable) {
+    if (hasHigher) {
       filtered = filtered.filter((seq) => seq.moves[0].die === higher);
     }
   }
@@ -42,35 +55,49 @@ export function generateMoveSequences(
   return deduplicateSequences(filtered);
 }
 
+/* -------------------------------------------------- */
+/* DFS RECURSION (APPLY + UNDO, NO COPY) */
+/* -------------------------------------------------- */
+
 function recurse(
   game: GameState,
   playerId: PlayerId,
   dice: number[],
-  current: Move[],
+  path: Move[],
   results: MoveSequence[],
 ) {
   if (dice.length === 0) {
-    results.push({ moves: [...current] });
+    results.push({ moves: [...path] });
     return;
   }
 
-  const legalMoves = generateSingleMoves(game, playerId, dice);
+  const legal = generateSingleMoves(game, playerId, dice);
 
-  if (legalMoves.length === 0) {
-    results.push({ moves: [...current] });
+  if (legal.length === 0) {
+    // no moves → sequence ends here
+    results.push({ moves: [...path] });
     return;
   }
 
-  for (const move of legalMoves) {
-    const nextGame = cloneGame(game);
+  for (const move of legal) {
+    // save snapshot for undo
+    const snapshot = takeSnapshot(game);
 
-    applyMove(nextGame, playerId, move.from, move.to);
+    // mutation
+    applyMove(game, playerId, move.from, move.to);
 
-    const remainingDice = removeDie(dice, move.die);
+    const remaining = removeDie(dice, move.die);
 
-    recurse(nextGame, playerId, remainingDice, [...current, move], results);
+    recurse(game, playerId, remaining, [...path, move], results);
+
+    // revert state
+    undoSnapshot(game, snapshot);
   }
 }
+
+/* -------------------------------------------------- */
+/* SINGLE STEP MOVE GENERATION */
+/* -------------------------------------------------- */
 
 function generateSingleMoves(
   game: GameState,
@@ -80,38 +107,54 @@ function generateSingleMoves(
   const moves: Move[] = [];
   const board = game.board;
 
+  // dice descending: prioritize larger dice first
   for (const die of [...dice].sort((a, b) => b - a)) {
+    /* -------------------------------------------------- */
+    /* BAR ENTRY */
+    /* -------------------------------------------------- */
     if (board.bar[playerId] > 0) {
-      const move: Move = {
-        from: "bar",
-        to: computeTargetFromBar(playerId, die),
-        die,
-      };
+      const to = computeTargetFromBar(game, playerId, die);
 
-      if (validateMove(game, playerId, move.from, move.to)) {
-        moves.push(move);
+      const res = validateMove(game, playerId, "bar", to);
+
+      if (res.valid) {
+        moves.push({
+          from: "bar",
+          to,
+          die: res.dieUsed!,
+        });
       }
 
       continue;
     }
 
-    for (let i = 0; i < board.points.length; i++) {
-      const stack = board.points[i];
+    /* -------------------------------------------------- */
+    /* BOARD MOVES */
+    /* -------------------------------------------------- */
 
-      if (!stack || stack.count === 0 || stack.owner !== playerId) continue;
+    for (let i = 0; i < 24; i++) {
+      const p = board.points[i];
+      if (!p || p.count === 0 || p.owner !== playerId) continue;
 
-      const to = computeTarget(playerId, i, die);
+      const to = computeTarget(game, playerId, i, die);
+      const res = validateMove(game, playerId, i, to);
 
-      const move: Move = { from: i, to, die };
-
-      if (validateMove(game, playerId, move.from, move.to)) {
-        moves.push(move);
+      if (res.valid) {
+        moves.push({
+          from: i,
+          to,
+          die: res.dieUsed!,
+        });
       }
     }
   }
 
   return moves;
 }
+
+/* -------------------------------------------------- */
+/* HELPERS */
+/* -------------------------------------------------- */
 
 function normalizeDice(dice: number[]): number[] {
   if (dice.length === 2 && dice[0] === dice[1]) {
@@ -132,19 +175,23 @@ function deduplicateSequences(sequences: MoveSequence[]): MoveSequence[] {
 
   return sequences.filter((seq) => {
     const key = seq.moves.map((m) => `${m.from}-${m.to}-${m.die}`).join("|");
-
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
 }
 
+/* -------------------------------------------------- */
+/* TARGET CALCULATIONS */
+/* -------------------------------------------------- */
+
 function computeTarget(
+  game: GameState,
   playerId: PlayerId,
   from: number,
   die: number,
 ): number | "off" {
-  const dir = getDirection(playerId);
+  const dir = getDirection(game, playerId);
   const target = from + dir * die;
 
   if (target < 0 || target > 23) return "off";
@@ -152,14 +199,58 @@ function computeTarget(
   return target;
 }
 
-function computeTargetFromBar(playerId: PlayerId, die: number): number {
-  return playerId === "white" ? 24 - die : die - 1;
+function computeTargetFromBar(
+  game: GameState,
+  playerId: PlayerId,
+  die: number,
+): number {
+  const dir = getDirection(game, playerId);
+
+  // white (dir=-1) enters at 23 → 18
+  if (dir === -1) return 24 - die;
+
+  // black (dir=+1) enters at 0 → 5
+  return die - 1;
 }
 
-function getDirection(playerId: PlayerId): number {
-  return playerId === "white" ? -1 : 1;
+/* -------------------------------------------------- */
+/* GET DIRECTION FROM PLAYER COLOR */
+/* -------------------------------------------------- */
+
+function getDirection(game: GameState, playerId: PlayerId): number {
+  const player = game.players.find((p) => p.id === playerId);
+  return player?.color === "white" ? -1 : 1;
 }
 
-function cloneGame(game: GameState): GameState {
-  return JSON.parse(JSON.stringify(game));
+/* -------------------------------------------------- */
+/* QUICK SNAPSHOT SYSTEM (FASTER THAN JSON CLONE) */
+/* -------------------------------------------------- */
+
+interface GameSnapshot {
+  points: { owner: PlayerId | null; count: number }[];
+  bar: Record<PlayerId, number>;
+  borneOff: Record<PlayerId, number>;
+}
+
+function takeSnapshot(game: GameState): GameSnapshot {
+  return {
+    points: game.board.points.map((p) => ({
+      owner: p.owner,
+      count: p.count,
+    })),
+    bar: { ...game.board.bar },
+    borneOff: { ...game.board.borneOff },
+  };
+}
+
+function undoSnapshot(game: GameState, snap: GameSnapshot) {
+  // restore points
+  for (let i = 0; i < snap.points.length; i++) {
+    game.board.points[i].owner = snap.points[i].owner;
+    game.board.points[i].count = snap.points[i].count;
+  }
+
+  // restore bar & borne off
+  game.board.bar = { ...snap.bar };
+  game.board.borneOff = { ...snap.borneOff };
 }

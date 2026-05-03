@@ -16,6 +16,7 @@ export function handleJoin(
   rooms: RoomManager,
 ) {
   const { gameId } = payload;
+  const playerId = ctx.id;
 
   const game = getGame(gameId);
 
@@ -26,18 +27,26 @@ export function handleJoin(
     });
   }
 
-  try {
-    const updatedGame = addPlayerToGame(game, ctx.id);
+  const alreadyInGame = game.players.some((p) => p.id === playerId);
 
+  try {
+    let updatedGame = game;
+
+    // اگر کاربر قبلا در بازی بوده، فقط دوباره join کن
+    if (!alreadyInGame) {
+      updatedGame = addPlayerToGame(game, playerId);
+    }
+
+    //  socket join می‌شود
     rooms.join(game.id, ctx);
 
     // اطلاع به اتاق که بازیکن join شد
     rooms.broadcast(game.id, {
       type: "game.join",
-      payload: onOkSocketResponse(updatedGame, "Player joined"),
+      payload: onOkSocketResponse({ playerId }, "Player joined"),
     });
 
-    // ارسال state جدید بازی
+    // ارسال وضعیت جدید بازی
     rooms.broadcast(game.id, {
       type: "game.state",
       payload: onOkSocketResponse(updatedGame),

@@ -4,6 +4,7 @@ import { RoomManager } from "../room-manager";
 
 import { applyMove, switchTurn } from "../../game/game.engine";
 import { validateMove } from "../../game/rule-validator";
+import { generateMoveSequences, MoveSequence } from "../../game/move.generator";
 
 import { MovePayload } from "../../validations/game.move";
 
@@ -12,15 +13,13 @@ import {
   onOkSocketResponse,
 } from "@/responses/response-builder";
 
-/**
- * Handle player move
- */
 export function handleMove(
   ctx: SocketContext,
   payload: MovePayload,
   rooms: RoomManager,
 ) {
   const { gameId, from, to } = payload;
+  const playerId = ctx.id;
 
   const game = getGame(gameId);
 
@@ -31,16 +30,21 @@ export function handleMove(
     });
   }
 
-  // Turn validation
-  if (game.turn !== ctx.id) {
+  if (game.turn !== playerId) {
     return ctx.send({
       type: "game.error",
       payload: onErrorSocketResponse("It's not your turn"),
     });
   }
 
-  // Rule validation (game logic)
-  const { valid, reason } = validateMove(game, ctx.id, from, to);
+  if (!game.dice || game.dice.length === 0) {
+    return ctx.send({
+      type: "game.error",
+      payload: onErrorSocketResponse("Dice not rolled"),
+    });
+  }
+
+  const { valid, reason } = validateMove(game, playerId, from, to);
 
   if (!valid) {
     return ctx.send({
@@ -50,27 +54,74 @@ export function handleMove(
   }
 
   try {
-    // Apply the actual move
-    applyMove(game, ctx.id, from, to);
+    applyMove(game, playerId, from, to);
 
-    // Switch to next player
-    switchTurn(game);
+    /* -------------------------------- */
+    /* CHECK WIN CONDITION */
+    /* -------------------------------- */
 
-    // Persist changes
+    if (game.board.borneOff[playerId] === 15) {
+      game.status = "finished";
+      game.winner = playerId;
+      game.dice = undefined;
+
+      saveGame(game);
+
+      rooms.broadcast(game.id, {
+        type: "game.state",
+        payload: onOkSocketResponse(game, "Game over"),
+      });
+
+      return;
+    }
+
+    /* -------------------------------- */
+    /* CALCULATE NEXT LEGAL MOVES */
+    /* -------------------------------- */
+
+    let legalMoves: MoveSequence[] = [];
+
+    if (game.dice && game.dice.length > 0) {
+      legalMoves = generateMoveSequences(game, playerId);
+    }
+
+    const mustPass = legalMoves.length === 0;
+
+    if (mustPass) {
+      game.dice = undefined;
+      switchTurn(game);
+
+      saveGame(game);
+
+      rooms.broadcast(game.id, {
+        type: "game.state",
+        payload: onOkSocketResponse(game, "Turn passed"),
+      });
+
+      return;
+    }
+
+    /* -------------------------------- */
+    /* NORMAL MOVE CONTINUE */
+    /* -------------------------------- */
+
     saveGame(game);
 
-    // Broadcast updated state
     rooms.broadcast(game.id, {
       type: "game.state",
       payload: onOkSocketResponse(game),
     });
-  } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Failed to process move";
 
+    rooms.broadcast(game.id, {
+      type: "game.legalMoves",
+      payload: onOkSocketResponse(legalMoves),
+    });
+  } catch (err) {
     ctx.send({
       type: "game.error",
-      payload: onErrorSocketResponse(message),
+      payload: onErrorSocketResponse(
+        err instanceof Error ? err.message : "Move failed",
+      ),
     });
   }
 }

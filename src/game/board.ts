@@ -16,7 +16,7 @@ export function createInitialBoard(
     }),
   );
 
-  // پوزیش کلاسی (در جهت معکوس برای بازیکن دوم)
+  // توزیع اولیه مهره‌ها بر اساس استاندارد بازی
   points[0] = { owner: playerB, count: 2 };
   points[11] = { owner: playerB, count: 5 };
   points[16] = { owner: playerB, count: 3 };

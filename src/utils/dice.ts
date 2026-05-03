@@ -1,10 +1,18 @@
-import { GameState } from "@/game/types";
+/**
+ * تاس تک عددی برای start-roll
+ */
+export function rollDie(): number {
+  return Math.floor(Math.random() * 6) + 1;
+}
 
-export function rollDice(game: GameState): number[] {
-  const d1 = Math.floor(Math.random() * 6) + 1;
-  const d2 = Math.floor(Math.random() * 6) + 1;
+/**
+ * تاس معمولی بازی:
+ * - اگر دابل → ۴ تاس
+ * - اگر عادی → ۲ تاس
+ */
+export function rollDice(): number[] {
+  const d1 = rollDie();
+  const d2 = rollDie();
 
-  const dice = d1 === d2 ? [d1, d1, d1, d1] : [d1, d2];
-
-  return dice;
+  return d1 === d2 ? [d1, d1, d1, d1] : [d1, d2];
 }

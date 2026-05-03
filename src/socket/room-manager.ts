@@ -1,5 +1,4 @@
 import { SocketContext } from "./socket-context";
-import { ServerMessage } from "./protocol";
 
 export class RoomManager {
   private rooms = new Map<string, Set<SocketContext>>();
