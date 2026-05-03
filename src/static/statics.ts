@@ -1,0 +1,29 @@
+import process from "node:process";
+
+export const portApp = process.env.PORT;
+export const portSocket = process.env.PORT_SOCKET;
+export const sitURL = process.env.API_URL;
+
+export const keyPublic = "backgammonGuest";
+export const keyUser = "backgammonUser";
+
+export const secretTokenUser = process.env.SECRET_USER ?? "";
+export const secretTokenSession = process.env.SECRET_SESSION ?? "";
+
+const dayInSecond = 86400;
+export const keyPublicAge = dayInSecond * 365; //"365 day in second"
+export const keyUserAgeShort = dayInSecond * 7; //"1 day in second"
+export const keyUserAgeLong = dayInSecond * 180; //"90 day in second"
+
+export const userPasswordLength = 8;
+export const phoneNumberLength = 11;
+
+//TODO ask in sprint
+export const otpLength = 5;
+export const otpAge = 10 * 60 * 1000; // 10 minutes;
+export const otpResend = 5 * 60 * 1000; // 5 minutes;
+export const otpMin = 2 * 60 * 1000; // 2 minutes;
+
+//TODO when we need notifications
+// export const webPushKeyPublic = process.env.WEBPUSH_PUBLIC ?? "";
+// export const webPushKeyPrivate = process.env.WEBPUSH_PRIVATE ?? "";
