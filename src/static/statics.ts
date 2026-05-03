@@ -19,10 +19,10 @@ export const userPasswordLength = 8;
 export const phoneNumberLength = 11;
 
 //TODO ask in sprint
-// export const otpLength = **;
-// export const otpAge = 10 * 60 * 1000; // 10 minutes;
-// export const otpResend = 5 * 60 * 1000; // 5 minutes;
-// export const otpMin = 2 * 60 * 1000; // 2 minutes;
+export const otpLength = 5;
+export const otpAge = 10 * 60 * 1000; // 10 minutes;
+export const otpResend = 5 * 60 * 1000; // 5 minutes;
+export const otpMin = 2 * 60 * 1000; // 2 minutes;
 
 //TODO when we need notifications
 // export const webPushKeyPublic = process.env.WEBPUSH_PUBLIC ?? "";
