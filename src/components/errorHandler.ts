@@ -30,6 +30,7 @@ export function errorHandlersOnPrisma({
 //   return OrmState.Error;
 // }
 
+//#region session
 export function errorHandlersOnSession({
   error,
   extra,
@@ -41,7 +42,9 @@ export function errorHandlersOnSession({
 }) {
   ErrorLogger({ error: error, errorType: Errors.Session, extra, title });
 }
+//#endregion session
 
+//#region Route
 export function errorHandlersOnRoute({
   error,
   extra,
@@ -53,7 +56,9 @@ export function errorHandlersOnRoute({
 }) {
   ErrorLogger({ error: error, errorType: Errors.Route, extra, title });
 }
+//#endregion Route
 
+//#region Other
 export function errorHandlersExtra({
   error,
   extra,
@@ -65,7 +70,9 @@ export function errorHandlersExtra({
 }) {
   ErrorLogger({ error: error, errorType: Errors.Extra, title: title, extra });
 }
+//#endregion Other
 
+//#region logger
 export function onFileLogger({
   error,
   extra,
@@ -113,3 +120,4 @@ ${JSON.stringify({ extra })}
 
   console.log({ errorType, content: error });
 }
+//#endregion logger
