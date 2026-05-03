@@ -1,25 +1,3 @@
-// export type PlayerId = string;
-
-// export interface Point {
-//   owner: PlayerId | null;
-//   count: number;
-// }
-
-// export interface Board {
-//   points: Point[];
-//   bar: Record<PlayerId, number>;
-//   borneOff: Record<PlayerId, number>;
-// }
-
-// export interface GameState {
-//   id: string;
-//   players: PlayerId[];
-//   turn: PlayerId;
-//   dice?: number[];
-//   board: Board;
-// }
-
-///
 export type PlayerId = string;
 
 export interface Point {
