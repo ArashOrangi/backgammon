@@ -1,13 +1,13 @@
 import { GameState, PlayerId, PlayerInfo } from "./types";
 
 /* ------------------------------------------------------------------ */
-/* در آینده میتونی اینو بندازی روی Redis یا DB، فعلاً in-memory map */
+/* in-memory store (later: Redis / DB)                                */
 /* ------------------------------------------------------------------ */
 
 const games = new Map<string, GameState>();
 
 /* ------------------------------------------------------------------ */
-/* ایجاد بازیکن با رنگ مشخص                                          */
+/* helpers                                                            */
 /* ------------------------------------------------------------------ */
 
 function createPlayer(id: PlayerId, color: "white" | "black"): PlayerInfo {
@@ -15,8 +15,44 @@ function createPlayer(id: PlayerId, color: "white" | "black"): PlayerInfo {
 }
 
 /* ------------------------------------------------------------------ */
-/* ایجاد بازی جدید                                                     */
-/* creator همیشه white است                                             */
+/* Backgammon initial board                                           */
+/* ------------------------------------------------------------------ */
+
+function createInitialBoard() {
+  const points = Array.from({ length: 24 }, () => ({
+    owner: null as "white" | "black" | null,
+    count: 0,
+  }));
+
+  // white
+  points[23] = { owner: "white", count: 2 };
+  points[12] = { owner: "white", count: 5 };
+  points[7] = { owner: "white", count: 3 };
+  points[5] = { owner: "white", count: 5 };
+
+  // black
+  points[0] = { owner: "black", count: 2 };
+  points[11] = { owner: "black", count: 5 };
+  points[16] = { owner: "black", count: 3 };
+  points[18] = { owner: "black", count: 5 };
+
+  return {
+    points,
+
+    bar: {
+      white: 0,
+      black: 0,
+    },
+
+    borneOff: {
+      white: 0,
+      black: 0,
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* create game                                                        */
 /* ------------------------------------------------------------------ */
 
 export function createGame(id: string, creatorId: PlayerId): GameState {
@@ -28,30 +64,18 @@ export function createGame(id: string, creatorId: PlayerId): GameState {
 
     status: "waiting",
 
-    turn: creatorId,
+    turn: "white",
 
-    board: {
-      points: Array.from({ length: 24 }, () => ({
-        owner: null,
-        count: 0,
-      })),
-
-      bar: {
-        [creatorId]: 0,
-      },
-
-      borneOff: {
-        [creatorId]: 0,
-      },
-    },
+    board: createInitialBoard(),
   };
 
   games.set(id, game);
+
   return game;
 }
 
 /* ------------------------------------------------------------------ */
-/* واکشی / ذخیره / حذف بازی                                           */
+/* basic store ops                                                    */
 /* ------------------------------------------------------------------ */
 
 export function getGame(id: string): GameState | undefined {
@@ -71,32 +95,34 @@ export function listGames(): GameState[] {
 }
 
 /* ------------------------------------------------------------------ */
-/* اضافه‌کردن بازیکن دوم (black)                                      */
+/* join second player                                                 */
 /* ------------------------------------------------------------------ */
 
 export function addPlayerToGame(
   game: GameState,
   playerId: PlayerId,
 ): GameState {
-  if (game.players.some((p) => p.id === playerId)) {
-    throw new Error("Player already in the game");
+  // اگر قبلا داخل بازی بوده (reconnect)
+  const exists = game.players.find((p) => p.id === playerId);
+
+  if (exists) {
+    return game;
   }
 
   if (game.players.length >= 2) {
     throw new Error("Game is full");
   }
 
-  // بازیکن دوم = black
   const newPlayer = createPlayer(playerId, "black");
+
   game.players.push(newPlayer);
 
-  // رکورد bar و borneOff را برای بازیکن جدید اضافه کن
-  game.board.bar[playerId] = 0;
-  game.board.borneOff[playerId] = 0;
-
-  // ورود بازیکن دوم = رفتن به فاز starting
-  game.status = "starting";
+  // وقتی 2 نفر شدند بازی آماده است
+  if (game.players.length === 2) {
+    game.status = "ready";
+  }
 
   saveGame(game);
+
   return game;
 }

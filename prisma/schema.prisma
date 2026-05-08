@@ -1,0 +1,103 @@
+// ------------------------------------------------------
+//  Prisma Schema — Backgammon Event Sourcing Architecture
+// ------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ----------------------
+//  User Table
+// ----------------------
+model Users {
+  id         Int      @id @default(autoincrement())
+  userName   String   @unique
+  winRate    Float    @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  gender     GENDER   @default(MAN)
+  whiteGames Games[]  @relation("WhitePlayerRelation")
+  blackGames Games[]  @relation("BlackPlayerRelation")
+}
+
+enum GENDER {
+  MAN
+  WOMAN
+  OTHER
+}
+
+// ----------------------
+//  Game Table
+// ----------------------
+model Games {
+  id          Int      @id @default(autoincrement())
+  status      GAMESTATUS    @default(PENDING)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // players
+  whitePlayerId Int?     
+  blackPlayerId Int?
+
+  whitePlayer   Users?       @relation("WhitePlayerRelation", fields: [whitePlayerId], references: [id])
+  blackPlayer   Users?       @relation("BlackPlayerRelation", fields: [blackPlayerId], references: [id])
+
+  // relations
+  events     GameEvents[]
+  snapshots  GameSnapshots[]
+  //index
+  @@index([whitePlayerId])
+  @@index([blackPlayerId])
+}
+
+enum GAMESTATUS {
+  PENDING
+  ACTIVE
+  FINISHED
+}
+
+// ----------------------
+//  GameEvent Table
+// ----------------------
+model GameEvents {
+  id         Int      @id @default(autoincrement())
+  gameId    Int
+  sequence  Int         // event order (0,1,2,3,...)
+  type      EVENTTYPE
+  payload   Json
+  createdAt DateTime    @default(now())
+
+  game      Games        @relation(fields: [gameId], references: [id])
+
+  // @@index([gameId])
+  @@index([gameId, sequence])
+  @@unique([gameId, sequence]) // no duplicate events
+}
+
+enum EVENTTYPE {
+  PLAYER_JOINED
+  PLAYER_LEFT
+  DICE_ROLLED
+  MOVE_APPLIED
+  GAME_FINISHED
+}
+
+// ----------------------
+//  GameSnapshot Table
+// ----------------------
+model GameSnapshots {
+  id         Int      @id @default(autoincrement())
+  gameId    Int
+  sequence  Int       // event sequence at the moment of snapshot
+  state     Json      // full board state
+  createdAt DateTime @default(now())
+
+  game      Games     @relation(fields: [gameId], references: [id])
+
+  // @@index([gameId])
+  @@unique([gameId, sequence])
+}

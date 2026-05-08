@@ -94,7 +94,7 @@ function computeDistance(
 }
 
 /* -------------------------------------------------- */
-/* 🏎 APPLY MOVE */
+/*  APPLY MOVE */
 /* -------------------------------------------------- */
 
 export function applyMove(

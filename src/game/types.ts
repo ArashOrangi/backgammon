@@ -36,7 +36,7 @@ export interface GameState {
   turn: PlayerId;
 
   /** وضعیت فعلی بازی */
-  status: "waiting" | "starting" | "in-progress" | "finished";
+  status: GameStatus;
 
   /** تاس جاری */
   dice?: number[];
@@ -67,3 +67,10 @@ export interface GameState {
   turnStartedAt?: number;
   turnTimeLimit?: number;
 }
+
+export type GameStatus =
+  | "waiting"
+  | "ready"
+  | "starting"
+  | "in-progress"
+  | "finished";

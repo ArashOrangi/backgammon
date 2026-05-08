@@ -62,3 +62,11 @@ export enum STATUS {
   inProgress = "in-progress",
   finished = "finished",
 }
+
+export enum EventTypes {
+  PLAYER_JOINED = "PLAYER_JOINED",
+  PLAYER_LEFT = "PLAYER_LEFT",
+  DICE_ROLLED = "DICE_ROLLED",
+  MOVE_APPLIED = "MOVE_APPLIED",
+  GAME_FINISHED = "GAME_FINISHED",
+}
