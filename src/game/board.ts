@@ -5,8 +5,8 @@ import { Board, PlayerId } from "./types";
  * هر بازیکن 15 مهره دارد و توزیع اولیه مطابق استاندارد بازی است.
  */
 export function createInitialBoard(
-  playerA: PlayerId,
-  playerB: PlayerId,
+  whitePlayerId: PlayerId,
+  blackPlayerId: PlayerId,
 ): Board {
   const points = Array.from(
     { length: 24 },
@@ -16,21 +16,27 @@ export function createInitialBoard(
     }),
   );
 
-  // توزیع اولیه مهره‌ها بر اساس استاندارد بازی
-  points[0] = { owner: playerB, count: 2 };
-  points[11] = { owner: playerB, count: 5 };
-  points[16] = { owner: playerB, count: 3 };
-  points[18] = { owner: playerB, count: 5 };
+  // black
+  points[0] = { owner: blackPlayerId, count: 2 };
+  points[11] = { owner: blackPlayerId, count: 5 };
+  points[16] = { owner: blackPlayerId, count: 3 };
+  points[18] = { owner: blackPlayerId, count: 5 };
 
-  points[23] = { owner: playerA, count: 2 };
-  points[12] = { owner: playerA, count: 5 };
-  points[7] = { owner: playerA, count: 3 };
-  points[5] = { owner: playerA, count: 5 };
+  // white
+  points[23] = { owner: whitePlayerId, count: 2 };
+  points[12] = { owner: whitePlayerId, count: 5 };
+  points[7] = { owner: whitePlayerId, count: 3 };
+  points[5] = { owner: whitePlayerId, count: 5 };
 
-  const board: Board = {
+  return {
     points,
-    bar: { [playerA]: 0, [playerB]: 0 },
-    borneOff: { [playerA]: 0, [playerB]: 0 },
+    bar: {
+      [whitePlayerId]: 0,
+      [blackPlayerId]: 0,
+    },
+    borneOff: {
+      [whitePlayerId]: 0,
+      [blackPlayerId]: 0,
+    },
   };
-  return board;
 }

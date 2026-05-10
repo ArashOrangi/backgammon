@@ -23,4 +23,8 @@ export const messageError = {
   notify: {
     general: " فعال سازی اعلان ها با خطا مواجه شد",
   },
+  gameHistory: {
+    general: "خطا در تاریخچه بازی",
+    find: "خطا در یافتن تاریخچه بازی",
+  },
 };

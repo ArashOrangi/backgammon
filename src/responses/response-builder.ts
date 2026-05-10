@@ -3,7 +3,9 @@ import {
   IValidations,
   ResponseStates,
 } from "@/responses/ResponseStates";
+import { Context } from "hono";
 
+//#region socket
 export function onOkSocketResponse<T = undefined, X = undefined>(
   data?: T,
   message?: string,
@@ -64,3 +66,107 @@ export function onNoAccessMessageResponse(
     message,
   };
 }
+//#endregion socket
+
+//============================
+
+//#region restAPI
+
+export function onOkRestResponse<T, X>({
+  ctx,
+  data,
+  extra,
+  message,
+  length,
+}: {
+  ctx: Context;
+  data: T;
+  message?: string;
+  extra?: X;
+  length?: number;
+}) {
+  return ctx.json(
+    { responseState: ResponseStates.Ok, data, message, extra, length },
+    200,
+  );
+}
+
+export function onNeedLoginRestResponse({
+  ctx,
+  message,
+}: {
+  ctx: Context;
+  message?: string;
+}) {
+  return ctx.json({ responseState: ResponseStates.NeedLogin, message }, 401);
+}
+
+export function onNotFoundRedirectRestResponse({
+  ctx,
+  redirectPath = "/404",
+}: {
+  ctx: Context;
+  redirectPath?: string;
+}) {
+  return ctx.json(
+    { responseState: ResponseStates.NotFoundRedirect, redirectPath },
+    404,
+  );
+}
+
+export function onValidationsRestResponse({
+  ctx,
+  validations,
+  message,
+}: {
+  ctx: Context;
+  validations: IValidations;
+  message?: string;
+}) {
+  return ctx.json(
+    { responseState: ResponseStates.Validations, validations, message },
+    251 as any,
+  );
+}
+
+export function onNotFoundMessageRestResponse({
+  ctx,
+  notFound,
+}: {
+  ctx: Context;
+  notFound: string[];
+}) {
+  return ctx.json(
+    { responseState: ResponseStates.NotFoundMessage, notFound },
+    252 as any,
+  );
+}
+
+export function onErrorRestResponse({
+  ctx,
+  errorMessage,
+}: {
+  ctx: Context;
+  errorMessage: string;
+}) {
+  return ctx.json(
+    { responseState: ResponseStates.ServerError, errorMessage },
+    254 as any,
+  );
+}
+
+export function onNoAccessMessageRestResponse({
+  ctx,
+  noAccess,
+  message,
+}: {
+  ctx: Context;
+  noAccess: string[];
+  message?: string;
+}) {
+  return ctx.json(
+    { responseState: ResponseStates.NoAccessMessage, noAccess, message },
+    253 as any,
+  );
+}
+//#endregion restAPI

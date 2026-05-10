@@ -1,6 +1,7 @@
 import { errorHandlersOnPrisma } from "@/components/errorHandler.ts";
 import { prisma } from "@/components/prisma";
 import { $Enums, Prisma } from "@prisma/client";
+import { OrmState } from "./enums";
 
 export interface GameEvent {
   id: number;
@@ -134,9 +135,11 @@ export async function prismaGameEventGetFromSequence({
 export async function prismaGameEventGetAfterSequence({
   gameId,
   sequence,
+  untilSequence,
 }: {
   gameId: number;
   sequence: number;
+  untilSequence?: number;
 }) {
   try {
     const events = await prisma.gameEvents.findMany({
@@ -144,16 +147,36 @@ export async function prismaGameEventGetAfterSequence({
         gameId,
         sequence: {
           gt: sequence,
+          ...(untilSequence !== undefined && { lte: untilSequence }),
         },
       },
       orderBy: {
         sequence: "asc",
       },
-      select: prismaSelectGameEvent,
     });
 
     return events;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
   }
+}
+
+export async function prismaGameEventsFind(gameId: number) {
+  try {
+    const events = await prisma.gameEvents.findMany({
+      where: { gameId },
+      orderBy: { sequence: "asc" },
+    });
+
+    return events;
+  } catch (error) {
+    return OrmState.Error;
+  }
+}
+
+export async function getGameEvents(gameId: number) {
+  return prisma.gameEvents.findMany({
+    where: { gameId },
+    orderBy: { sequence: "asc" },
+  });
 }

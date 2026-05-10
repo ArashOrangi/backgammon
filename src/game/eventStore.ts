@@ -15,6 +15,7 @@ import {
 import { applyMove, switchTurn } from "./game.engine";
 import { createInitialGameState } from "./game.store";
 import { createInitialBoard } from "./board";
+import { prisma } from "@/components/prisma";
 
 function assertNever(x: never): never {
   throw new Error(`Unknown event type: ${(x as any).type}`);
@@ -298,4 +299,42 @@ export async function appendGameEvent(gameId: number, event: GameEvent) {
   }
 
   return created;
+}
+
+export async function loadGameStateUntil(
+  gameId: number,
+  untilSequence?: number,
+): Promise<GameState | null> {
+  const snapshot = await prismaGameSnapshotGetLast(gameId);
+
+  let state: GameState;
+  let sequence = 0;
+
+  if (isSnapshotRow(snapshot)) {
+    state = snapshot.state as unknown as GameState;
+    sequence = snapshot.sequence;
+  } else {
+    state = createInitialGameState(String(gameId));
+  }
+
+  const events = await prismaGameEventGetAfterSequence({
+    gameId,
+    sequence,
+    untilSequence,
+  });
+
+  if (!events) return null;
+
+  for (const row of events) {
+    if (!isEventRow(row)) continue;
+
+    const event = {
+      type: row.type,
+      payload: row.payload,
+    } as unknown as GameEvent;
+
+    state = applyEvent(state, event);
+  }
+
+  return state;
 }
