@@ -18,7 +18,7 @@ function createPlayer(id: PlayerId, color: "white" | "black"): PlayerInfo {
 /* Backgammon initial board                                           */
 /* ------------------------------------------------------------------ */
 
-function createInitialBoard() {
+export function createInitialBoard() {
   const points = Array.from({ length: 24 }, () => ({
     owner: null as "white" | "black" | null,
     count: 0,
@@ -52,22 +52,64 @@ function createInitialBoard() {
 }
 
 /* ------------------------------------------------------------------ */
-/* create game                                                        */
+/* initial state factory                                              */
 /* ------------------------------------------------------------------ */
 
-export function createGame(id: string, creatorId: PlayerId): GameState {
-  const game: GameState = {
-    id,
-    createdAt: Date.now(),
+export function createInitialGameState(gameId: string): GameState {
+  return {
+    id: gameId,
 
-    players: [createPlayer(creatorId, "white")],
+    players: [],
+
+    turn: null,
 
     status: "waiting",
 
-    turn: "white",
+    dice: undefined,
+    startingDice: {},
 
-    board: createInitialBoard(),
+    board: {
+      points: Array.from({ length: 24 }, () => ({
+        owner: null,
+        count: 0,
+      })),
+      bar: {},
+      borneOff: {},
+    },
+
+    pipCount: {},
+
+    cubeValue: 1,
+    cubeOwner: undefined,
+    cubeOffered: undefined,
+
+    createdAt: Date.now(),
+
+    turnStartedAt: undefined,
+    turnTimeLimit: undefined,
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* create game                                                        */
+/* ------------------------------------------------------------------ */
+
+// export function createGame(id: string, creatorId: PlayerId): GameState {
+//   const game: GameState = {
+//     ...createInitialGameState(id),
+
+//     players: [createPlayer(creatorId, "white")],
+
+//     turn: creatorId,
+//   };
+
+//   games.set(id, game);
+
+//   return game;
+// }
+
+export function createGame(id: string): GameState {
+  const game = createInitialGameState(id);
 
   games.set(id, game);
 
@@ -102,9 +144,9 @@ export function addPlayerToGame(
   game: GameState,
   playerId: PlayerId,
 ): GameState {
-  // اگر قبلا داخل بازی بوده (reconnect)
   const exists = game.players.find((p) => p.id === playerId);
 
+  // reconnect-safe
   if (exists) {
     return game;
   }
@@ -117,7 +159,6 @@ export function addPlayerToGame(
 
   game.players.push(newPlayer);
 
-  // وقتی 2 نفر شدند بازی آماده است
   if (game.players.length === 2) {
     game.status = "ready";
   }

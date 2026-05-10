@@ -1,4 +1,5 @@
 import { getGame, saveGame } from "../../game/game.store";
+import { appendGameEvent, loadGameState } from "../../game/eventStore";
 import {
   rollDice,
   rollStartingDie,
@@ -20,7 +21,7 @@ type RollPayload = {
   gameId: string;
 };
 
-export function handleRoll(
+export async function handleRoll(
   ctx: SocketContext,
   payload: RollPayload,
   rooms: RoomManager,
@@ -34,12 +35,6 @@ export function handleRoll(
     });
   }
 
-  /* --------------------------------------------------------
-   * VALIDATIONS
-   * --------------------------------------------------------
-   */
-
-  // must be one of game players
   if (!game.players.some((p) => p.id === ctx.id)) {
     return ctx.send({
       type: "game.error",
@@ -47,7 +42,6 @@ export function handleRoll(
     });
   }
 
-  // turn check (except starting phase)
   if (game.status !== "starting" && game.turn !== ctx.id) {
     return ctx.send({
       type: "game.error",
@@ -56,12 +50,21 @@ export function handleRoll(
   }
 
   try {
-    /* --------------------------------------------------------
-     * STARTING PHASE
-     * --------------------------------------------------------
-     */
     if (game.status === "starting") {
       const value = rollStartingDie(game, ctx.id);
+
+      await appendGameEvent(Number(game.id), {
+        type: "STARTING_ROLLED",
+        payload: {
+          playerId: ctx.id,
+          value,
+        },
+      });
+
+      let updatedGame = await loadGameState(Number(game.id));
+      if (!updatedGame) {
+        throw new Error("Failed to rebuild game state after STARTING_ROLLED");
+      }
 
       rooms.broadcast(game.id, {
         type: "game.startRoll",
@@ -71,25 +74,52 @@ export function handleRoll(
         }),
       });
 
-      // resolves: tie or winner
-      tryResolveStartingRoll(game);
+      // اگر engine هنوز logic resolve را در state memory انجام می‌دهد:
+      tryResolveStartingRoll(updatedGame);
 
-      // still starting? (tie)
-      if (game.status === "starting") {
-        saveGame(game);
+      // اگر همچنان tie یا incomplete است
+      if (updatedGame.status === "starting") {
+        saveGame(updatedGame);
+
+        rooms.broadcast(game.id, {
+          type: "game.state",
+          payload: onOkSocketResponse(updatedGame),
+        });
+
         return;
       }
 
-      // game started, opening dice assigned internally
-      saveGame(game);
+      const whitePlayer = updatedGame.players.find((p) => p.color === "white");
+      const blackPlayer = updatedGame.players.find((p) => p.color === "black");
+
+      if (!whitePlayer || !blackPlayer || !updatedGame.turn) {
+        throw new Error(
+          "Cannot start game: players or starting player missing",
+        );
+      }
+
+      await appendGameEvent(Number(game.id), {
+        type: "GAME_STARTED",
+        payload: {
+          whitePlayerId: whitePlayer.id,
+          blackPlayerId: blackPlayer.id,
+          startingPlayerId: updatedGame.turn,
+        },
+      });
+
+      updatedGame = await loadGameState(Number(game.id));
+      if (!updatedGame) {
+        throw new Error("Failed to rebuild game state after GAME_STARTED");
+      }
+
+      saveGame(updatedGame);
 
       rooms.broadcast(game.id, {
         type: "game.state",
-        payload: onOkSocketResponse(game),
+        payload: onOkSocketResponse(updatedGame),
       });
 
-      // send legal moves for opening roll
-      const legal = generateMoveSequences(game, game.turn);
+      const legal = generateMoveSequences(updatedGame, updatedGame.turn!);
 
       rooms.broadcast(game.id, {
         type: "game.legalMoves",
@@ -99,12 +129,6 @@ export function handleRoll(
       return;
     }
 
-    /* --------------------------------------------------------
-     * NORMAL GAME ROLL
-     * --------------------------------------------------------
-     */
-
-    // dice already present → can't roll again
     if (game.dice?.length) {
       return ctx.send({
         type: "game.error",
@@ -112,28 +136,48 @@ export function handleRoll(
       });
     }
 
-    // roll normally
     const dice = rollDice(game);
 
-    // compute legal moves for this player
-    const legal = generateMoveSequences(game, ctx.id);
+    await appendGameEvent(Number(game.id), {
+      type: "DICE_ROLLED",
+      payload: {
+        playerId: ctx.id,
+        dice,
+      },
+    });
 
-    // AUTO-PASS: no legal moves
+    let updatedGame = await loadGameState(Number(game.id));
+    if (!updatedGame) {
+      throw new Error("Failed to rebuild game state after DICE_ROLLED");
+    }
+
+    const legal = generateMoveSequences(updatedGame, ctx.id);
+
     if (!legal.length) {
-      game.dice = undefined;
-      switchTurn(game);
-      saveGame(game);
+      await appendGameEvent(Number(game.id), {
+        type: "TURN_PASSED",
+        payload: {
+          playerId: ctx.id,
+          reason: "NO_LEGAL_MOVES",
+        },
+      });
+
+      updatedGame = await loadGameState(Number(game.id));
+      if (!updatedGame) {
+        throw new Error("Failed to rebuild game state after TURN_PASSED");
+      }
+
+      saveGame(updatedGame);
 
       rooms.broadcast(game.id, {
         type: "game.state",
-        payload: onOkSocketResponse(game, "No legal moves, turn passed"),
+        payload: onOkSocketResponse(updatedGame, "No legal moves, turn passed"),
       });
 
       return;
     }
 
-    // NORMAL CASE: player has legal moves
-    saveGame(game);
+    saveGame(updatedGame);
 
     rooms.broadcast(game.id, {
       type: "game.roll",
@@ -145,7 +189,7 @@ export function handleRoll(
 
     rooms.broadcast(game.id, {
       type: "game.state",
-      payload: onOkSocketResponse(game),
+      payload: onOkSocketResponse(updatedGame),
     });
 
     rooms.broadcast(game.id, {

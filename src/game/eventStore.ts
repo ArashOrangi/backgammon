@@ -13,6 +13,12 @@ import {
 } from "../models/gameSnapshot";
 
 import { applyMove, switchTurn } from "./game.engine";
+import { createInitialGameState } from "./game.store";
+import { createInitialBoard } from "./board";
+
+function assertNever(x: never): never {
+  throw new Error(`Unknown event type: ${(x as any).type}`);
+}
 
 const SNAPSHOT_INTERVAL = 20;
 
@@ -20,25 +26,10 @@ const SNAPSHOT_INTERVAL = 20;
 /* Event Types                                                                */
 /* -------------------------------------------------------------------------- */
 
-type PlayerJoinedEvent = {
-  type: "PLAYER_JOINED";
-  payload: {
-    playerId: string;
-    color: "white" | "black";
-  };
-};
-
 type PlayerLeftEvent = {
   type: "PLAYER_LEFT";
   payload: {
     playerId: string;
-  };
-};
-
-type DiceRolledEvent = {
-  type: "DICE_ROLLED";
-  payload: {
-    dice: number[];
   };
 };
 
@@ -59,10 +50,68 @@ type GameFinishedEvent = {
   };
 };
 
+export type PlayerJoinedEvent = {
+  type: "PLAYER_JOINED";
+  payload: {
+    playerId: string;
+    color: "white" | "black";
+  };
+};
+
+export type GameStartingEvent = {
+  type: "GAME_STARTING";
+  payload: {};
+};
+
+export type StartingRolledEvent = {
+  type: "STARTING_ROLLED";
+  payload: {
+    playerId: string;
+    value: number;
+  };
+};
+
+export type GameStartedEvent = {
+  type: "GAME_STARTED";
+  payload: {
+    whitePlayerId: string;
+    blackPlayerId: string;
+    startingPlayerId: string;
+  };
+};
+
+export type DiceRolledEvent = {
+  type: "DICE_ROLLED";
+  payload: {
+    playerId: string;
+    dice: number[];
+  };
+};
+
+export type TurnPassedEvent = {
+  type: "TURN_PASSED";
+  payload: {
+    playerId: string;
+    reason: "NO_LEGAL_MOVES";
+  };
+};
+
+// export type GameEvent =
+//   | GameStartedEvent
+//   | PlayerJoinedEvent
+//   | PlayerLeftEvent
+//   | DiceRolledEvent
+//   | MoveAppliedEvent
+//   | GameFinishedEvent;
+
 export type GameEvent =
+  | GameStartingEvent
+  | StartingRolledEvent
+  | GameStartedEvent
   | PlayerJoinedEvent
   | PlayerLeftEvent
   | DiceRolledEvent
+  | TurnPassedEvent
   | MoveAppliedEvent
   | GameFinishedEvent;
 
@@ -102,6 +151,33 @@ function isEventRow(value: unknown): value is {
 
 function applyEvent(state: GameState, event: GameEvent): GameState {
   switch (event.type) {
+    case "GAME_STARTING": {
+      state.status = "starting";
+      return state;
+    }
+
+    case "STARTING_ROLLED": {
+      const { playerId, value } = event.payload;
+
+      if (!state.startingDice) {
+        state.startingDice = {};
+      }
+
+      state.startingDice[playerId] = value;
+
+      return state;
+    }
+
+    case "GAME_STARTED": {
+      const { whitePlayerId, blackPlayerId, startingPlayerId } = event.payload;
+
+      state.status = "in-progress";
+      state.turn = startingPlayerId;
+      state.board = createInitialBoard(whitePlayerId, blackPlayerId);
+
+      return state;
+    }
+
     case "PLAYER_JOINED": {
       const { playerId, color } = event.payload;
 
@@ -134,15 +210,24 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       const { playerId, from, to } = event.payload;
 
       applyMove(state, playerId, from, to);
-      switchTurn(state);
+      return state;
+    }
 
+    case "TURN_PASSED": {
+      switchTurn(state);
       return state;
     }
 
     case "GAME_FINISHED": {
       state.status = "finished";
+      state.winner = event.payload.winner;
+      state.winType = event.payload.winType as "normal" | "mars" | "backgammon";
+
       return state;
     }
+
+    default:
+      return assertNever(event);
   }
 }
 
@@ -153,12 +238,14 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
 export async function loadGameState(gameId: number): Promise<GameState | null> {
   const snapshot = await prismaGameSnapshotGetLast(gameId);
 
-  let state: GameState | null = null;
+  let state: GameState;
   let sequence = 0;
 
   if (isSnapshotRow(snapshot)) {
     state = snapshot.state as unknown as GameState;
     sequence = snapshot.sequence;
+  } else {
+    state = createInitialGameState(String(gameId));
   }
 
   const events = await prismaGameEventGetAfterSequence({
@@ -166,26 +253,15 @@ export async function loadGameState(gameId: number): Promise<GameState | null> {
     sequence,
   });
 
-  if (!state && events.length > 0) {
-    const first = events[0];
-
-    if (isEventRow(first)) {
-      state = first.payload as unknown as GameState;
-      sequence = first.sequence;
-    }
-  }
-
   for (const row of events) {
     if (!isEventRow(row)) continue;
-
-    if (row.sequence <= sequence) continue;
 
     const event = {
       type: row.type,
       payload: row.payload,
     } as unknown as GameEvent;
 
-    state = applyEvent(state!, event);
+    state = applyEvent(state, event);
   }
 
   return state;
@@ -206,7 +282,7 @@ export async function appendGameEvent(gameId: number, event: GameEvent) {
     gameId,
     sequence: nextSequence,
     type: event.type as $Enums.EVENTTYPE,
-    payload: event.payload,
+    payload: event.payload as Prisma.InputJsonValue,
   });
 
   if (nextSequence % SNAPSHOT_INTERVAL === 0) {

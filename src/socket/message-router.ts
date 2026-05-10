@@ -14,6 +14,7 @@ import {
   onValidationSocketResponse,
   onErrorSocketResponse,
 } from "@/responses/response-builder";
+import { GameQueue } from "@/game/gameQueue";
 
 type Handler<TPayload = any> = (
   ctx: SocketContext,
@@ -23,6 +24,7 @@ type Handler<TPayload = any> = (
 
 export class MessageRouter {
   private handlers = new Map<ClientMessage["type"], Handler>();
+  private queue = new GameQueue();
 
   constructor(private rooms: RoomManager) {}
 
@@ -50,7 +52,6 @@ export class MessageRouter {
         });
       }
 
-      // Validation Layer
       const isValid = this.validateMessage(message);
 
       if (!isValid) {
@@ -62,8 +63,15 @@ export class MessageRouter {
         });
       }
 
-      // Safe handler execution
-      handler(ctx, message.payload as any, this.rooms);
+      const gameId = message.payload.gameId;
+
+      if (!gameId) {
+        return handler(ctx, message.payload as any, this.rooms);
+      }
+
+      this.queue.enqueue(String(gameId), async () => {
+        await handler(ctx, message.payload as any, this.rooms);
+      });
     } catch (error) {
       console.error("MessageRouter Error:", error);
 

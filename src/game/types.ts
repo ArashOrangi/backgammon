@@ -33,7 +33,7 @@ export interface GameState {
   players: PlayerInfo[];
 
   /** بازیکنی که نوبتش است */
-  turn: PlayerId;
+  turn: PlayerId | null;
 
   /** وضعیت فعلی بازی */
   status: GameStatus;
