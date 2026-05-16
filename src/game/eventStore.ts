@@ -12,10 +12,10 @@ import {
   prismaGameSnapshotGetLast,
 } from "../models/gameSnapshot";
 
-import { applyMove, switchTurn } from "./gameEngine";
 import { createInitialGameState } from "./gameStore";
 import { createInitialBoard } from "./board";
 import { prisma } from "@/components/prisma";
+import { applyMove, switchTurn } from "./engine";
 
 function assertNever(x: never): never {
   throw new Error(`Unknown event type: ${(x as any).type}`);

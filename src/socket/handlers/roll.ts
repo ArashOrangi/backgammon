@@ -1,11 +1,5 @@
 import { getGame, saveGame } from "../../game/gameStore";
 import { appendGameEvent, loadGameState } from "../../game/eventStore";
-import {
-  rollDice,
-  rollStartingDie,
-  tryResolveStartingRoll,
-  switchTurn,
-} from "../../game/gameEngine";
 
 import { SocketContext } from "../socket-context";
 import { RoomManager } from "../room-manager";
@@ -16,6 +10,11 @@ import {
 } from "@/responses/response-builder";
 
 import { generateMoveSequences } from "@/game/moveGenerator";
+import {
+  rollDice,
+  rollStartingDie,
+  tryResolveStartingRoll,
+} from "@/game/engine";
 
 type RollPayload = {
   gameId: string;

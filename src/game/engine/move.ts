@@ -1,33 +1,5 @@
-import { GameState, PlayerId } from "./types";
-import { canBearOff } from "./ruleValidator";
-import { rollDie, rollDice as rollDiceUtil } from "../utils/dice";
-
-/* -------------------------------------------------- */
-/* 🎲 NORMAL ROLL */
-/* -------------------------------------------------- */
-
-export function rollDice(game: GameState): number[] {
-  const dice = rollDiceUtil();
-  game.dice = dice;
-  return dice;
-}
-
-/* -------------------------------------------------- */
-/* 🔄 TURN MANAGEMENT */
-/* -------------------------------------------------- */
-
-export function switchTurn(game: GameState) {
-  const idx = game.players.findIndex((p) => p.id === game.turn);
-
-  if (idx === -1) {
-    throw new Error("Current turn player not found");
-  }
-
-  const next = (idx + 1) % game.players.length;
-
-  game.turn = game.players[next].id;
-  game.turnStartedAt = Date.now();
-}
+import { GameState, PlayerId } from "../types";
+import { canBearOff } from "../ruleValidator";
 
 /* -------------------------------------------------- */
 /* 🎯 DIE CONSUMPTION (ENGINE‑LEVEL STRICT) */
@@ -215,53 +187,4 @@ export function undoMove(
     src.owner = playerId;
     src.count++;
   }
-}
-
-/* -------------------------------------------------- */
-/* 🏁 GAME OVER CHECK */
-/* -------------------------------------------------- */
-
-export function isGameOver(game: GameState): boolean {
-  return game.players.some((p) => (game.board.borneOff[p.id] ?? 0) >= 15);
-}
-
-/* -------------------------------------------------- */
-/* ⭐ STARTING PHASE LOGIC */
-/* -------------------------------------------------- */
-
-export function rollStartingDie(game: GameState, playerId: PlayerId): number {
-  if (game.status !== "starting") throw new Error("Game not in starting phase");
-
-  if (!game.startingDice) game.startingDice = {};
-
-  if (game.startingDice[playerId])
-    throw new Error("Player already rolled starting die");
-
-  const value = rollDie();
-  game.startingDice[playerId] = value;
-  return value;
-}
-
-export function tryResolveStartingRoll(game: GameState) {
-  if (game.status !== "starting") return;
-
-  const players = game.players.map((p) => p.id);
-  if (players.length < 2) return;
-
-  const [p1, p2] = players;
-  const d1 = game.startingDice?.[p1];
-  const d2 = game.startingDice?.[p2];
-  if (!d1 || !d2) return;
-
-  if (d1 === d2) {
-    game.startingDice = {};
-    return;
-  }
-
-  const starter = d1 > d2 ? p1 : p2;
-  game.turn = starter;
-  game.dice = [d1, d2];
-  game.status = "in-progress";
-  delete game.startingDice;
-  game.turnStartedAt = Date.now();
 }

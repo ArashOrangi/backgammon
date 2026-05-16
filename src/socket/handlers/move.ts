@@ -2,7 +2,6 @@ import { getGame, saveGame } from "../../game/gameStore";
 import { SocketContext } from "../socket-context";
 import { RoomManager } from "../room-manager";
 
-import { applyMove, switchTurn } from "../../game/gameEngine";
 import { validateMove } from "../../game/ruleValidator";
 import { generateMoveSequences, MoveSequence } from "../../game/moveGenerator";
 
@@ -12,6 +11,7 @@ import {
   onErrorSocketResponse,
   onOkSocketResponse,
 } from "@/responses/response-builder";
+import { applyMove, switchTurn } from "@/game/engine";
 
 export function handleMove(
   ctx: SocketContext,

@@ -66,6 +66,7 @@ export interface GameState {
   /** تایمر نوبت */
   turnStartedAt?: number;
   turnTimeLimit?: number;
+  lastActionAt?: number;
 }
 
 export type GameStatus =
