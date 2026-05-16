@@ -1,11 +1,11 @@
-import { getGame, saveGame } from "../../game/game.store";
+import { getGame, saveGame } from "../../game/gameStore";
 import { appendGameEvent, loadGameState } from "../../game/eventStore";
 import {
   rollDice,
   rollStartingDie,
   tryResolveStartingRoll,
   switchTurn,
-} from "../../game/game.engine";
+} from "../../game/gameEngine";
 
 import { SocketContext } from "../socket-context";
 import { RoomManager } from "../room-manager";
@@ -15,7 +15,7 @@ import {
   onOkSocketResponse,
 } from "@/responses/response-builder";
 
-import { generateMoveSequences } from "@/game/move.generator";
+import { generateMoveSequences } from "@/game/moveGenerator";
 
 type RollPayload = {
   gameId: string;

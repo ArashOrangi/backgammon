@@ -1,4 +1,3 @@
-import { saveGame } from "../../game/game.store";
 import { appendGameEvent, loadGameState } from "../../game/eventStore";
 import { SocketContext } from "../socket-context";
 import { RoomManager } from "../room-manager";
@@ -6,6 +5,7 @@ import {
   onErrorSocketResponse,
   onOkSocketResponse,
 } from "@/responses/response-builder";
+import { saveGame } from "@/game/gameStore";
 
 type JoinPayload = {
   gameId: string;

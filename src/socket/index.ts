@@ -9,7 +9,7 @@ import { handleRoll } from "./handlers/roll";
 import { handleMove } from "./handlers/move";
 import { handleLeave } from "./handlers/leave";
 
-import { getGame, saveGame, deleteGame } from "@/game/game.store";
+import { getGame, saveGame, deleteGame } from "@/game/gameStore";
 import {
   onErrorSocketResponse,
   onOkSocketResponse,

@@ -6,7 +6,7 @@ import {
   validateLeave,
   validateRoll,
 } from "@/validations/socket";
-import { validateMove } from "@/game/rule-validator";
+import { validateMove } from "@/game/ruleValidator";
 import { Value } from "@sinclair/typebox/value";
 import { MovePieceSchema } from "@/validations/game.move";
 

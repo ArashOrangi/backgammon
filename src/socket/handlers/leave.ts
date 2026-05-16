@@ -1,4 +1,4 @@
-import { getGame, saveGame, deleteGame } from "../../game/game.store";
+import { getGame, saveGame, deleteGame } from "../../game/gameStore";
 import { SocketContext } from "../socket-context";
 import { RoomManager } from "../room-manager";
 

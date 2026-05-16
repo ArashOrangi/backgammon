@@ -1,6 +1,6 @@
 import { GameState, PlayerId } from "./types";
-import { validateMove } from "./rule-validator";
-import { applyMove, undoMove } from "./game.engine";
+import { validateMove } from "./ruleValidator";
+import { applyMove, undoMove } from "./gameEngine";
 
 /* -------------------------------------------------- */
 /* TYPES */

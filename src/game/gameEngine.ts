@@ -1,5 +1,5 @@
 import { GameState, PlayerId } from "./types";
-import { canBearOff } from "./rule-validator";
+import { canBearOff } from "./ruleValidator";
 import { rollDie, rollDice as rollDiceUtil } from "../utils/dice";
 
 /* -------------------------------------------------- */

@@ -1,10 +1,10 @@
-import { getGame, saveGame } from "../../game/game.store";
+import { getGame, saveGame } from "../../game/gameStore";
 import { SocketContext } from "../socket-context";
 import { RoomManager } from "../room-manager";
 
-import { applyMove, switchTurn } from "../../game/game.engine";
-import { validateMove } from "../../game/rule-validator";
-import { generateMoveSequences, MoveSequence } from "../../game/move.generator";
+import { applyMove, switchTurn } from "../../game/gameEngine";
+import { validateMove } from "../../game/ruleValidator";
+import { generateMoveSequences, MoveSequence } from "../../game/moveGenerator";
 
 import { MovePayload } from "../../validations/game.move";
 

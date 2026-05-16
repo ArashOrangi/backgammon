@@ -12,8 +12,8 @@ import {
   prismaGameSnapshotGetLast,
 } from "../models/gameSnapshot";
 
-import { applyMove, switchTurn } from "./game.engine";
-import { createInitialGameState } from "./game.store";
+import { applyMove, switchTurn } from "./gameEngine";
+import { createInitialGameState } from "./gameStore";
 import { createInitialBoard } from "./board";
 import { prisma } from "@/components/prisma";
 
