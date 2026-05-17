@@ -1,7 +1,7 @@
 import process from "node:process";
 
-export const portApp = process.env.PORT;
-export const portSocket = process.env.PORT_SOCKET;
+export const portApp = Number(process.env.PORT) || 3000;
+export const portSocket = Number(process.env.PORT) || 3001;
 export const sitURL = process.env.API_URL;
 
 export const keyPublic = "backgammonGuest";

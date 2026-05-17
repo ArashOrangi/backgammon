@@ -11,8 +11,19 @@ function consumeDie(game: GameState, distance: number) {
   }
 
   const exact = game.dice.findIndex((d) => d === distance);
+
   if (exact !== -1) {
     game.dice.splice(exact, 1);
+    return;
+  }
+
+  const bigger = game.dice
+    .map((d, i) => ({ d, i }))
+    .filter((x) => x.d > distance)
+    .sort((a, b) => a.d - b.d)[0];
+
+  if (bigger) {
+    game.dice.splice(bigger.i, 1);
     return;
   }
 

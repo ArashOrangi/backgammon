@@ -1,61 +1,77 @@
 import { GameEvent } from "./eventStore";
 
-type TimelineEventRow = {
-  type: GameEvent["type"];
-  payload: any;
-  sequence?: number;
-  createdAt?: Date;
-};
+export function eventToTimeline(event: any) {
+  const base = {
+    id: event.id,
+    time: new Date(event.createdAt).getTime(),
+    roomId: event.gameId,
+    seq: event.sequence,
+    revert: false,
+  };
 
-export function eventToTimeline(event: TimelineEventRow) {
   switch (event.type) {
     case "PLAYER_JOINED":
       return {
-        sequence: event.sequence,
-        message: `Player ${event.payload.playerId} joined`,
-        createdAt: event.createdAt,
+        ...base,
+        initiator: event.payload.playerId,
+        event: "Joined",
+        details: event.payload.playerId,
       };
 
-    case "DICE_ROLLED":
+    case "GAME_STARTING":
       return {
-        sequence: event.sequence,
-        message: `Dice rolled ${event.payload.dice[0]}-${event.payload.dice[1]}`,
-        createdAt: event.createdAt,
-      };
-
-    case "MOVE_APPLIED":
-      return {
-        sequence: event.sequence,
-        message: `Move ${event.payload.from} → ${event.payload.to}`,
-        createdAt: event.createdAt,
-      };
-
-    case "TURN_PASSED":
-      return {
-        sequence: event.sequence,
-        message: "Turn passed",
-        createdAt: event.createdAt,
+        ...base,
+        initiator: null,
+        event: "RoomReady",
+        details: null,
       };
 
     case "GAME_STARTED":
       return {
-        sequence: event.sequence,
-        message: "Game started",
-        createdAt: event.createdAt,
+        ...base,
+        initiator: null,
+        event: "Assign",
+        details: `${event.payload.whiteId},${event.payload.blackId}`,
+      };
+
+    case "DICE_ROLLED":
+      return {
+        ...base,
+        initiator: event.payload.playerId,
+        event: "DiceResult",
+        details: `${event.payload.dice[0]},${event.payload.dice[1]}`,
+      };
+
+    case "MOVE_APPLIED":
+      return {
+        ...base,
+        initiator: event.payload.playerId,
+        event: "Move",
+        details: `${event.payload.from},${event.payload.to}`,
+      };
+
+    case "TURN_PASSED":
+      return {
+        ...base,
+        initiator: event.payload.playerId,
+        event: "Turn",
+        details: null,
       };
 
     case "GAME_FINISHED":
       return {
-        sequence: event.sequence,
-        message: `Winner ${event.payload.winner}`,
-        createdAt: event.createdAt,
+        ...base,
+        initiator: null,
+        event: "Result",
+        details: event.payload.winner,
       };
 
     default:
       return {
-        sequence: event.sequence,
-        message: event.type,
-        createdAt: event.createdAt,
+        ...base,
+        initiator: null,
+        event: event.type,
+        details: null,
       };
   }
 }

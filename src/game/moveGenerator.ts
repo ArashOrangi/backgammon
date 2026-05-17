@@ -112,7 +112,7 @@ function generateSingleMoves(
     /* -------------------------------------------------- */
     /* BAR ENTRY */
     /* -------------------------------------------------- */
-    if (board.bar[playerId] > 0) {
+    if ((board.bar[playerId] ?? 0) > 0) {
       const to = computeTargetFromBar(game, playerId, die);
 
       const res = validateMove(game, playerId, "bar", to);

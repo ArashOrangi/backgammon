@@ -11,9 +11,10 @@ import {
   onErrorSocketResponse,
   onOkSocketResponse,
 } from "@/responses/response-builder";
-import { applyMove, switchTurn } from "@/game/engine";
 
-export function handleMove(
+import { appendGameEvent, loadGameState } from "@/game/eventStore";
+
+export async function handleMove(
   ctx: SocketContext,
   payload: MovePayload,
   rooms: RoomManager,
@@ -54,22 +55,47 @@ export function handleMove(
   }
 
   try {
-    applyMove(game, playerId, from, to);
+    /* -------------------------------- */
+    /* APPEND MOVE EVENT */
+    /* -------------------------------- */
+
+    await appendGameEvent(Number(game.id), {
+      type: "MOVE_APPLIED",
+      payload: {
+        playerId,
+        from,
+        to,
+      },
+    });
+
+    let updatedGame = await loadGameState(Number(game.id));
+
+    if (!updatedGame) {
+      throw new Error("Failed to rebuild state after MOVE_APPLIED");
+    }
 
     /* -------------------------------- */
     /* CHECK WIN CONDITION */
     /* -------------------------------- */
 
-    if (game.board.borneOff[playerId] === 15) {
-      game.status = "finished";
-      game.winner = playerId;
-      game.dice = undefined;
+    if (updatedGame.board.borneOff[playerId] === 15) {
+      await appendGameEvent(Number(updatedGame.id), {
+        type: "GAME_FINISHED",
+        payload: {
+          winner: playerId,
+          winType: "normal",
+        },
+      });
 
-      saveGame(game);
+      updatedGame = await loadGameState(Number(updatedGame.id));
+      if (!updatedGame) {
+        throw new Error("Game not found after event append");
+      }
+      saveGame(updatedGame);
 
-      rooms.broadcast(game.id, {
+      rooms.broadcast(updatedGame.id, {
         type: "game.state",
-        payload: onOkSocketResponse(game, "Game over"),
+        payload: onOkSocketResponse(updatedGame, "Game over"),
       });
 
       return;
@@ -81,38 +107,47 @@ export function handleMove(
 
     let legalMoves: MoveSequence[] = [];
 
-    if (game.dice && game.dice.length > 0) {
-      legalMoves = generateMoveSequences(game, playerId);
+    if (updatedGame.dice && updatedGame.dice.length > 0) {
+      legalMoves = generateMoveSequences(updatedGame, playerId);
     }
 
     const mustPass = legalMoves.length === 0;
 
     if (mustPass) {
-      game.dice = undefined;
-      switchTurn(game);
+      await appendGameEvent(Number(updatedGame.id), {
+        type: "TURN_PASSED",
+        payload: {
+          playerId,
+          reason: "NO_LEGAL_MOVES",
+        },
+      });
 
-      saveGame(game);
+      updatedGame = await loadGameState(Number(updatedGame.id));
+      if (!updatedGame) {
+        throw new Error("Game state could not be loaded");
+      }
+      saveGame(updatedGame);
 
-      rooms.broadcast(game.id, {
+      rooms.broadcast(updatedGame.id, {
         type: "game.state",
-        payload: onOkSocketResponse(game, "Turn passed"),
+        payload: onOkSocketResponse(updatedGame, "Turn passed"),
       });
 
       return;
     }
 
     /* -------------------------------- */
-    /* NORMAL MOVE CONTINUE */
+    /* NORMAL CONTINUE */
     /* -------------------------------- */
 
-    saveGame(game);
+    saveGame(updatedGame);
 
-    rooms.broadcast(game.id, {
+    rooms.broadcast(updatedGame.id, {
       type: "game.state",
-      payload: onOkSocketResponse(game),
+      payload: onOkSocketResponse(updatedGame),
     });
 
-    rooms.broadcast(game.id, {
+    rooms.broadcast(updatedGame.id, {
       type: "game.legalMoves",
       payload: onOkSocketResponse(legalMoves),
     });

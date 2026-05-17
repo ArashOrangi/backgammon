@@ -42,7 +42,8 @@ history.get("/:gameId/history", async (ctx) => {
 history.get("/:gameId/replay", async (ctx) => {
   try {
     const gameId = Number(ctx.req.param("gameId"));
-    const until = Number(ctx.req.query("until"));
+    const untilQuery = ctx.req.query("until");
+    const until = untilQuery ? Number(untilQuery) : undefined;
 
     const state = await loadGameStateUntil(gameId, until);
     if (!state) {

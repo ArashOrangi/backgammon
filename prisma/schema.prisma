@@ -81,10 +81,15 @@ model GameEvents {
 enum EVENTTYPE {
   PLAYER_JOINED
   PLAYER_LEFT
+  GAME_STARTING
+  GAME_STARTED
+  STARTING_ROLLED
   DICE_ROLLED
   MOVE_APPLIED
+  TURN_PASSED
   GAME_FINISHED
 }
+
 
 // ----------------------
 //  GameSnapshot Table
