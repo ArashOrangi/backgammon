@@ -13,6 +13,6 @@ export function startServer() {
   registerSocketHandlers(wss);
 
   httpServer.listen(portApp, () => {
-    console.log("Backgammon server running on port 3000 (ws)");
+    console.log(`Backgammon server running on port ${portApp} (ws)`);
   });
 }

@@ -13,6 +13,9 @@
 // }, (info) => {
 //   console.log(`Server is running on http://localhost:${info.port}`)
 // })
-import "./server/server";
+import { startServer } from "./server/server";
+import dotenv from "dotenv";
+dotenv.config();
 
+startServer();
 console.log("Backgammon server started...");

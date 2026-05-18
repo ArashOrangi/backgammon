@@ -1,4 +1,6 @@
 import process from "node:process";
+import dotenv from "dotenv";
+dotenv.config();
 
 export const portApp = Number(process.env.PORT) || 3000;
 export const portSocket = Number(process.env.PORT) || 3001;
