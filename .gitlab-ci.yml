@@ -28,8 +28,7 @@ deploy:
     - cicd
   script:
     - xcopy /E /I C:\Users\Public\node_modules node_modules
-    - npm install
-    - npm run build
+    - npm install --registry="https://mirror-npm.runflare.com"
     - Write-Host "Starting deployment script..."
     - powershell -ExecutionPolicy Bypass -File .\deploy.ps1 -SiteName "$env:SITE_NAME"
   environment:
