@@ -1,34 +1,17 @@
 {
   "compilerOptions": {
-    "removeComments": true,
-    "preserveConstEnums": true,
-    "sourceRoot": "./src/",
-    "rootDir": "./src/",
     "outDir": "./dist",
-    "sourceMap": true,
-    "lib": ["ES2022"],
-    "allowJs": false,
-    "skipLibCheck": true,
-    "strict": true,
-    "noEmit": false,
-    "esModuleInterop": true,
+    "rootDir": "./src",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "jsx": "preserve",
-    "incremental": true,
     "target": "ES2022",
-    "paths": {
-      "@/*": ["./src/*"]
-    },
-    "allowImportingTsExtensions": false,
-    "noImplicitAny": false
+    "paths": { "@/*": ["./src/*"] },
+    "noEmit": false,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": false
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"],
-  "tsc-alias": {
-    "resolveFullPaths": true,
-    "verbose": false
-  }
+  "exclude": ["node_modules", "dist"]
 }
