@@ -4,24 +4,31 @@
     "preserveConstEnums": true,
     "sourceRoot": "./src/",
     "rootDir": "./src/",
+    "outDir": "./dist",
     "sourceMap": true,
-    "lib": ["esnext"],
+    "lib": ["ES2022"],
     "allowJs": false,
     "skipLibCheck": true,
     "strict": true,
-    "noEmit": true,
+    "noEmit": false,
     "esModuleInterop": true,
-    "module": "esnext",
+    "module": "ESNext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
-    "target": "ES2017",
-    "paths": { "@/*": ["./src/*"] },
-    "allowImportingTsExtensions": true,
+    "target": "ES2022",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "allowImportingTsExtensions": false,
     "noImplicitAny": false
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "dist"],
+  "tsc-alias": {
+    "resolveFullPaths": true,
+    "verbose": false
+  }
 }

@@ -1,4 +1,4 @@
-import { Errors, OrmState } from "../models/enums.ts";
+import { Errors, OrmState } from "../models/enums";
 import fs from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";

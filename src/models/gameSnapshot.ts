@@ -1,4 +1,4 @@
-import { errorHandlersOnPrisma } from "@/components/errorHandler.ts";
+import { errorHandlersOnPrisma } from "@/components/errorHandler";
 import { prisma } from "@/components/prisma";
 import { Prisma } from "@prisma/client";
 

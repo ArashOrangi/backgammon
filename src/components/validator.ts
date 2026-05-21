@@ -4,12 +4,12 @@ import {
   ValueError,
   ValueErrorType,
 } from "@sinclair/typebox/compiler";
-import { textFixer } from "@/components/textFixer.ts";
+import { textFixer } from "@/components/textFixer";
 import {
   otpLength,
   phoneNumberLength,
   userPasswordLength,
-} from "@/static/statics.ts";
+} from "@/static/statics";
 
 const socialWords = [
   "ایتا",

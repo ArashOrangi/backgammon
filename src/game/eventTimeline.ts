@@ -1,5 +1,16 @@
 import { GameEvent } from "./eventStore";
-
+// {
+//   Joined,
+//   RoomReady,
+//   Assign,
+//   Turn,
+//   RollDice,
+//   DiceResult,
+//   TurnTimeout,
+//   NetworkTimeout,
+//   Move,
+//   Result
+// }
 export function eventToTimeline(event: any) {
   const base = {
     id: event.id,
@@ -75,3 +86,53 @@ export function eventToTimeline(event: any) {
       };
   }
 }
+
+// import { GameEventWithMeta, mapGameEventToClientMessage } from "./protocol";
+
+// export function eventToTimeline(event: GameEventWithMeta) {
+//   const clientMessage = mapGameEventToClientMessage(event);
+
+//   if (!clientMessage) return null;
+
+//   const base = {
+//     id: event.id,
+//     time: new Date(event.createdAt).getTime(),
+//     roomId: String(event.gameId),
+//     seq: event.sequence,
+//     revert: false,
+//   };
+
+//   return {
+//     ...base,
+//     initiator: getInitiator(clientMessage),
+//     event: clientMessage.type,
+//     details: getDetails(clientMessage),
+//   };
+// }
+
+// function getInitiator(message: ServerMessage): string | null {
+//   switch (message.type) {
+//     case "Joined": return message.payload.playerId;
+//     case "DiceResult": return message.payload.playerId;
+//     case "Move": return message.payload.playerId;
+//     case "Turn": return message.payload.playerId;
+//     default: return null;
+//   }
+// }
+
+// function getDetails(message: ServerMessage): string | null {
+//   switch (message.type) {
+//     case "Assign":
+//       return `${message.payload.whitePlayerId},${message.payload.blackPlayerId}`;
+//     case "DiceResult":
+//       return message.payload.dice.join(",");
+//     case "Move":
+//       return `${message.payload.from},${message.payload.to}`;
+//     case "Result":
+//       return message.payload.winner;
+//     case "Joined":
+//       return message.payload.playerId;
+//     default:
+//       return null;
+//   }
+// }

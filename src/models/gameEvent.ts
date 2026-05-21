@@ -1,4 +1,4 @@
-import { errorHandlersOnPrisma } from "@/components/errorHandler.ts";
+import { errorHandlersOnPrisma } from "@/components/errorHandler";
 import { prisma } from "@/components/prisma";
 import { $Enums, Prisma } from "@prisma/client";
 import { OrmState } from "./enums";
