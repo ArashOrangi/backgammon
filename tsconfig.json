@@ -2,8 +2,7 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
+    "module": "CommonJS",
     "target": "ES2022",
     "paths": { "@/*": ["./src/*"] },
     "noEmit": false,
