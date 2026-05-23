@@ -274,11 +274,9 @@ export async function loadGameState(gameId: number): Promise<GameState | null> {
 
 export async function appendGameEvent(gameId: number, event: GameEvent) {
   const lastSequence = await prismaGameEventGetLastSequence(gameId);
-
   if (typeof lastSequence !== "number") return lastSequence;
 
   const nextSequence = lastSequence + 1;
-
   const created = await prismaGameEventCreate({
     gameId,
     sequence: nextSequence,
@@ -286,9 +284,14 @@ export async function appendGameEvent(gameId: number, event: GameEvent) {
     payload: event.payload as Prisma.InputJsonValue,
   });
 
+  // اگر created خطا باشد (مثلاً به دلیل Foreign Key)
+  if (!created || (created as any).errorType) {
+    console.error("Failed to append event:", created);
+    throw new Error(`Failed to append event: ${JSON.stringify(created)}`);
+  }
+
   if (nextSequence % SNAPSHOT_INTERVAL === 0) {
     const state = await loadGameState(gameId);
-
     if (state) {
       await prismaGameSnapshotCreate({
         gameId,
@@ -297,7 +300,6 @@ export async function appendGameEvent(gameId: number, event: GameEvent) {
       });
     }
   }
-
   return created;
 }
 

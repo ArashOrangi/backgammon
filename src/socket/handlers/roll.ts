@@ -1,31 +1,28 @@
 import { getGame, saveGame } from "../../game/gameStore";
-import { appendGameEvent, loadGameState } from "../../game/eventStore";
-
 import { SocketContext } from "../socket-context";
 import { RoomManager } from "../room-manager";
-
 import {
   onErrorSocketResponse,
   onOkSocketResponse,
 } from "@/responses/response-builder";
-
 import { generateMoveSequences } from "@/game/moveGenerator";
 import {
   rollDice,
   rollStartingDie,
   tryResolveStartingRoll,
 } from "@/game/engine";
+import { createInitialBoard } from "@/game/board";
 
-type RollPayload = {
-  gameId: string;
-};
+type RollPayload = { gameId: string };
 
 export async function handleRoll(
   ctx: SocketContext,
   payload: RollPayload,
   rooms: RoomManager,
 ) {
-  const game = getGame(payload.gameId);
+  const { gameId } = payload;
+  const playerId = ctx.id;
+  const game = getGame(gameId);
 
   if (!game) {
     return ctx.send({
@@ -34,14 +31,14 @@ export async function handleRoll(
     });
   }
 
-  if (!game.players.some((p) => p.id === ctx.id)) {
+  if (!game.players.some((p) => p.id === playerId)) {
     return ctx.send({
       type: "game.error",
       payload: onErrorSocketResponse("Player not in game"),
     });
   }
 
-  if (game.status !== "starting" && game.turn !== ctx.id) {
+  if (game.status !== "starting" && game.turn !== playerId) {
     return ctx.send({
       type: "game.error",
       payload: onErrorSocketResponse("Not your turn"),
@@ -50,84 +47,52 @@ export async function handleRoll(
 
   try {
     if (game.status === "starting") {
-      const value = rollStartingDie(game, ctx.id);
-
-      await appendGameEvent(Number(game.id), {
-        type: "STARTING_ROLLED",
-        payload: {
-          playerId: ctx.id,
-          value,
-        },
-      });
-
-      let updatedGame = await loadGameState(Number(game.id));
-      if (!updatedGame) {
-        throw new Error("Failed to rebuild game state after STARTING_ROLLED");
-      }
-
-      rooms.broadcast(game.id, {
+      const value = rollStartingDie(game, playerId);
+      rooms.broadcast(gameId, {
         type: "game.startRoll",
-        payload: onOkSocketResponse({
-          player: ctx.id,
-          value,
-        }),
+        payload: onOkSocketResponse({ player: playerId, value }),
       });
+      tryResolveStartingRoll(game);
 
-      // اگر engine هنوز logic resolve را در state memory انجام می‌دهد:
-      tryResolveStartingRoll(updatedGame);
-
-      // اگر همچنان tie یا incomplete است
-      if (updatedGame.status === "starting") {
-        saveGame(updatedGame);
-
-        rooms.broadcast(game.id, {
-          type: "game.state",
-          payload: onOkSocketResponse(updatedGame),
-        });
-
-        return;
+      const newStatus: string = game.status;
+      if (newStatus === "in-progress") {
+        const whitePlayer = game.players.find((p) => p.color === "white");
+        const blackPlayer = game.players.find((p) => p.color === "black");
+        if (whitePlayer && blackPlayer) {
+          const isEmpty = game.board.points.every((p) => p.owner === null);
+          if (isEmpty) {
+            game.board = createInitialBoard(whitePlayer.id, blackPlayer.id);
+          }
+        }
       }
 
-      const whitePlayer = updatedGame.players.find((p) => p.color === "white");
-      const blackPlayer = updatedGame.players.find((p) => p.color === "black");
-
-      if (!whitePlayer || !blackPlayer || !updatedGame.turn) {
-        throw new Error(
-          "Cannot start game: players or starting player missing",
-        );
-      }
-
-      await appendGameEvent(Number(game.id), {
-        type: "GAME_STARTED",
-        payload: {
-          whitePlayerId: whitePlayer.id,
-          blackPlayerId: blackPlayer.id,
-          startingPlayerId: updatedGame.turn,
-        },
-      });
-
-      updatedGame = await loadGameState(Number(game.id));
-      if (!updatedGame) {
-        throw new Error("Failed to rebuild game state after GAME_STARTED");
-      }
-
-      saveGame(updatedGame);
-
-      rooms.broadcast(game.id, {
+      saveGame(game);
+      rooms.broadcast(gameId, {
         type: "game.state",
-        payload: onOkSocketResponse(updatedGame),
+        payload: onOkSocketResponse(game),
       });
 
-      const legal = generateMoveSequences(updatedGame, updatedGame.turn!);
-
-      rooms.broadcast(game.id, {
-        type: "game.legalMoves",
-        payload: onOkSocketResponse(legal),
-      });
-
+      if (newStatus === "in-progress") {
+        if (game.dice && game.dice.length > 0 && game.turn) {
+          try {
+            const legal = generateMoveSequences(game, game.turn);
+            rooms.broadcast(gameId, {
+              type: "game.legalMoves",
+              payload: onOkSocketResponse(legal),
+            });
+          } catch (err) {
+            console.error("Error generating legal moves:", err);
+          }
+        } else {
+          console.warn(
+            "No dice or turn available after starting roll. Skipping legal moves.",
+          );
+        }
+      }
       return;
     }
 
+    // ریختن تاس معمولی
     if (game.dice?.length) {
       return ctx.send({
         type: "game.error",
@@ -136,70 +101,53 @@ export async function handleRoll(
     }
 
     const dice = rollDice(game);
-
-    await appendGameEvent(Number(game.id), {
-      type: "DICE_ROLLED",
-      payload: {
-        playerId: ctx.id,
-        dice,
-      },
-    });
-
-    let updatedGame = await loadGameState(Number(game.id));
-    if (!updatedGame) {
-      throw new Error("Failed to rebuild game state after DICE_ROLLED");
-    }
-
-    const legal = generateMoveSequences(updatedGame, ctx.id);
-
-    if (!legal.length) {
-      await appendGameEvent(Number(game.id), {
-        type: "TURN_PASSED",
-        payload: {
-          playerId: ctx.id,
-          reason: "NO_LEGAL_MOVES",
-        },
-      });
-
-      updatedGame = await loadGameState(Number(game.id));
-      if (!updatedGame) {
-        throw new Error("Failed to rebuild game state after TURN_PASSED");
-      }
-
-      saveGame(updatedGame);
-
-      rooms.broadcast(game.id, {
-        type: "game.state",
-        payload: onOkSocketResponse(updatedGame, "No legal moves, turn passed"),
-      });
-
-      return;
-    }
-
-    saveGame(updatedGame);
-
-    rooms.broadcast(game.id, {
+    saveGame(game);
+    rooms.broadcast(gameId, {
       type: "game.roll",
-      payload: onOkSocketResponse({
-        player: ctx.id,
-        dice,
-      }),
+      payload: onOkSocketResponse({ player: playerId, dice }),
     });
-
-    rooms.broadcast(game.id, {
+    rooms.broadcast(gameId, {
       type: "game.state",
-      payload: onOkSocketResponse(updatedGame),
+      payload: onOkSocketResponse(game),
     });
 
-    rooms.broadcast(game.id, {
-      type: "game.legalMoves",
-      payload: onOkSocketResponse(legal),
-    });
+    if (game.dice && game.dice.length > 0) {
+      const legal = generateMoveSequences(game, playerId);
+      if (!legal.length) {
+        const idx = game.players.findIndex((p) => p.id === game.turn);
+        const next = (idx + 1) % game.players.length;
+        game.turn = game.players[next].id;
+        game.dice = undefined;
+        saveGame(game);
+        rooms.broadcast(gameId, {
+          type: "game.state",
+          payload: onOkSocketResponse(game),
+        });
+      } else {
+        rooms.broadcast(gameId, {
+          type: "game.legalMoves",
+          payload: onOkSocketResponse(legal),
+        });
+      }
+    } else {
+      // اگر تاس وجود نداشت (نباید رخ دهد)، نوبت را عوض کن
+      console.warn("No dice after roll. Skipping move generation.");
+      const idx = game.players.findIndex((p) => p.id === game.turn);
+      const next = (idx + 1) % game.players.length;
+      game.turn = game.players[next].id;
+      game.dice = undefined;
+      saveGame(game);
+      rooms.broadcast(gameId, {
+        type: "game.state",
+        payload: onOkSocketResponse(game),
+      });
+    }
   } catch (err) {
+    console.error("Roll Error:", err);
     ctx.send({
       type: "game.error",
       payload: onErrorSocketResponse(
-        err instanceof Error ? err.message : "Failed to roll dice",
+        err instanceof Error ? err.message : "Roll failed",
       ),
     });
   }

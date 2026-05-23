@@ -84,7 +84,13 @@ function recurse(
     const snapshot = takeSnapshot(game);
 
     // mutation
-    applyMove(game, playerId, move.from, move.to);
+    try {
+      applyMove(game, playerId, move.from, move.to);
+    } catch (err) {
+      // اگر حرکت معتبر نبود، برگردان و ادامه بده
+      undoSnapshot(game, snapshot);
+      continue;
+    }
 
     const remaining = removeDie(dice, move.die);
 
@@ -230,6 +236,7 @@ interface GameSnapshot {
   points: { owner: PlayerId | null; count: number }[];
   bar: Record<PlayerId, number>;
   borneOff: Record<PlayerId, number>;
+  dice: number[]; // حفظ تاس‌ها برای بازگردانی
 }
 
 function takeSnapshot(game: GameState): GameSnapshot {
@@ -240,6 +247,7 @@ function takeSnapshot(game: GameState): GameSnapshot {
     })),
     bar: { ...game.board.bar },
     borneOff: { ...game.board.borneOff },
+    dice: game.dice ? [...game.dice] : [],
   };
 }
 
@@ -249,8 +257,9 @@ function undoSnapshot(game: GameState, snap: GameSnapshot) {
     game.board.points[i].owner = snap.points[i].owner;
     game.board.points[i].count = snap.points[i].count;
   }
-
   // restore bar & borne off
   game.board.bar = { ...snap.bar };
   game.board.borneOff = { ...snap.borneOff };
+  // restore dice
+  game.dice = snap.dice.length ? [...snap.dice] : undefined;
 }

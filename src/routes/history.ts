@@ -12,7 +12,7 @@ import { eventToTimeline } from "@/game/eventTimeline";
 
 export const history = new Hono();
 
-history.get("/:gameId/history", async (ctx) => {
+history.get("/:gameId", async (ctx) => {
   try {
     const gameId = Number(ctx.req.param("gameId"));
 

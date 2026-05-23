@@ -10,7 +10,6 @@
 
 # deps
 node_modules/
-
 # env
 .env
 .env.production
@@ -30,3 +29,6 @@ tsconfig.tsbuildinfo
 ./dist
 dist
 dist/
+# prisma/migrations/migration_lock.toml
+prisma/migrations/
+# prisma/migrations/20260523115344_first_migrate/migration.sql

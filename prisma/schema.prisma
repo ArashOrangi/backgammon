@@ -100,7 +100,7 @@ model GameSnapshots {
   sequence  Int       // event sequence at the moment of snapshot
   state     Json      // full board state
   createdAt DateTime @default(now())
-
+  lastSequence  Int?
   game      Games     @relation(fields: [gameId], references: [id])
 
   // @@index([gameId])
