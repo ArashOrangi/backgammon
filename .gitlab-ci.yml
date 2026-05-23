@@ -1,0 +1,47 @@
+stages:
+  - build
+  - deploy
+  - report
+
+variables:
+  SITE_NAME: $CI_PROJECT_NAME
+
+build-app:
+  stage: build
+  tags:
+    - windows-iis
+  only:
+    - Develop
+    - cicd
+  script:
+    - echo $PWD
+    - cmd /c "pm2 delete %SITE_NAME% 2>nul || exit /b 0"
+
+deploy:
+  stage: deploy
+  tags:
+    - windows-iis
+  variables:
+    GIT_STRATEGY: none
+  only:
+    - Develop
+    - cicd
+  script:
+    - xcopy /E /I C:\Users\Public\node_modules node_modules
+    - npm install --registry="https://mirror-npm.runflare.com"
+    - Write-Host "Starting deployment script..."
+    - powershell -ExecutionPolicy Bypass -File .\deploy.ps1 -SiteName "$env:SITE_NAME"
+  environment:
+    name: production/$CI_PROJECT_NAME
+
+report-log:
+  stage: report
+  tags:
+    - windows-iis
+  variables:
+    GIT_STRATEGY: none
+  only:
+    - Develop
+    - cicd
+  script:
+    - pm2 logs "$env:SITE_NAME" --nostream --lines 200
