@@ -113,6 +113,13 @@ export async function handleRoll(
 
     if (game.dice && game.dice.length > 0) {
       const legal = generateMoveSequences(game, playerId);
+      console.log(`[DEBUG] legal moves for ${playerId}: ${legal.length}`);
+      if (legal.length === 0) {
+        console.log(
+          `[DEBUG] No legal moves, dice: ${game.dice}, turn: ${game.turn}`,
+        );
+        // سپس نوبت عوض می‌شود
+      }
       if (!legal.length) {
         const idx = game.players.findIndex((p) => p.id === game.turn);
         const next = (idx + 1) % game.players.length;

@@ -75,3 +75,12 @@ export type GameStatus =
   | "starting"
   | "in-progress"
   | "finished";
+
+export const SPECIAL_POSITIONS = {
+  BAR: -50,
+  BEAR_OFF_BLACK: -100,
+  BEAR_OFF_WHITE: 100,
+};
+
+export type SpecialPosition =
+  (typeof SPECIAL_POSITIONS)[keyof typeof SPECIAL_POSITIONS];

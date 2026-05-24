@@ -1,194 +1,225 @@
 import WebSocket from "ws";
 
 const PORT = 8080;
-const API_BASE = `http://localhost:${PORT}/api`;
-const WS_URL = `ws://localhost:${PORT}`;
-const TIMEOUT_MS = 90000;
+const API = `http://localhost:${PORT}/api`;
+const WS = `ws://localhost:${PORT}`;
+const TIMEOUT = 300000;
 
-function sendMessage(ws, type, payload) {
+// ثابت‌های موقعیت‌های خاص (مطابق با SPECIAL_POSITIONS سرور)
+const POS = {
+  BAR: -50,
+  BEAR_OFF_WHITE: 100,
+  BEAR_OFF_BLACK: -100,
+};
+
+const stats = {
+  moves: 0,
+  rolls: 0,
+  errors: 0,
+  stateUpdates: 0,
+};
+
+function send(ws, type, payload) {
   ws.send(JSON.stringify({ type, payload }));
 }
 
-async function createGame(whitePlayerId = 1) {
-  const res = await fetch(`${API_BASE}/games`, {
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function createGame() {
+  const res = await fetch(`${API}/games`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ whitePlayerId }),
+    body: JSON.stringify({
+      whitePlayerId: "player_white", // <-- string
+    }),
   });
+
   const data = await res.json();
+  // مسیرهای مختلف پاسخ ممکن
   const gameId = data.id || data.data?.id;
-  if (!gameId) throw new Error(`Cannot create game: ${JSON.stringify(data)}`);
-  console.log(`✅ Game created with ID: ${gameId}`);
+
+  if (!gameId) {
+    throw new Error(`Game creation failed: ${JSON.stringify(data)}`);
+  }
+
   return String(gameId);
 }
 
-function createPlayer(name, gameId, autoPlay = true) {
-  const ws = new WebSocket(WS_URL);
+function createPlayer(name, gameId) {
   let state = null;
-  let myPlayerId = null;
-  let hasRolledStarting = false;
-  let hasRolledDice = false;
-  let moveAttempted = false;
+  let myId = null;
+  let hasRolledStart = false;
+  let lastAction = Date.now();
+
+  const ws = new WebSocket(WS);
 
   ws.on("open", () => {
-    console.log(`[${name}] 🔌 Connected. Joining game ${gameId}...`);
-    sendMessage(ws, "game.join", { gameId });
+    console.log(`[${name}] Connected`);
+    send(ws, "game.join", { gameId });
   });
 
   ws.on("message", (raw) => {
-    const msg = JSON.parse(raw.toString());
-    const { type, payload } = msg;
+    lastAction = Date.now();
 
-    if (type === "game.error") {
-      console.error(`[${name}] ❌ Error:`, payload.message);
-      if (payload.message.includes("not found")) ws.close();
-      return;
-    }
+    try {
+      const msg = JSON.parse(raw.toString());
+      const { type, payload } = msg;
 
-    if (type === "game.state") {
-      console.log(
-        `[${name}] 📢 game.state (status=${payload.data.status}, turn=${payload.data.turn?.slice(0, 8)}..., dice=${JSON.stringify(payload.data.dice)})`,
-      );
-      state = payload.data;
-      handleGameState();
-    } else if (type === "game.legalMoves") {
-      const moves = payload.data;
-      if (
-        autoPlay &&
-        state &&
-        myPlayerId &&
-        state.turn === myPlayerId &&
-        !moveAttempted
-      ) {
-        if (
-          moves &&
-          moves.length > 0 &&
-          moves[0].moves &&
-          moves[0].moves.length > 0
-        ) {
-          const move = moves[0].moves[0];
-          console.log(`[${name}] 🎯 Making move:`, move);
-          sendMessage(ws, "game.move", {
-            gameId,
-            from: move.from,
-            to: move.to,
-          });
-          moveAttempted = true;
-        } else {
+      console.log(`[${name}] <- ${type}`);
+
+      switch (type) {
+        case "game.error":
+          stats.errors++;
+          console.error(`[${name}] ERROR:`, payload?.message || payload);
+          break;
+
+        case "game.join":
+          myId =
+            payload?.data?.playerId ||
+            payload?.data?.game?.players?.find((p) => p.id)?.id;
+          console.log(`[${name}] PlayerId:`, myId);
+          break;
+
+        case "game.state":
+          stats.stateUpdates++;
+          state = payload.data;
           console.log(
-            `[${name}] ⚠️ No legal moves reported. Trying a fallback move...`,
+            `[${name}] status=${state.status} turn=${state.turn} dice=${JSON.stringify(state.dice)}`,
           );
-          // Fallback: اگر بازیکن مشکی است و تاس‌ها [1,3]، از نقطه 0 به 1 حرکت کن
-          if (
-            state.turn === myPlayerId &&
-            state.dice &&
-            state.dice.includes(1)
-          ) {
-            const fallbackMove = { from: 0, to: 1, die: 1 };
-            console.log(`[${name}] 🔁 Fallback move:`, fallbackMove);
-            sendMessage(ws, "game.move", { gameId, from: 0, to: 1 });
-            moveAttempted = true;
-          } else if (
-            state.turn === myPlayerId &&
-            state.dice &&
-            state.dice.includes(3)
-          ) {
-            const fallbackMove = { from: 11, to: 8, die: 3 };
-            console.log(`[${name}] 🔁 Fallback move:`, fallbackMove);
-            sendMessage(ws, "game.move", { gameId, from: 11, to: 8 });
-            moveAttempted = true;
-          }
-        }
+          tick();
+          break;
+
+        case "game.roll":
+          stats.rolls++;
+          console.log(`[${name}] dice rolled`, payload.data);
+          break;
+
+        case "game.legalMoves":
+          handleLegalMoves(payload.data || []);
+          break;
+
+        case "game.startRoll":
+          tick();
+          break;
+
+        default:
+          console.log(`[${name}] Event:`, type);
       }
-    } else if (type === "game.join") {
-      if (payload.data?.playerId) {
-        myPlayerId = payload.data.playerId;
-        console.log(`[${name}] 🆔 My player ID: ${myPlayerId}`);
-      }
-    } else if (type === "game.roll") {
-      console.log(`[${name}] 🎲 Dice rolled:`, payload.data);
-    } else if (type === "game.startRoll") {
-      console.log(`[${name}] 📨 game.startRoll`, payload);
-    } else {
-      console.log(`[${name}] 📨 ${type}`, payload);
+    } catch (err) {
+      console.error(`[${name}] Parse Error`, err);
     }
   });
 
-  ws.on("close", () => console.log(`[${name}] 🔌 Disconnected`));
-  ws.on("error", (err) =>
-    console.error(`[${name}] ⚡ WebSocket error:`, err.message),
-  );
+  ws.on("close", () => {
+    console.log(`[${name}] disconnected`);
+  });
 
-  function handleGameState() {
-    if (!state || !myPlayerId) return;
+  ws.on("error", (err) => {
+    console.error(`[${name}] WS error:`, err.message);
+  });
+
+  function formatMove(move) {
+    const fromStr = move.from === POS.BAR ? "BAR" : move.from;
+    let toStr = move.to;
+    if (move.to === POS.BEAR_OFF_WHITE) toStr = "BEAR_OFF_WHITE";
+    if (move.to === POS.BEAR_OFF_BLACK) toStr = "BEAR_OFF_BLACK";
+    return `${fromStr} → ${toStr} (die=${move.die})`;
+  }
+
+  async function handleLegalMoves(legalMoves) {
+    if (!state || !myId || state.turn !== myId) return;
+    if (!legalMoves.length) {
+      console.log(`[${name}] no legal moves`);
+      return;
+    }
+
+    // اولین توالی حرکتی را انتخاب کن
+    const sequence = legalMoves[0];
+    if (!sequence?.moves?.length) return;
+
+    console.log(`[${name}] Sequence moves:`, sequence.moves.map(formatMove));
+
+    // حرکات را به ترتیب و با تأخیر کوتاه ارسال کن (تا سرور فرصت بروزرسانی داشته باشد)
+    for (const move of sequence.moves) {
+      stats.moves++;
+      console.log(`[${name}] Sending move: ${formatMove(move)}`);
+
+      send(ws, "game.move", {
+        gameId,
+        from: move.from,
+        to: move.to,
+      });
+
+      // صبر کن تا سرور state را به‌روز کند (اختیاری ولی پایدارتر)
+      await sleep(100);
+    }
+  }
+
+  function tick() {
+    if (!state || !myId) return;
+
+    if (state.status === "finished") {
+      console.log("\n====================");
+      console.log("GAME FINISHED");
+      console.log("Winner:", state.winner);
+      console.log("WinType:", state.winType);
+      console.log("Stats:");
+      console.table(stats);
+      process.exit(0);
+    }
 
     if (state.status === "starting") {
-      const startingDice = state.startingDice || {};
-      if (!startingDice[myPlayerId] && !hasRolledStarting) {
-        hasRolledStarting = true;
-        console.log(`[${name}] 🎲 Rolling starting die...`);
-        sendMessage(ws, "game.roll", { gameId });
+      const startDice = state.startingDice || {};
+      if (!startDice[myId] && !hasRolledStart) {
+        hasRolledStart = true;
+        console.log(`[${name}] rolling start dice`);
+        send(ws, "game.roll", { gameId });
       }
       return;
     }
 
-    if (
-      state.status === "in-progress" &&
-      myPlayerId &&
-      state.turn === myPlayerId
-    ) {
-      if ((!state.dice || state.dice.length === 0) && !hasRolledDice) {
-        hasRolledDice = true;
-        console.log(`[${name}] 🎲 Rolling dice...`);
-        sendMessage(ws, "game.roll", { gameId });
-      } else if (state.dice && state.dice.length > 0 && !moveAttempted) {
-        console.log(`[${name}] Waiting for legal moves...`);
+    if (state.status === "in-progress" && state.turn === myId) {
+      if (!state.dice || state.dice.length === 0) {
+        console.log(`[${name}] rolling`);
+        send(ws, "game.roll", { gameId });
       }
     }
-
-    if (state.status === "finished") {
-      console.log(
-        `[${name}] 🏆 Game finished! Winner: ${state.winner}, type: ${state.winType}`,
-      );
-      ws.close();
-    }
   }
+
+  // نظارت بر idle بودن (در صورت قطع نشدن)
+  setInterval(() => {
+    const idle = (Date.now() - lastAction) / 1000;
+    if (idle > 15) {
+      console.log(`\n[${name}] stalled ${idle}s`);
+      console.log({
+        status: state?.status,
+        turn: state?.turn,
+        dice: state?.dice,
+      });
+    }
+  }, 5000);
 
   return ws;
 }
 
 (async () => {
-  console.log(`🔍 Checking server at ${API_BASE} ...`);
-  const testRes = await fetch(`${API_BASE}`).catch(() => null);
-  if (!testRes || !testRes.ok) {
-    console.error(
-      "❌ Server not reachable. Please start the server (npm run start).",
-    );
+  console.log("Checking server...");
+  const test = await fetch(API).catch(() => null);
+  if (!test) throw new Error("Server offline");
+  console.log("Server OK");
+
+  const gameId = await createGame();
+  console.log("\nGame ID:", gameId);
+
+  createPlayer("WHITE", gameId);
+  await sleep(500);
+  createPlayer("BLACK", gameId);
+
+  setTimeout(() => {
+    console.log("\nTIMEOUT");
+    console.table(stats);
     process.exit(1);
-  }
-  console.log("✅ Server is reachable.\n");
-
-  try {
-    const gameId = await createGame(1);
-    console.log(`\n🚀 Starting test with game ID: ${gameId}\n`);
-    const white = createPlayer("⚪ White", gameId);
-    const black = createPlayer("⚫ Black", gameId);
-
-    const cleanup = () => {
-      console.log("\n🛑 Closing connections...");
-      white.close();
-      black.close();
-      setTimeout(() => process.exit(0), 500);
-    };
-    process.on("SIGINT", cleanup);
-    process.on("SIGTERM", cleanup);
-
-    setTimeout(() => {
-      console.log(`\n⏰ Test timeout (${TIMEOUT_MS / 1000}s)`);
-      cleanup();
-    }, TIMEOUT_MS);
-  } catch (err) {
-    console.error("❌ Fatal error:", err.message);
-    process.exit(1);
-  }
+  }, TIMEOUT);
 })();

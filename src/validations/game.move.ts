@@ -1,9 +1,14 @@
-import { Literal, Static, Type, Union } from "@sinclair/typebox";
+import { Type, Static, Union, Literal } from "@sinclair/typebox";
+import { SPECIAL_POSITIONS } from "@/game/types";
 
 export const MovePieceSchema = Type.Object({
   gameId: Type.String(),
-  from: Union([Type.Number(), Literal("bar")]),
-  to: Union([Type.Number(), Literal("off")]),
+  from: Type.Union([Type.Number(), Type.Literal(SPECIAL_POSITIONS.BAR)]),
+  to: Type.Union([
+    Type.Number(),
+    Type.Literal(SPECIAL_POSITIONS.BEAR_OFF_WHITE),
+    Type.Literal(SPECIAL_POSITIONS.BEAR_OFF_BLACK),
+  ]),
 });
 
 export type MovePayload = Static<typeof MovePieceSchema>;

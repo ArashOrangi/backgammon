@@ -5,8 +5,8 @@ export interface ClientToServerEvents {
   "game.roll": (data: { gameId: string }) => void;
   "game.move": (data: {
     gameId: string;
-    from: number | "bar";
-    to: number | "off";
+    from: number; // before: number | "bar"
+    to: number; // before: number | "off"
   }) => void;
   "player.leave": (data: { gameId: string }) => void;
 }

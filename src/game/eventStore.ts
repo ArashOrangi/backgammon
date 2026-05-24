@@ -34,15 +34,14 @@ type PlayerLeftEvent = {
   };
 };
 
-type MoveAppliedEvent = {
+export type MoveAppliedEvent = {
   type: "MOVE_APPLIED";
   payload: {
     playerId: string;
-    from: number | "bar";
-    to: number | "off";
+    from: number; // قبلاً number | "bar"
+    to: number; // قبلاً number | "off"
   };
 };
-
 type GameFinishedEvent = {
   type: "GAME_FINISHED";
   payload: {

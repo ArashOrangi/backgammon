@@ -18,8 +18,8 @@ export type ClientMessage =
       type: "game.move";
       payload: {
         gameId: string;
-        from: number | "bar";
-        to: number | "off";
+        from: number; // before number | "bar"
+        to: number; // before number | "off"
       };
     }
   | {

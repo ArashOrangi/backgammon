@@ -23,5 +23,11 @@ gameRoutes.post("/", async (c) => {
       errorMessage: "Failed to create game",
     });
   }
-  return onOkRestResponse({ ctx: c, data: result });
+  // const isWhite = result.whitePlayerId != null ? true : false;
+  const isWhite = result.whitePlayerId != null;
+  return onOkRestResponse({
+    ctx: c,
+    data: result,
+    extra: { isWhite, isBlack: !isWhite },
+  });
 });
