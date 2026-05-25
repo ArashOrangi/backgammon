@@ -1,4 +1,4 @@
-import { GameState, PlayerInfo } from "./types";
+import { GameState, PlayerId } from "./types";
 import { $Enums, Prisma } from "@prisma/client";
 
 import {
@@ -14,48 +14,30 @@ import {
 
 import { createInitialGameState } from "./gameStore";
 import { createInitialBoard } from "./board";
-import { prisma } from "@/components/prisma";
 import { applyMove, switchTurn } from "./engine";
 
+/**
+ * این تابع تضمین می‌کنه که اگه ایونت جدیدی اضافه کردی و فراموش کردی
+ * توی switch-case مدیریتش کنی، تایپ‌اسکریپت بهت ارور بده (Exhaustive Check).
+ */
 function assertNever(x: never): never {
-  throw new Error(`Unknown event type: ${(x as any).type}`);
+  throw new Error(`Unhandled event type: ${(x as any).type}`);
 }
 
 const SNAPSHOT_INTERVAL = 20;
 
 /* -------------------------------------------------------------------------- */
-/* Event Types                                                                */
+/* Event Types Definition                                                     */
 /* -------------------------------------------------------------------------- */
-
-type PlayerLeftEvent = {
-  type: "PLAYER_LEFT";
-  payload: {
-    playerId: string;
-  };
-};
-
-export type MoveAppliedEvent = {
-  type: "MOVE_APPLIED";
-  payload: {
-    playerId: string;
-    from: number; // قبلاً number | "bar"
-    to: number; // قبلاً number | "off"
-  };
-};
-type GameFinishedEvent = {
-  type: "GAME_FINISHED";
-  payload: {
-    winner: string;
-    winType: string;
-  };
-};
 
 export type PlayerJoinedEvent = {
   type: "PLAYER_JOINED";
-  payload: {
-    playerId: string;
-    color: "white" | "black";
-  };
+  payload: { playerId: PlayerId; color: "white" | "black" };
+};
+
+export type PlayerLeftEvent = {
+  type: "PLAYER_LEFT";
+  payload: { playerId: PlayerId };
 };
 
 export type GameStartingEvent = {
@@ -65,64 +47,72 @@ export type GameStartingEvent = {
 
 export type StartingRolledEvent = {
   type: "STARTING_ROLLED";
-  payload: {
-    playerId: string;
-    value: number;
-  };
+  payload: { playerId: PlayerId; value: number };
 };
 
 export type GameStartedEvent = {
   type: "GAME_STARTED";
   payload: {
-    whitePlayerId: string;
-    blackPlayerId: string;
-    startingPlayerId: string;
+    whitePlayerId: PlayerId;
+    blackPlayerId: PlayerId;
+    startingPlayerId: PlayerId;
   };
 };
 
 export type DiceRolledEvent = {
   type: "DICE_ROLLED";
-  payload: {
-    playerId: string;
-    dice: number[];
-  };
+  payload: { playerId: PlayerId; dice: number[] };
+};
+
+export type MoveAppliedEvent = {
+  type: "MOVE_APPLIED";
+  payload: { playerId: PlayerId; from: number; to: number };
 };
 
 export type TurnPassedEvent = {
   type: "TURN_PASSED";
+  payload: { playerId: PlayerId; reason: "NO_LEGAL_MOVES" | "TIMEOUT" };
+};
+
+export type TurnTimeoutEvent = {
+  type: "TURN_TIMEOUT";
+  payload: { playerId: PlayerId };
+};
+
+export type NetworkTimeoutEvent = {
+  type: "NETWORK_TIMEOUT";
+  payload: { playerId: PlayerId };
+};
+
+export type GameFinishedEvent = {
+  type: "GAME_FINISHED";
   payload: {
-    playerId: string;
-    reason: "NO_LEGAL_MOVES";
+    winner: PlayerId;
+    winType: "normal" | "mars" | "backgammon";
+    reason: "REGULAR" | "TIMEOUT" | "DISCONNECT";
   };
 };
 
-// export type GameEvent =
-//   | GameStartedEvent
-//   | PlayerJoinedEvent
-//   | PlayerLeftEvent
-//   | DiceRolledEvent
-//   | MoveAppliedEvent
-//   | GameFinishedEvent;
-
 export type GameEvent =
+  | PlayerJoinedEvent
+  | PlayerLeftEvent
   | GameStartingEvent
   | StartingRolledEvent
   | GameStartedEvent
-  | PlayerJoinedEvent
-  | PlayerLeftEvent
   | DiceRolledEvent
-  | TurnPassedEvent
   | MoveAppliedEvent
+  | TurnPassedEvent
+  | TurnTimeoutEvent
+  | NetworkTimeoutEvent
   | GameFinishedEvent;
 
 /* -------------------------------------------------------------------------- */
-/* ORM Type Guards                                                            */
+/* Type Guards                                                                */
 /* -------------------------------------------------------------------------- */
 
-function isSnapshotRow(value: unknown): value is {
-  sequence: number;
-  state: Prisma.JsonValue;
-} {
+function isSnapshotRow(
+  value: unknown,
+): value is { sequence: number; state: Prisma.JsonValue } {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -146,11 +136,33 @@ function isEventRow(value: unknown): value is {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Apply Event                                                                */
+/* Apply Event (The Reducer Logic)                                            */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * این تابع "حقیقت" بازی رو از روی ایونت‌ها می‌سازه.
+ * هر تغییری در منطق بازی باید اینجا منعکس بشه.
+ */
 function applyEvent(state: GameState, event: GameEvent): GameState {
+  // ثبت زمان آخرین تعامل برای مدیریت تایم‌اوت شبکه
+  state.lastActionAt = Date.now();
+
   switch (event.type) {
+    case "PLAYER_JOINED": {
+      const { playerId, color } = event.payload;
+      if (!state.players.some((p) => p.id === playerId)) {
+        state.players.push({ id: playerId, color });
+      }
+      return state;
+    }
+
+    case "PLAYER_LEFT": {
+      state.players = state.players.filter(
+        (p) => p.id !== event.payload.playerId,
+      );
+      return state;
+    }
+
     case "GAME_STARTING": {
       state.status = "starting";
       return state;
@@ -158,71 +170,54 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
 
     case "STARTING_ROLLED": {
       const { playerId, value } = event.payload;
-
-      if (!state.startingDice) {
-        state.startingDice = {};
-      }
-
+      if (!state.startingDice) state.startingDice = {};
       state.startingDice[playerId] = value;
-
       return state;
     }
 
     case "GAME_STARTED": {
       const { whitePlayerId, blackPlayerId, startingPlayerId } = event.payload;
-
       state.status = "in-progress";
       state.turn = startingPlayerId;
       state.board = createInitialBoard(whitePlayerId, blackPlayerId);
-
-      return state;
-    }
-
-    case "PLAYER_JOINED": {
-      const { playerId, color } = event.payload;
-
-      if (!state.players.some((p) => p.id === playerId)) {
-        const player: PlayerInfo = {
-          id: playerId,
-          color,
-        };
-
-        state.players.push(player);
-      }
-
-      return state;
-    }
-
-    case "PLAYER_LEFT": {
-      const { playerId } = event.payload;
-
-      state.players = state.players.filter((p) => p.id !== playerId);
-
+      state.turnStartedAt = Date.now();
       return state;
     }
 
     case "DICE_ROLLED": {
       state.dice = event.payload.dice;
+      state.turnStartedAt = Date.now();
       return state;
     }
 
     case "MOVE_APPLIED": {
-      const { playerId, from, to } = event.payload;
-
-      applyMove(state, playerId, from, to);
+      applyMove(
+        state,
+        event.payload.playerId,
+        event.payload.from,
+        event.payload.to,
+      );
       return state;
     }
 
     case "TURN_PASSED": {
       switchTurn(state);
+      state.turnStartedAt = Date.now();
+      return state;
+    }
+
+    case "TURN_TIMEOUT":
+    case "NETWORK_TIMEOUT": {
+      // این ایونت‌ها صرفاً جهت ثبت در لاگ و تاریخچه هستند.
+      // تغییر اصلی استیت توسط GAME_FINISHED که بلافاصله بعد از اینها میاد انجام میشه.
       return state;
     }
 
     case "GAME_FINISHED": {
       state.status = "finished";
       state.winner = event.payload.winner;
-      state.winType = event.payload.winType as "normal" | "mars" | "backgammon";
-
+      state.winType = event.payload.winType;
+      state.turn = null;
       return state;
     }
 
@@ -232,12 +227,11 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Load Game State                                                            */
+/* Public API                                                                 */
 /* -------------------------------------------------------------------------- */
 
 export async function loadGameState(gameId: number): Promise<GameState | null> {
   const snapshot = await prismaGameSnapshotGetLast(gameId);
-
   let state: GameState;
   let sequence = 0;
 
@@ -248,34 +242,22 @@ export async function loadGameState(gameId: number): Promise<GameState | null> {
     state = createInitialGameState(String(gameId));
   }
 
-  const events = await prismaGameEventGetAfterSequence({
-    gameId,
-    sequence,
-  });
+  const events = await prismaGameEventGetAfterSequence({ gameId, sequence });
 
   for (const row of events) {
     if (!isEventRow(row)) continue;
-
-    const event = {
-      type: row.type,
-      payload: row.payload,
-    } as unknown as GameEvent;
-
-    state = applyEvent(state, event);
+    //  cast کردن به هر ایونتی اینجا لازمه چون از دیتابیس میاد
+    state = applyEvent(state, { type: row.type, payload: row.payload } as any);
   }
 
   return state;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Append Event                                                               */
-/* -------------------------------------------------------------------------- */
-
 export async function appendGameEvent(gameId: number, event: GameEvent) {
   const lastSequence = await prismaGameEventGetLastSequence(gameId);
   if (typeof lastSequence !== "number") return lastSequence;
-
   const nextSequence = lastSequence + 1;
+
   const created = await prismaGameEventCreate({
     gameId,
     sequence: nextSequence,
@@ -283,12 +265,12 @@ export async function appendGameEvent(gameId: number, event: GameEvent) {
     payload: event.payload as Prisma.InputJsonValue,
   });
 
-  // اگر created خطا باشد (مثلاً به دلیل Foreign Key)
   if (!created || (created as any).errorType) {
-    console.error("Failed to append event:", created);
     throw new Error(`Failed to append event: ${JSON.stringify(created)}`);
   }
 
+  // مکانیسم Snapshotting برای بهینه‌سازی سرعت Load در بازی‌های طولانی
+  // منطق اسنپ‌شات (هر ۲۰ ایونت یکبار)
   if (nextSequence % SNAPSHOT_INTERVAL === 0) {
     const state = await loadGameState(gameId);
     if (state) {
@@ -307,7 +289,6 @@ export async function loadGameStateUntil(
   untilSequence?: number,
 ): Promise<GameState | null> {
   const snapshot = await prismaGameSnapshotGetLast(gameId);
-
   let state: GameState;
   let sequence = 0;
 
@@ -323,18 +304,11 @@ export async function loadGameStateUntil(
     sequence,
     untilSequence,
   });
-
   if (!events) return null;
 
   for (const row of events) {
     if (!isEventRow(row)) continue;
-
-    const event = {
-      type: row.type,
-      payload: row.payload,
-    } as unknown as GameEvent;
-
-    state = applyEvent(state, event);
+    state = applyEvent(state, { type: row.type, payload: row.payload } as any);
   }
 
   return state;

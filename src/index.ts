@@ -7,6 +7,8 @@ import { logger } from "hono/logger";
 import { gameRoutes } from "./routes/games";
 import { userRoutes } from "./routes/users";
 import { registerSocketHandlers } from "./socket";
+import { RoomManager } from "./socket/room-manager";
+import { checkGameTimeouts } from "./game/engine/timer";
 
 dotenv.config();
 
@@ -72,9 +74,23 @@ const server = createServer(async (req, res) => {
     res.end("Not Found");
   }
 });
+// ۱. ایجاد RoomManager به صورت واحد (Shared Instance)
+const rooms = new RoomManager();
 
+// ۲. اتصال WebSocket
 const wss = new WebSocketServer({ server });
-registerSocketHandlers(wss);
+registerSocketHandlers(wss, rooms);
+
+// ۳. ایجاد Game Loop (قلب تپنده)
+// هر ۲ ثانیه یکبار بازی‌ها رو چک می‌کنه
+const TICK_RATE = 2000;
+setInterval(async () => {
+  try {
+    await checkGameTimeouts(rooms);
+  } catch (err) {
+    console.error("Critical Game Loop Error:", err);
+  }
+}, TICK_RATE);
 
 server.listen(PORT, () => {
   console.log(`🚀 REST API running on http://localhost:${PORT}/api`);

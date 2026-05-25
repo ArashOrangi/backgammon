@@ -54,8 +54,9 @@ export async function prismaGameEventGetLastSequence(gameId: number) {
       orderBy: { sequence: "desc" },
       select: prismaSelectGameEvent,
     });
-
-    return event;
+    // اگه ایونتی نبود، از -1 شروع می‌کنیم تا اولین ایونت بشه 0
+    return event ? event.sequence : -1;
+    // return event;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
   }

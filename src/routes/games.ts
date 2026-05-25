@@ -28,6 +28,6 @@ gameRoutes.post("/", async (c) => {
   return onOkRestResponse({
     ctx: c,
     data: result,
-    extra: { isWhite, isBlack: !isWhite },
+    extra: { isWhite },
   });
 });
