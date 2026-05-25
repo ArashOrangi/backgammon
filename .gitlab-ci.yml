@@ -30,7 +30,8 @@ deploy:
     - xcopy /Y /E /I C:\Users\Public\node_modules node_modules
     - xcopy /Y /E /I C:\Users\Public\forprisma node_modules
     - npm install --registry="https://mirror-npm.runflare.com"
-    - npx prisma migrate dev --name="lastsequence GameSnapshots"
+    - npx prisma migrate reset -f
+    - npx prisma migrate dev --name="24-5-2026"
     - npx prisma generate
     - Write-Host "Starting deployment script..."
     - powershell -ExecutionPolicy Bypass -File .\deploy.ps1 -SiteName "$env:SITE_NAME"
