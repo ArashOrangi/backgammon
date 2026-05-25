@@ -1,13 +1,9 @@
 import { GameState, PlayerId, PlayerInfo } from "./types";
 
-/* ------------------------------------------------------------------ */
-/* in-memory store (later: Redis / DB)                                */
-/* ------------------------------------------------------------------ */
-
 const games = new Map<string, GameState>();
 
 /* ------------------------------------------------------------------ */
-/* helpers                                                            */
+/* Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
 function createPlayer(id: PlayerId, color: "white" | "black"): PlayerInfo {
@@ -15,59 +11,53 @@ function createPlayer(id: PlayerId, color: "white" | "black"): PlayerInfo {
 }
 
 /* ------------------------------------------------------------------ */
-/* Backgammon initial board                                           */
+/* Backgammon initial board (Fixed with Player IDs)                   */
 /* ------------------------------------------------------------------ */
 
-export function createInitialBoard() {
+// حالا آیدی بازیکن‌ها رو می‌گیره تا آبجکت‌های bar و borneOff رو درست بسازه
+export function createInitialBoard(whiteId: PlayerId, blackId: PlayerId) {
   const points = Array.from({ length: 24 }, () => ({
-    owner: null as "white" | "black" | null,
+    owner: null as PlayerId | null,
     count: 0,
   }));
 
-  // white
-  points[23] = { owner: "white", count: 2 };
-  points[12] = { owner: "white", count: 5 };
-  points[7] = { owner: "white", count: 3 };
-  points[5] = { owner: "white", count: 5 };
+  // White checkers (Starting positions)
+  points[23] = { owner: whiteId, count: 2 };
+  points[12] = { owner: whiteId, count: 5 };
+  points[7] = { owner: whiteId, count: 3 };
+  points[5] = { owner: whiteId, count: 5 };
 
-  // black
-  points[0] = { owner: "black", count: 2 };
-  points[11] = { owner: "black", count: 5 };
-  points[16] = { owner: "black", count: 3 };
-  points[18] = { owner: "black", count: 5 };
+  // Black checkers (Starting positions)
+  points[0] = { owner: blackId, count: 2 };
+  points[11] = { owner: blackId, count: 5 };
+  points[16] = { owner: blackId, count: 3 };
+  points[18] = { owner: blackId, count: 5 };
 
   return {
     points,
-
     bar: {
-      white: 0,
-      black: 0,
+      [whiteId]: 0,
+      [blackId]: 0,
     },
-
     borneOff: {
-      white: 0,
-      black: 0,
+      [whiteId]: 0,
+      [blackId]: 0,
     },
   };
 }
 
 /* ------------------------------------------------------------------ */
-/* initial state factory                                              */
+/* Initial state factory                                              */
 /* ------------------------------------------------------------------ */
 
 export function createInitialGameState(gameId: string): GameState {
   return {
     id: gameId,
-
     players: [],
-
     turn: null,
-
     status: "waiting",
-
     dice: undefined,
     startingDice: {},
-
     board: {
       points: Array.from({ length: 24 }, () => ({
         owner: null,
@@ -76,55 +66,31 @@ export function createInitialGameState(gameId: string): GameState {
       bar: {},
       borneOff: {},
     },
-
     pipCount: {},
-
     cubeValue: 1,
-    cubeOwner: undefined,
-    cubeOffered: undefined,
-
     createdAt: Date.now(),
-
+    lastActionAt: Date.now(), // برای Network Timeout ضروریه
     turnStartedAt: undefined,
-    turnTimeLimit: undefined,
+    turnTimeLimit: 30, // پیش‌فرض ۳۰ ثانیه
   };
 }
 
 /* ------------------------------------------------------------------ */
-/* create game                                                        */
+/* Store Ops                                                          */
 /* ------------------------------------------------------------------ */
-
-// export function createGame(id: string, creatorId: PlayerId): GameState {
-//   const game: GameState = {
-//     ...createInitialGameState(id),
-
-//     players: [createPlayer(creatorId, "white")],
-
-//     turn: creatorId,
-//   };
-
-//   games.set(id, game);
-
-//   return game;
-// }
 
 export function createGame(id: string): GameState {
   const game = createInitialGameState(id);
-
   games.set(id, game);
-
   return game;
 }
-
-/* ------------------------------------------------------------------ */
-/* basic store ops                                                    */
-/* ------------------------------------------------------------------ */
 
 export function getGame(id: string): GameState | undefined {
   return games.get(id);
 }
 
 export function saveGame(game: GameState) {
+  game.lastActionAt = Date.now(); // هر بار ذخیره، زمان آخرین فعالیت آپدیت بشه
   games.set(game.id, game);
 }
 
@@ -132,12 +98,13 @@ export function deleteGame(id: string) {
   games.delete(id);
 }
 
-export function listGames(): GameState[] {
+// این همون تابعی که Game Loop مرکزی بهش نیاز داره
+export function getAllActiveGames(): GameState[] {
   return Array.from(games.values());
 }
 
 /* ------------------------------------------------------------------ */
-/* join second player                                                 */
+/* Player Management                                                  */
 /* ------------------------------------------------------------------ */
 
 export function addPlayerToGame(
@@ -145,25 +112,27 @@ export function addPlayerToGame(
   playerId: PlayerId,
 ): GameState {
   const exists = game.players.find((p) => p.id === playerId);
-
-  // reconnect-safe
-  if (exists) {
-    return game;
-  }
+  if (exists) return game;
 
   if (game.players.length >= 2) {
     throw new Error("Game is full");
   }
 
-  const newPlayer = createPlayer(playerId, "black");
+  // نفر اول سفید، نفر دوم سیاه
+  const color = game.players.length === 0 ? "white" : "black";
+  const newPlayer = createPlayer(playerId, color);
 
   game.players.push(newPlayer);
 
   if (game.players.length === 2) {
     game.status = "ready";
+
+    // مقداردهی اولیه برد بلافاصله بعد از آماده شدن
+    const white = game.players.find((p) => p.color === "white")!;
+    const black = game.players.find((p) => p.color === "black")!;
+    game.board = createInitialBoard(white.id, black.id);
   }
 
   saveGame(game);
-
   return game;
 }

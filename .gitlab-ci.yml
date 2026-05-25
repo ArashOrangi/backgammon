@@ -31,7 +31,7 @@ deploy:
     - xcopy /Y /E /I C:\Users\Public\forprisma node_modules
     - npm install --registry="https://mirror-npm.runflare.com"
     - npx prisma migrate reset -f
-    - npx prisma migrate dev --name="24-5-2026"
+    - npx prisma migrate dev --name add_timeout_events
     - npx prisma generate
     - Write-Host "Starting deployment script..."
     - powershell -ExecutionPolicy Bypass -File .\deploy.ps1 -SiteName "$env:SITE_NAME"

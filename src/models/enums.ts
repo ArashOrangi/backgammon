@@ -1,3 +1,4 @@
+//ساخت فایل مشترک برای enumهای هم سرور و هم کلاینت
 export enum ErrorCause {
   None,
   Validation,

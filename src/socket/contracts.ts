@@ -13,11 +13,18 @@ export interface ClientToServerEvents {
 
 export interface ServerToClientEvents {
   "game.state": (state: GameState) => void;
-  "game.roll": (data: { dice: number[] }) => void;
-  "game.join": (data: {
-    success: boolean;
-    message: string;
-    game?: GameState;
-  }) => void;
   "game.error": (data: { message: string }) => void;
+
+  // ایونت‌های اختصاصی لیست مدیر فنی
+  "player.assign": (data: {
+    color: "white" | "black";
+    playerId: string;
+  }) => void;
+  "room.ready": (data: { gameId: string }) => void;
+  "game.turn": (data: { playerId: string; color: "white" | "black" }) => void;
+  "dice.result": (data: { dice: number[]; playerId: string }) => void;
+  "turn.timeout": (data: { playerId: string }) => void;
+  "network.timeout": (data: { playerId: string }) => void;
+  "game.result": (data: { winner: string; reason: string }) => void;
+  // ... بقیه ایونت‌ها مثل move
 }
