@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { prismaUserCreate } from "@/models/user";
+import { prismaUserGetOrCreate } from "@/models/user";
 import {
   onOkRestResponse,
   onErrorRestResponse,
@@ -13,7 +13,7 @@ userRoutes.post("/", async (c) => {
   if (!userName) {
     return onErrorRestResponse({ ctx: c, errorMessage: "userName required" });
   }
-  const result = await prismaUserCreate(userName);
+  const result = await prismaUserGetOrCreate(userName);
   if (!result || result === OrmState.Error) {
     return onErrorRestResponse({
       ctx: c,

@@ -17,16 +17,23 @@ const prismaSelectUser = {
   updatedAt: true,
 };
 
-export async function prismaUserCreate(userName: string) {
+export async function prismaUserGetOrCreate(userName: string) {
   try {
-    const user = await prisma.users.create({
-      data: {
-        userName,
-      },
+    // ۱. اول سعی می‌کنیم پیدا کنیم
+    const existingUser = await prisma.users.findUnique({
+      where: { userName },
       select: prismaSelectUser,
     });
 
-    return user;
+    if (existingUser) return existingUser;
+
+    // ۲. اگه نبود، می‌سازیم
+    const newUser = await prisma.users.create({
+      data: { userName },
+      select: prismaSelectUser,
+    });
+
+    return newUser;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
   }
