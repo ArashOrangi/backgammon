@@ -1,4 +1,4 @@
-import { GameState, PlayerId } from "./types";
+import { GameState, PlayerId, SubStatus } from "./types";
 import { $Enums, Prisma } from "@prisma/client";
 
 import {
@@ -15,6 +15,7 @@ import {
 import { createInitialGameState } from "./gameStore";
 import { createInitialBoard } from "./board";
 import { applyMove, switchTurn } from "./engine";
+import { generateMoveSequences } from "./moveGenerator";
 
 /**
  * این تابع تضمین می‌کنه که اگه ایونت جدیدی اضافه کردی و فراموش کردی
@@ -66,12 +67,15 @@ export type DiceRolledEvent = {
 
 export type MoveAppliedEvent = {
   type: "MOVE_APPLIED";
-  payload: { playerId: PlayerId; from: number; to: number };
+  payload: { playerId: PlayerId; from: number; to: number; die: number };
 };
 
 export type TurnPassedEvent = {
   type: "TURN_PASSED";
-  payload: { playerId: PlayerId; reason: "NO_LEGAL_MOVES" | "TIMEOUT" };
+  payload: {
+    playerId: PlayerId;
+    reason: "NO_LEGAL_MOVES" | "TIMEOUT" | "MANUAL_END";
+  };
 };
 
 export type TurnTimeoutEvent = {
@@ -187,6 +191,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
     case "DICE_ROLLED": {
       state.dice = event.payload.dice;
       state.turnStartedAt = Date.now();
+      //  اینجا لازم نیست subStatus را ست کنیم، چون داینامیک حسابش می‌کنیم
       return state;
     }
 
@@ -196,12 +201,15 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
         event.payload.playerId,
         event.payload.from,
         event.payload.to,
+        event.payload.die,
       );
+      // بعد از حرکت، اگر تاس‌ها تمام شده باشند، در محاسبه داینامیک subStatus خودبخود به mustEndTurn می‌رویم
       return state;
     }
 
     case "TURN_PASSED": {
       switchTurn(state);
+      state.dice = []; // مهم: تاس‌ها برای نفر بعدی باید خالی شوند
       state.turnStartedAt = Date.now();
       return state;
     }
@@ -239,7 +247,7 @@ export async function loadGameState(gameId: number): Promise<GameState | null> {
     state = snapshot.state as unknown as GameState;
     sequence = snapshot.sequence;
   } else {
-    state = createInitialGameState(String(gameId));
+    state = createInitialGameState(gameId);
   }
 
   const events = await prismaGameEventGetAfterSequence({ gameId, sequence });
@@ -296,7 +304,7 @@ export async function loadGameStateUntil(
     state = snapshot.state as unknown as GameState;
     sequence = snapshot.sequence;
   } else {
-    state = createInitialGameState(String(gameId));
+    state = createInitialGameState(gameId);
   }
 
   const events = await prismaGameEventGetAfterSequence({
@@ -312,4 +320,24 @@ export async function loadGameStateUntil(
   }
 
   return state;
+}
+
+export function calculateSubStatus(state: GameState): SubStatus {
+  if (state.status !== "in-progress" || !state.turn) return "waitingRoll";
+
+  // ۱. اگر تاسی ریخته نشده باشد (یا آرایه خالی باشد)
+  if (!state.dice || state.dice.length === 0) {
+    return "waitingRoll";
+  }
+
+  // ۲. اصلاح فراخوانی: متد تو فقط 2 ورودی می‌گیرد (game و playerId)
+  // فایل moveGenerator.ts خط ۲۱ رو ببین، ورودی اول کل GameState است.
+  const legalMoves = generateMoveSequences(state, state.turn);
+
+  if (legalMoves && legalMoves.length > 0) {
+    return "playDice";
+  } else {
+    // ۳. تاس هست ولی هیچ حرکت قانونی (حتی با ترکیب‌های مختلف) وجود ندارد
+    return "mustEndTurn";
+  }
 }

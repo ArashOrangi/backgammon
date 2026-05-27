@@ -11,16 +11,24 @@ import {
 import { appendGameEvent, loadGameState } from "@/game/eventStore";
 import { GameQueue } from "@/game/gameQueue";
 import { isGameOver, calculateWinType } from "../../game/engine";
+import { calculateSubStatus } from "@/game/eventStore"; // اضافه شد
 
 const gameQueue = new GameQueue();
 
 export async function handleMove(
   ctx: SocketContext,
-  payload: MovePayload,
+  payload: MovePayload & { die: number }, // اضافه شدن die به ورودی
   rooms: RoomManager,
 ) {
-  const { gameId, from, to } = payload;
-  const playerId = ctx.id;
+  const { gameId, from, to, die } = payload; // استخراج die
+  const playerId = ctx.userId;
+
+  if (!playerId) {
+    return ctx.send({
+      type: "game.error",
+      payload: onErrorSocketResponse("Not authenticated"),
+    });
+  }
 
   await gameQueue.enqueue(gameId, async () => {
     const game = getGame(gameId);
@@ -39,10 +47,11 @@ export async function handleMove(
       });
     }
 
-    if (!game.dice || game.dice.length === 0) {
+    // بررسی وجود تاس در استیت فعلی قبل از هر چیز
+    if (!game.dice || !game.dice.includes(die)) {
       return ctx.send({
         type: "game.error",
-        payload: onErrorSocketResponse("Dice not rolled"),
+        payload: onErrorSocketResponse(`Invalid die: ${die}`),
       });
     }
 
@@ -55,44 +64,40 @@ export async function handleMove(
     }
 
     try {
-      // ۱. ثبت حرکت در دیتابیس (Event Sourcing)
-      await appendGameEvent(Number(game.id), {
+      // ۱. ثبت حرکت با تاس مصرف شده در EventStore
+      await appendGameEvent(game.id, {
         type: "MOVE_APPLIED",
-        payload: { playerId, from, to },
+        payload: { playerId, from, to, die }, // die اینجا ذخیره می‌شود
       });
 
-      // ۲. بازسازی استیت از روی تاریخچه وقایع
-      let updatedGame = await loadGameState(Number(game.id));
+      // ۲. بازسازی استیت (applyMove داخلی، خودش consumeDie را بر اساس die ارسالی انجام می‌دهد)
+      let updatedGame = await loadGameState(game.id);
       if (!updatedGame) throw new Error("Failed to rebuild state");
 
-      // ۳. اعلام حرکت به همه (برای انیمیشن کلاینت)
+      // ۳. اعلام حرکت به همه (طبق سناریو: add dice value here too)
       rooms.broadcast(gameId, {
         type: "player.move",
-        payload: { playerId, from, to },
+        payload: { playerId, from, to, die }, // ارسال die برای کلاینت
       });
 
       /* ------------------------------------------------------------------ */
-      /* ۴. چک کردن شرط برد با متدهای تخصصی (Core Logic)                       */
+      /* ۴. چک کردن شرط برد                                                  */
       /* ------------------------------------------------------------------ */
       if (isGameOver(updatedGame)) {
-        // تشخیص دقیق نوع برد: Normal, Mars, Backgammon
         const winType = calculateWinType(updatedGame, playerId);
 
-        await appendGameEvent(Number(updatedGame.id), {
+        await appendGameEvent(updatedGame.id, {
           type: "GAME_FINISHED",
           payload: {
             winner: playerId,
-            winType, // حالا دیگه مقدار دقیق ذخیره می‌شه
+            winType,
             reason: "REGULAR",
           },
         });
 
-        // لود مجدد برای گرفتن استیت نهایی با وضعیت status: finished
-        updatedGame =
-          (await loadGameState(Number(updatedGame.id))) || updatedGame;
+        updatedGame = (await loadGameState(updatedGame.id)) || updatedGame;
         saveGame(updatedGame);
 
-        // اعلام پایان بازی به کلاینت‌ها با جزئیات کامل
         rooms.broadcast(updatedGame.id, {
           type: "game.result",
           payload: {
@@ -107,53 +112,31 @@ export async function handleMove(
           payload: onOkSocketResponse(updatedGame, `Game finished: ${winType}`),
         });
 
-        return; // خروج از صف چون بازی تمام شده
+        return;
       }
 
       /* ------------------------------------------------------------------ */
-      /* ۵. منطق تغییر نوبت                                                  */
+      /* 5. منطق تزریق subStatus و ارسال استیت                                */
       /* ------------------------------------------------------------------ */
+
+      // محاسبه وضعیت زیرمجموعه بر اساس حرکات باقی‌مانده قانونی
       const legalMoves = generateMoveSequences(updatedGame, playerId);
 
-      if (legalMoves.length === 0) {
-        await appendGameEvent(Number(updatedGame.id), {
-          type: "TURN_PASSED",
-          payload: { playerId, reason: "NO_LEGAL_MOVES" },
-        });
+      // استفاده از تابع متمرکز calculateSubStatus برای هماهنگی کامل
+      (updatedGame as any).subStatus = calculateSubStatus(updatedGame);
 
-        updatedGame =
-          (await loadGameState(Number(updatedGame.id))) || updatedGame;
-        saveGame(updatedGame);
-
-        // اعلام تغییر نوبت به کلاینت‌ها
-        const nextPlayer = updatedGame.players.find(
-          (p) => p.id === updatedGame?.turn,
-        );
-        if (nextPlayer) {
-          rooms.broadcast(updatedGame.id, {
-            type: "game.turn",
-            payload: {
-              playerId: nextPlayer.id,
-              color: nextPlayer.color,
-            },
-          });
-        }
-      }
-
-      // ۶. ذخیره و ارسال استیت لحظه‌ای
+      // ذخیره و ارسال استیت نهایی شده به اتاق
       saveGame(updatedGame);
       rooms.broadcast(updatedGame.id, {
         type: "game.state",
         payload: onOkSocketResponse(updatedGame),
       });
 
-      // ارسال حرکات قانونی باقی‌مانده
-      if (legalMoves.length > 0) {
-        rooms.broadcast(updatedGame.id, {
-          type: "game.legalMoves",
-          payload: onOkSocketResponse(legalMoves),
-        });
-      }
+      // ارسال لیست حرکات قانونی برای آپدیت هایلایت‌های فرانت‌اندر
+      rooms.broadcast(updatedGame.id, {
+        type: "game.legalMoves",
+        payload: onOkSocketResponse(legalMoves),
+      });
     } catch (err) {
       console.error("Move Error:", err);
       ctx.send({

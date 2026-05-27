@@ -1,4 +1,4 @@
-import { getAllActiveGames, saveGame, deleteGame } from "../gameStore";
+import { getAllActiveGames, saveGame } from "../gameStore";
 import { appendGameEvent, loadGameState } from "../eventStore";
 import { RoomManager } from "../../socket/room-manager";
 import { onOkSocketResponse } from "@/responses/response-builder";
@@ -10,30 +10,25 @@ export async function checkGameTimeouts(rooms: RoomManager) {
   for (const game of games) {
     if (game.status !== "in-progress" && game.status !== "starting") continue;
 
-    const gameIdNum = Number(game.id);
+    const gameId = game.id; // number
 
-    // ۱. چک کردن تایم‌اوت نوبت (Turn Timeout - مثلا ۳۰ ثانیه)
+    // 1. Turn timeout (30 seconds)
     if (game.turn && game.turnStartedAt) {
       const turnDuration = now - game.turnStartedAt;
       if (turnDuration > 30000) {
-        // ۳۰ ثانیه
-        await handleTimeout(gameIdNum, "TURN_TIMEOUT", game.turn, rooms);
-        continue; // بقیه چک‌ها برای این بازی لازم نیست
+        await handleTimeout(gameId, "TURN_TIMEOUT", game.turn, rooms);
+        continue;
       }
     }
 
-    // ۲. چک کردن تایم‌اوت شبکه (Network/Disconnect Timeout - مثلا ۶۰ ثانیه)
+    // 2. Network / disconnect timeout (60 seconds)
     if (game.lastActionAt) {
       const inactiveDuration = now - game.lastActionAt;
       if (inactiveDuration > 60000) {
-        // ۶۰ ثانیه
-        // فرض می‌کنیم کسی که نوبتش بوده مسئول توقف بازیه
-        await handleTimeout(
-          gameIdNum,
-          "NETWORK_TIMEOUT",
-          game.turn || game.players[0].id,
-          rooms,
-        );
+        const loserId = game.turn ?? game.players[0]?.id;
+        if (loserId !== undefined) {
+          await handleTimeout(gameId, "NETWORK_TIMEOUT", loserId, rooms);
+        }
       }
     }
   }
@@ -42,24 +37,24 @@ export async function checkGameTimeouts(rooms: RoomManager) {
 async function handleTimeout(
   gameId: number,
   type: "TURN_TIMEOUT" | "NETWORK_TIMEOUT",
-  loserId: string,
+  loserId: number,
   rooms: RoomManager,
 ) {
   console.log(`[Timer] Handling ${type} for game ${gameId}, Loser: ${loserId}`);
 
-  // پیدا کردن برنده (نفر مقابل بازنده)
   const state = await loadGameState(gameId);
   if (!state) return;
 
   const winner = state.players.find((p) => p.id !== loserId);
   if (!winner) return;
 
-  // ثبت واقعه پایان بازی در EventStore
+  // Store timeout event
   await appendGameEvent(gameId, {
     type: type === "TURN_TIMEOUT" ? "TURN_TIMEOUT" : "NETWORK_TIMEOUT",
     payload: { playerId: loserId },
   });
 
+  // Store game finished event
   await appendGameEvent(gameId, {
     type: "GAME_FINISHED",
     payload: {
@@ -69,13 +64,12 @@ async function handleTimeout(
     },
   });
 
-  // بازسازی استیت نهایی و ذخیره
   const finalGame = await loadGameState(gameId);
   if (finalGame) {
     saveGame(finalGame);
 
-    // اطلاع‌رسانی به کلاینت‌ها
-    rooms.broadcast(String(gameId), {
+    // Broadcast result
+    rooms.broadcast(gameId, {
       type: "game.result",
       payload: {
         winner: winner.id,
@@ -83,7 +77,7 @@ async function handleTimeout(
       },
     });
 
-    rooms.broadcast(String(gameId), {
+    rooms.broadcast(gameId, {
       type: "game.state",
       payload: onOkSocketResponse(finalGame, `Game ended due to ${type}`),
     });

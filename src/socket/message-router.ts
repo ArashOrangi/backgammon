@@ -69,7 +69,7 @@ export class MessageRouter {
         return handler(ctx, message.payload as any, this.rooms);
       }
 
-      this.queue.enqueue(String(gameId), async () => {
+      this.queue.enqueue(gameId, async () => {
         await handler(ctx, message.payload as any, this.rooms);
       });
     } catch (error) {

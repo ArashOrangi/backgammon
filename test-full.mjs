@@ -53,7 +53,7 @@ async function createGame(whiteUserId) {
   if (!gameId) {
     throw new Error(`Game creation failed: ${JSON.stringify(data)}`);
   }
-  return String(gameId);
+  return gameId;
 }
 
 // ----- Create a player (WebSocket client) -----

@@ -8,13 +8,11 @@ import { handleJoin } from "./handlers/join";
 import { handleRoll } from "./handlers/roll";
 import { handleMove } from "./handlers/move";
 import { handleLeave } from "./handlers/leave";
+import { handleEndTurn } from "./handlers/endTurn"; // <--- ۱. اضافه کردن هندلر جدید
 
 import { getGame } from "@/game/gameStore";
 import { onErrorSocketResponse } from "@/responses/response-builder";
 
-/** اینجا rooms رو به عنوان آرگومان دوم اضافه کردیم تا در کل برنامه
- * یک Instance واحد داشته باشیم و Game Loop بتونه بهش دسترسی داشته باشه.
- */
 export function registerSocketHandlers(
   wss: WebSocketServer,
   rooms: RoomManager,
@@ -25,6 +23,7 @@ export function registerSocketHandlers(
   router.register("game.roll", handleRoll);
   router.register("game.move", handleMove);
   router.register("player.leave", handleLeave);
+  router.register("game.endTurn", handleEndTurn); // <---  ریجیستر کردن برای استفاده کلاینت
 
   wss.on("connection", (ws) => {
     const ctx = new SocketContext(ws);
@@ -48,16 +47,19 @@ export function registerSocketHandlers(
       if (gameId) {
         const game = getGame(gameId);
         if (game) {
+          // 3. اینجا بهتره از ctx.userId استفاده کنی چون ID سوکت با هر بار رفرش عوض میشه
+          // اما userId همونیه که توی دیتابیس داری.
+          const disconnectingPlayerId = ctx.userId || ctx.id;
+
           console.log(
-            `[Socket] Player ${ctx.id} went offline. Waiting for timeout...`,
+            `[Socket] Player ${disconnectingPlayerId} went offline. Waiting for timeout...`,
           );
 
-          // برودکست وضعیت آفلاین برای آگاهی حریف (UI می‌تونه تایمر نشون بده)
           rooms.broadcast(gameId, {
             type: "network.timeout",
             payload: {
-              playerId: ctx.id,
-              timeoutAt: Date.now() + 60000, // اطلاع‌رسانی که ۶۰ ثانیه وقت داره برگرده
+              playerId: disconnectingPlayerId,
+              timeoutAt: Date.now() + 60000,
             },
           } as any);
         }

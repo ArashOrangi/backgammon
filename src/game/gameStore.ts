@@ -1,6 +1,6 @@
 import { GameState, PlayerId, PlayerInfo } from "./types";
 
-const games = new Map<string, GameState>();
+const games = new Map<number, GameState>();
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                            */
@@ -50,7 +50,7 @@ export function createInitialBoard(whiteId: PlayerId, blackId: PlayerId) {
 /* Initial state factory                                              */
 /* ------------------------------------------------------------------ */
 
-export function createInitialGameState(gameId: string): GameState {
+export function createInitialGameState(gameId: number): GameState {
   return {
     id: gameId,
     players: [],
@@ -79,13 +79,13 @@ export function createInitialGameState(gameId: string): GameState {
 /* Store Ops                                                          */
 /* ------------------------------------------------------------------ */
 
-export function createGame(id: string): GameState {
+export function createGame(id: number): GameState {
   const game = createInitialGameState(id);
   games.set(id, game);
   return game;
 }
 
-export function getGame(id: string): GameState | undefined {
+export function getGame(id: number): GameState | undefined {
   return games.get(id);
 }
 
@@ -94,7 +94,7 @@ export function saveGame(game: GameState) {
   games.set(game.id, game);
 }
 
-export function deleteGame(id: string) {
+export function deleteGame(id: number) {
   games.delete(id);
 }
 

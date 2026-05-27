@@ -1,4 +1,4 @@
-export type PlayerId = string;
+export type PlayerId = number;
 
 export interface PlayerInfo {
   /** شناسه بازیکن در سیستم یا همان socketId */
@@ -27,7 +27,7 @@ export interface Board {
 /** وضعیت کامل یک بازی */
 export interface GameState {
   /** شناسه بازی */
-  id: string;
+  id: number;
 
   /** لیست بازیکنان با رنگ و ID */
   players: PlayerInfo[];
@@ -37,7 +37,7 @@ export interface GameState {
 
   /** وضعیت فعلی بازی */
   status: GameStatus;
-
+  subStatus?: SubStatus;
   /** تاس جاری */
   dice?: number[];
 
@@ -84,3 +84,5 @@ export const SPECIAL_POSITIONS = {
 
 export type SpecialPosition =
   (typeof SPECIAL_POSITIONS)[keyof typeof SPECIAL_POSITIONS];
+
+export type SubStatus = "waitingRoll" | "playDice" | "mustEndTurn";

@@ -17,7 +17,7 @@ import { appendGameEvent } from "@/game/eventStore";
 
 const gameQueue = new GameQueue();
 
-type RollPayload = { gameId: string };
+type RollPayload = { gameId: number };
 
 export async function handleRoll(
   ctx: SocketContext,
@@ -25,13 +25,18 @@ export async function handleRoll(
   rooms: RoomManager,
 ) {
   const { gameId } = payload;
-  const playerId = ctx.id;
+  const playerId = ctx.userId; // شناسه عددی کاربر
 
-  // تمام عملیات رو توی صف می‌بریم تا Race Condition نداشته باشیم
+  // بررسی احراز هویت
+  if (!playerId) {
+    return ctx.send({
+      type: "game.error",
+      payload: onErrorSocketResponse("Not authenticated"),
+    });
+  }
+
   await gameQueue.enqueue(gameId, async () => {
     const game = getGame(gameId);
-    const numericGameId = parseInt(gameId); // فرض بر این است که ID دیتابیس عدد است
-
     if (!game) {
       return ctx.send({
         type: "game.error",
@@ -55,19 +60,15 @@ export async function handleRoll(
     }
 
     try {
-      /* ------------------------------------------------------------------ */
-      /* فاز تعیین شروع‌کننده (Starting)                                      */
-      /* ------------------------------------------------------------------ */
+      // فاز تعیین شروع‌کننده (Starting)
       if (game.status === "starting") {
         const value = rollStartingDie(game, playerId);
 
-        // ۱. ثبت در دیتابیس (Event Sourcing)
-        await appendGameEvent(numericGameId, {
+        await appendGameEvent(game.id, {
           type: "STARTING_ROLLED",
           payload: { playerId, value },
         });
 
-        // ۲. ایونت DiceResult برای کلاینت
         rooms.broadcast(gameId, {
           type: "dice.result",
           payload: { dice: [value], playerId },
@@ -79,11 +80,9 @@ export async function handleRoll(
           const whitePlayer = game.players.find((p) => p.color === "white")!;
           const blackPlayer = game.players.find((p) => p.color === "black")!;
 
-          // چیدن مهره‌ها
           game.board = createInitialBoard(whitePlayer.id, blackPlayer.id);
 
-          // ثبت شروع رسمی بازی در دیتابیس
-          await appendGameEvent(numericGameId, {
+          await appendGameEvent(game.id, {
             type: "GAME_STARTED",
             payload: {
               whitePlayerId: whitePlayer.id,
@@ -92,7 +91,6 @@ export async function handleRoll(
             },
           });
 
-          // اعلام نوبت شروع‌کننده
           rooms.broadcast(gameId, {
             type: "game.turn",
             payload: {
@@ -110,9 +108,7 @@ export async function handleRoll(
         return;
       }
 
-      /* ------------------------------------------------------------------ */
-      /* فاز تاس ریختن معمولی (In-Progress)                                   */
-      /* ------------------------------------------------------------------ */
+      // فاز تاس ریختن معمولی (In-Progress)
       if (game.dice && game.dice.length > 0) {
         return ctx.send({
           type: "game.error",
@@ -122,8 +118,7 @@ export async function handleRoll(
 
       const dice = rollDice(game);
 
-      // ثبت واقعه ریختن تاس
-      await appendGameEvent(numericGameId, {
+      await appendGameEvent(game.id, {
         type: "DICE_ROLLED",
         payload: { playerId, dice },
       });
@@ -133,23 +128,26 @@ export async function handleRoll(
         payload: { dice, playerId },
       });
 
-      // چک کردن حرکت‌های قانونی
       const legalMoves = generateMoveSequences(game, playerId);
 
       if (legalMoves.length === 0) {
-        // ثبت در دیتابیس: نوبت رد شد چون حرکتی نبود
-        await appendGameEvent(numericGameId, {
+        await appendGameEvent(game.id, {
           type: "TURN_PASSED",
           payload: { playerId, reason: "NO_LEGAL_MOVES" },
         });
 
-        // اطلاع‌رسانی نوبت جدید
         rooms.broadcast(gameId, {
           type: "game.turn",
           payload: {
             playerId: game.turn!,
             color: game.players.find((p) => p.id === game.turn)!.color,
           },
+        });
+      } else {
+        // ارسال حرکات قانونی به کلاینت
+        rooms.broadcast(gameId, {
+          type: "game.legalMoves",
+          payload: onOkSocketResponse(legalMoves),
         });
       }
 

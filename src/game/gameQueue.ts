@@ -1,9 +1,9 @@
 type Task = () => Promise<void>;
 
 export class GameQueue {
-  private queues = new Map<string, Promise<void>>();
+  private queues = new Map<number, Promise<void>>();
 
-  enqueue(gameId: string, task: Task) {
+  enqueue(gameId: number, task: Task) {
     const prev = this.queues.get(gameId) ?? Promise.resolve();
 
     const next = prev

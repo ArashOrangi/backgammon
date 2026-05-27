@@ -11,15 +11,17 @@ import {
 } from "@/responses/response-builder";
 import { createInitialBoard } from "@/game/board";
 
-type JoinPayload = { gameId: string };
+type JoinPayload = { gameId: number; userId: number };
 
 export async function handleJoin(
   ctx: SocketContext,
-  payload: { gameId: string },
+  payload: JoinPayload,
   rooms: RoomManager,
 ) {
-  const { gameId } = payload;
-  const playerId = ctx.id;
+  const { gameId, userId } = payload;
+
+  // ذخیره userId در کانتکست برای استفاده در سایر هندلرها
+  ctx.userId = userId;
 
   try {
     let game = getGame(gameId);
@@ -28,42 +30,35 @@ export async function handleJoin(
       saveGame(game);
     }
 
-    const alreadyInGame = game.players.find((p) => p.id === playerId);
+    const alreadyInGame = game.players.find((p) => p.id === userId);
 
     if (!alreadyInGame) {
       if (game.players.length >= 2) {
         return ctx.send({
           type: "game.error",
-          payload: { message: "Game is full" },
-        } as any);
+          payload: onErrorSocketResponse("Game is full"),
+        });
       }
 
       const color = game.players.length === 0 ? "white" : "black";
-      game.players.push({ id: playerId, color });
+      game.players.push({ id: userId, color });
 
-      // ایونت Assign: اختصاصی برای پلیر جدید
+      // اختصاص رنگ و شناسه عددی به بازیکن
       ctx.send({
         type: "player.assign",
-        payload: { color, playerId },
-      } as any);
+        payload: { color, playerId: userId },
+      });
 
       // اگر نفر دوم آمد
       if (game.players.length === 2) {
-        game.status = "ready"; // تغییر وضعیت به آماده
+        game.status = "ready";
 
-        // ایونت RoomReady: برودکاست به همه
         rooms.broadcast(gameId, {
           type: "room.ready",
           payload: { gameId },
         });
 
-        // حالا باید وارد فاز Starting Dice شویم (تاس ریختن برای شروع)
-        // این بخش معمولا در handleRoll یا یک تایمر اتوماتیک هندل می‌شود
-        // اما برای اینکه لیست مدیر فنی کامل شود:
         game.status = "starting";
-
-        // نکته کنجکاوانه: در تخته‌نرد واقعی، اولین حرکت با همان تاس‌های شروع انجام می‌شود.
-        // اینجا می‌توانیم منطق شروع را صدا بزنیم.
       }
 
       saveGame(game);
@@ -71,7 +66,7 @@ export async function handleJoin(
 
     rooms.join(gameId, ctx, "player");
 
-    // سینک نهایی وضعیت برای کلاینت
+    // ارسال وضعیت کامل بازی به همه
     rooms.broadcast(gameId, {
       type: "game.state",
       payload: onOkSocketResponse(game),

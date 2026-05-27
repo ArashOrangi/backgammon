@@ -181,3 +181,25 @@ export async function getGameEvents(gameId: number) {
     orderBy: { sequence: "asc" },
   });
 }
+
+export async function prismaGameEventDeleteLastMove(
+  gameId: number,
+  playerId: number,
+) {
+  // پیدا کردن آخرین حرکت این بازیکن
+  const lastMove = await prisma.gameEvents.findFirst({
+    where: {
+      gameId,
+      type: "MOVE_APPLIED",
+      payload: { path: ["playerId"], equals: playerId }, // جستجو در JSON payload
+    },
+    orderBy: { sequence: "desc" },
+  });
+
+  if (lastMove) {
+    return await prisma.gameEvents.delete({
+      where: { id: lastMove.id },
+    });
+  }
+  return null;
+}

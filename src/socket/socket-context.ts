@@ -3,7 +3,8 @@ import { ServerMessage } from "./protocol";
 import crypto from "crypto";
 
 export class SocketContext {
-  id: string;
+  id: string; // شناسه یکتای سوکت (UUID)
+  userId?: number; // شناسه عددی کاربر احراز هویت شده
   ws: WebSocket;
 
   constructor(ws: WebSocket) {
