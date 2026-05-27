@@ -46,7 +46,7 @@ export type ServerMessage =
     }
   | {
       type: "dice.result";
-      payload: { dice: number[]; playerId: number };
+      payload: { dice: number[]; playerId: number; type?: "starting" };
     }
   | {
       type: "game.turn";
@@ -54,7 +54,23 @@ export type ServerMessage =
     }
   | {
       type: "player.move";
-      payload: { playerId: number; from: number; to: number; die: number };
+      payload:
+        | {
+            playerId: number;
+            from: number;
+            to: number;
+            die: number;
+            ownerId: number;
+            isUndo?: boolean;
+          }
+        | Array<{
+            playerId: number;
+            from: number;
+            to: number;
+            die: number;
+            ownerId: number;
+            isUndo?: boolean;
+          }>;
     }
   | {
       type: "game.legalMoves";

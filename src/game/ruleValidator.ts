@@ -40,11 +40,10 @@ function computeDistance(
   to: number,
 ): number | null {
   const dir = getDirection(game, playerId);
-  const player = game.players.find((p) => p.id === playerId)!;
 
   // from bar
   if (from === SPECIAL_POSITIONS.BAR) {
-    const entry = dir === -1 ? 23 : 0;
+    const entry = dir === -1 ? 24 : -1;
     return dir === -1 ? entry - to : to - entry;
   }
 
@@ -85,11 +84,14 @@ function findHigherDieForBearOff(
   const { points } = game.board;
   const dir = getDirection(game, playerId);
   const [start, end] = getHomeRange(game, playerId);
+
   if (dir === -1) {
+    // برای سفید (حرکت به سمت 0)، چک می‌کنیم مهره‌ای عقب‌تر از خانه فعلی نباشد
     for (let i = from + 1; i <= end; i++) {
       if (points[i].owner === playerId && points[i].count > 0) return null;
     }
   } else {
+    // برای سیاه (حرکت به سمت 23)، چک می‌کنیم مهره‌ای عقب‌تر از خانه فعلی نباشد
     for (let i = from - 1; i >= start; i--) {
       if (points[i].owner === playerId && points[i].count > 0) return null;
     }
@@ -104,74 +106,91 @@ export function validateMove(
   from: number,
   to: number,
   diceOverride?: number[],
-): { valid: boolean; dieUsed?: number; reason?: string } {
+): { isValid: boolean; isHit?: boolean; dieUsed?: number; message?: string } {
   const { board } = game;
   const dice = diceOverride ?? game.dice;
+
   if (!dice || dice.length === 0)
-    return { valid: false, reason: "No dice available" };
+    return { isValid: false, message: "No dice available" };
 
   const barCount = board.bar[playerId] ?? 0;
   if (barCount > 0 && from !== SPECIAL_POSITIONS.BAR) {
-    return { valid: false, reason: "Must enter from bar first" };
+    return { isValid: false, message: "Must enter from bar first" };
   }
+
   if (from === SPECIAL_POSITIONS.BAR) {
-    if (barCount === 0) return { valid: false, reason: "No checker on bar" };
+    if (barCount === 0) return { isValid: false, message: "No checker on bar" };
   } else {
     const src = board.points[from];
     if (!src || src.owner !== playerId || src.count <= 0) {
-      return { valid: false, reason: "Invalid source point" };
+      return { isValid: false, message: "Invalid source point" };
     }
   }
 
   const isBearOff =
     to === SPECIAL_POSITIONS.BEAR_OFF_WHITE ||
     to === SPECIAL_POSITIONS.BEAR_OFF_BLACK;
+
+  const distance = computeDistance(game, playerId, from, to);
+  if (distance == null || distance <= 0)
+    return { isValid: false, message: "Invalid distance" };
+
   if (!isBearOff) {
     if (to < 0 || to > 23)
-      return { valid: false, reason: "Invalid destination" };
+      return { isValid: false, message: "Invalid destination" };
     if (isPointBlocked(game, playerId, to))
-      return { valid: false, reason: "Point blocked" };
+      return { isValid: false, message: "Point blocked" };
+
+    // تشخیص زدن مهره (Hit)
+    const targetPoint = game.board.points[to];
+    const isHit =
+      targetPoint.owner &&
+      targetPoint.owner !== playerId &&
+      targetPoint.count === 1;
+
+    const exactDie = findMatchingDie(game, distance, dice);
+    if (!exactDie)
+      return { isValid: false, message: "No matching die for this distance" };
+
+    return { isValid: true, dieUsed: exactDie, isHit: !!isHit };
   } else {
+    // منطق Bear Off
     const player = game.players.find((p) => p.id === playerId)!;
     const expectedBearOff =
       player.color === "white"
         ? SPECIAL_POSITIONS.BEAR_OFF_WHITE
         : SPECIAL_POSITIONS.BEAR_OFF_BLACK;
+
     if (to !== expectedBearOff) {
-      return { valid: false, reason: "Invalid bear off point" };
+      return { isValid: false, message: "Invalid bear off point" };
     }
-  }
 
-  const distance = computeDistance(game, playerId, from, to);
-  if (distance == null || distance <= 0)
-    return { valid: false, reason: "Invalid distance" };
-
-  if (isBearOff) {
     if (!canBearOff(game, playerId))
-      return { valid: false, reason: "Cannot bear off yet" };
-    const exactDie = findMatchingDie(game, distance, dice);
-    if (exactDie) return { valid: true, dieUsed: exactDie };
-    if (typeof from === "number") {
-      const higher = findHigherDieForBearOff(
-        game,
-        playerId,
-        from,
-        distance,
-        dice,
-      );
-      if (higher) return { valid: true, dieUsed: higher };
-    }
-    return { valid: false, reason: "No usable die" };
-  }
+      return {
+        isValid: false,
+        message: "Cannot bear off yet, bring all checkers home",
+      };
 
-  const exactDie = findMatchingDie(game, distance, dice);
-  if (!exactDie) return { valid: false, reason: "No matching die" };
-  return { valid: true, dieUsed: exactDie };
+    const exactDie = findMatchingDie(game, distance, dice);
+    if (exactDie) return { isValid: true, dieUsed: exactDie, isHit: false };
+
+    const higher = findHigherDieForBearOff(
+      game,
+      playerId,
+      from,
+      distance,
+      dice,
+    );
+    if (higher) return { isValid: true, dieUsed: higher, isHit: false };
+
+    return { isValid: false, message: "No usable die for bear off" };
+  }
 }
 
 export function hasLegalMoves(game: GameState, playerId: PlayerId): boolean {
   const { board, dice } = game;
   if (!dice || dice.length === 0) return false;
+
   const barCount = board.bar[playerId] ?? 0;
   const player = game.players.find((p) => p.id === playerId)!;
   const bearOffPos =
@@ -181,7 +200,7 @@ export function hasLegalMoves(game: GameState, playerId: PlayerId): boolean {
 
   if (barCount > 0) {
     for (let to = 0; to < 24; to++) {
-      if (validateMove(game, playerId, SPECIAL_POSITIONS.BAR, to).valid)
+      if (validateMove(game, playerId, SPECIAL_POSITIONS.BAR, to).isValid)
         return true;
     }
     return false;
@@ -191,9 +210,9 @@ export function hasLegalMoves(game: GameState, playerId: PlayerId): boolean {
     const p = board.points[i];
     if (p.owner === playerId && p.count > 0) {
       for (let to = 0; to < 24; to++) {
-        if (validateMove(game, playerId, i, to).valid) return true;
+        if (validateMove(game, playerId, i, to).isValid) return true;
       }
-      if (validateMove(game, playerId, i, bearOffPos).valid) return true;
+      if (validateMove(game, playerId, i, bearOffPos).isValid) return true;
     }
   }
   return false;

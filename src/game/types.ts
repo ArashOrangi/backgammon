@@ -85,4 +85,11 @@ export const SPECIAL_POSITIONS = {
 export type SpecialPosition =
   (typeof SPECIAL_POSITIONS)[keyof typeof SPECIAL_POSITIONS];
 
-export type SubStatus = "waitingRoll" | "playDice" | "mustEndTurn";
+export type SubStatus = "turnRoll" | "playDice" | "mustEndTurn";
+
+export interface Move {
+  from: number;
+  to: number;
+  die: number;
+  ownerId: PlayerId;
+}

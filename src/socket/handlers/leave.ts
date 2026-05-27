@@ -5,7 +5,15 @@ import {
   onErrorSocketResponse,
   onOkSocketResponse,
 } from "@/responses/response-builder";
-import { appendGameEvent, loadGameState } from "@/game/eventStore";
+import {
+  appendGameEvent,
+  loadGameState,
+  calculateSubStatus,
+} from "@/game/eventStore";
+import {
+  flattenMoveSequences,
+  generateMoveSequences,
+} from "@/game/moveGenerator";
 import { GameQueue } from "@/game/gameQueue";
 
 const gameQueue = new GameQueue();
@@ -18,9 +26,8 @@ export async function handleLeave(
   rooms: RoomManager,
 ) {
   const { gameId } = payload;
-  const playerId = ctx.userId; // شناسه عددی کاربر
+  const playerId = ctx.userId;
 
-  // بررسی احراز هویت
   if (!playerId) {
     return ctx.send({
       type: "game.error",
@@ -49,7 +56,6 @@ export async function handleLeave(
     try {
       // سناریو ۱: بازی شروع نشده (waiting یا ready)
       if (game.status === "waiting" || game.status === "ready") {
-        // ثبت رویداد خروج (playerId عددی)
         await appendGameEvent(game.id, {
           type: "PLAYER_LEFT",
           payload: { playerId },
@@ -60,9 +66,22 @@ export async function handleLeave(
           saveGame(updatedGame);
           rooms.leave(ctx);
 
+          // محاسبه subStatus و legalMoves برای وضعیت جدید
+          const subStatus = calculateSubStatus(updatedGame);
+          let legalMoves: any[] = [];
+          if (updatedGame.turn !== null) {
+            legalMoves = generateMoveSequences(updatedGame, updatedGame.turn);
+          }
+          const flatLegalMoves = flattenMoveSequences(legalMoves);
+          const stateToSend = {
+            ...updatedGame,
+            subStatus,
+            legalMoves: flatLegalMoves,
+          };
+
           rooms.broadcast(gameId, {
             type: "game.state",
-            payload: onOkSocketResponse(updatedGame, "Player left"),
+            payload: onOkSocketResponse(stateToSend, "Player left"),
           });
         }
         return;

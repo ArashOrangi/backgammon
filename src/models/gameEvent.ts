@@ -10,6 +10,7 @@ export interface GameEvent {
   payload: Prisma.JsonValue;
   sequence: number;
   createdAt: Date;
+  isUndo: boolean;
 }
 
 const prismaSelectGameEvent = {
@@ -19,6 +20,7 @@ const prismaSelectGameEvent = {
   payload: true,
   sequence: true,
   createdAt: true,
+  isUndo: true,
 };
 
 export async function prismaGameEventCreate({
@@ -99,7 +101,7 @@ export async function prismaGameEventAppend({
 export async function prismaGameEventGetAll(gameId: number) {
   try {
     const events = await prisma.gameEvents.findMany({
-      where: { gameId },
+      where: { gameId, isUndo: false },
       orderBy: { sequence: "asc" },
       select: prismaSelectGameEvent,
     });
@@ -122,6 +124,7 @@ export async function prismaGameEventGetFromSequence({
       where: {
         gameId,
         sequence: { gt: sequence },
+        isUndo: false,
       },
       orderBy: { sequence: "asc" },
       select: prismaSelectGameEvent,
@@ -143,20 +146,17 @@ export async function prismaGameEventGetAfterSequence({
   untilSequence?: number;
 }) {
   try {
-    const events = await prisma.gameEvents.findMany({
+    return await prisma.gameEvents.findMany({
       where: {
         gameId,
+        isUndo: false,
         sequence: {
           gt: sequence,
           ...(untilSequence !== undefined && { lte: untilSequence }),
         },
       },
-      orderBy: {
-        sequence: "asc",
-      },
+      orderBy: { sequence: "asc" },
     });
-
-    return events;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
   }
@@ -202,4 +202,32 @@ export async function prismaGameEventDeleteLastMove(
     });
   }
   return null;
+}
+
+export async function prismaGameEventMarkAsUndo(
+  gameId: number,
+  playerId: number,
+) {
+  try {
+    // پیدا کردن آخرین حرکتی که هنوز Undo نشده
+    const lastMove = await prisma.gameEvents.findFirst({
+      where: {
+        gameId,
+        type: "MOVE_APPLIED",
+        isUndo: false,
+        payload: { path: ["playerId"], equals: playerId },
+      },
+      orderBy: { sequence: "desc" },
+    });
+
+    if (!lastMove) return null;
+
+    return await prisma.gameEvents.update({
+      where: { id: lastMove.id },
+      data: { isUndo: true },
+      select: prismaSelectGameEvent,
+    });
+  } catch (error) {
+    return errorHandlersOnPrisma({ error });
+  }
 }

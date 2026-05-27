@@ -1,12 +1,6 @@
-import { GameState, PlayerId, SPECIAL_POSITIONS } from "./types";
+import { GameState, Move, PlayerId, SPECIAL_POSITIONS } from "./types";
 import { validateMove } from "./ruleValidator";
 import { applyMove } from "./engine";
-
-export interface Move {
-  from: number;
-  to: number;
-  die: number;
-}
 
 export interface MoveSequence {
   moves: Move[];
@@ -76,8 +70,13 @@ function generateSingleMoves(
     if (barCount > 0) {
       const to = computeTargetFromBar(game, playerId, die);
       const res = validateMove(game, playerId, SPECIAL_POSITIONS.BAR, to, dice);
-      if (res.valid) {
-        moves.push({ from: SPECIAL_POSITIONS.BAR, to, die: res.dieUsed! });
+      if (res.isValid && res.dieUsed !== undefined) {
+        moves.push({
+          from: SPECIAL_POSITIONS.BAR,
+          to,
+          die: res.dieUsed,
+          ownerId: playerId,
+        });
       }
       continue;
     }
@@ -87,8 +86,13 @@ function generateSingleMoves(
       if (!p || p.count === 0 || p.owner !== playerId) continue;
       const to = computeTarget(game, playerId, i, die);
       const res = validateMove(game, playerId, i, to, dice);
-      if (res.valid) {
-        moves.push({ from: i, to, die: res.dieUsed! });
+      if (res.isValid && res.dieUsed !== undefined) {
+        moves.push({
+          from: i,
+          to,
+          die: res.dieUsed,
+          ownerId: playerId,
+        });
       }
     }
   }
@@ -176,4 +180,18 @@ function undoSnapshot(game: GameState, snap: GameSnapshot) {
   game.board.bar = { ...snap.bar };
   game.board.borneOff = { ...snap.borneOff };
   game.dice = snap.dice.length ? [...snap.dice] : undefined;
+}
+
+export function flattenMoveSequences(sequences: MoveSequence[]): Move[] {
+  const allMoves: Move[] = [];
+  for (const seq of sequences) {
+    allMoves.push(...seq.moves);
+  }
+  // حذف حرکات تکراری (از نظر from, to, die, ownerId)
+  const unique = new Map<string, Move>();
+  for (const move of allMoves) {
+    const key = `${move.from}-${move.to}-${move.die}-${move.ownerId}`;
+    if (!unique.has(key)) unique.set(key, move);
+  }
+  return Array.from(unique.values());
 }

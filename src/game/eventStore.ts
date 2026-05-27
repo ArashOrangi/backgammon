@@ -5,6 +5,7 @@ import {
   prismaGameEventCreate,
   prismaGameEventGetAfterSequence,
   prismaGameEventGetLastSequence,
+  prismaGameEventMarkAsUndo,
 } from "../models/gameEvent";
 
 import {
@@ -16,6 +17,7 @@ import { createInitialGameState } from "./gameStore";
 import { createInitialBoard } from "./board";
 import { applyMove, switchTurn } from "./engine";
 import { generateMoveSequences } from "./moveGenerator";
+import { OrmState } from "@/models/enums";
 
 /**
  * این تابع تضمین می‌کنه که اگه ایونت جدیدی اضافه کردی و فراموش کردی
@@ -67,7 +69,13 @@ export type DiceRolledEvent = {
 
 export type MoveAppliedEvent = {
   type: "MOVE_APPLIED";
-  payload: { playerId: PlayerId; from: number; to: number; die: number };
+  payload: {
+    playerId: PlayerId;
+    from: number;
+    to: number;
+    die: number;
+    isUndo?: boolean;
+  };
 };
 
 export type TurnPassedEvent = {
@@ -323,11 +331,11 @@ export async function loadGameStateUntil(
 }
 
 export function calculateSubStatus(state: GameState): SubStatus {
-  if (state.status !== "in-progress" || !state.turn) return "waitingRoll";
+  if (state.status !== "in-progress" || !state.turn) return "turnRoll";
 
   // ۱. اگر تاسی ریخته نشده باشد (یا آرایه خالی باشد)
   if (!state.dice || state.dice.length === 0) {
-    return "waitingRoll";
+    return "turnRoll";
   }
 
   // ۲. اصلاح فراخوانی: متد تو فقط 2 ورودی می‌گیرد (game و playerId)
@@ -340,4 +348,20 @@ export function calculateSubStatus(state: GameState): SubStatus {
     // ۳. تاس هست ولی هیچ حرکت قانونی (حتی با ترکیب‌های مختلف) وجود ندارد
     return "mustEndTurn";
   }
+}
+
+export async function undoLastMove(gameId: number, playerId: PlayerId) {
+  // 1. مارک کردن در دیتابیس
+  const result = await prismaGameEventMarkAsUndo(gameId, playerId);
+
+  // بررسی اینکه آیا خروجی خطا بوده یا نه
+  if (result === OrmState.Error || !result) {
+    return null;
+  }
+
+  // حالا TypeScript می‌فهمه که result حتماً یک GameEvent هست
+  const undoneEvent = result as GameEvent;
+
+  // 2. برگرداندن پلود برای بازیابی تاس در منطق انجین
+  return undoneEvent.payload;
 }

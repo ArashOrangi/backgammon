@@ -17,8 +17,8 @@ model Users {
   id         Int      @id @default(autoincrement())
   userName   String   @unique
   winRate    Float    @default(0)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+   createdAt   DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @db.Timestamptz(3)
   gender     GENDER   @default(MAN)
   whiteGames Games[]  @relation("WhitePlayerRelation")
   blackGames Games[]  @relation("BlackPlayerRelation")
@@ -36,8 +36,8 @@ enum GENDER {
 model Games {
   id          Int      @id @default(autoincrement())
   status      GAMESTATUS    @default(PENDING)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @db.Timestamptz(3)
 
   // players
   whitePlayerId Int?     
@@ -69,8 +69,9 @@ model GameEvents {
   sequence  Int         // event order (0,1,2,3,...)
   type      EVENTTYPE
   payload   Json
-  createdAt DateTime    @default(now())
-
+  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @db.Timestamptz(3)
+  isUndo    Boolean      @default(false)
   game      Games        @relation(fields: [gameId], references: [id])
 
   // @@index([gameId])

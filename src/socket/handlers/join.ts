@@ -9,7 +9,11 @@ import {
   onErrorSocketResponse,
   onOkSocketResponse,
 } from "@/responses/response-builder";
-import { createInitialBoard } from "@/game/board";
+import { calculateSubStatus } from "@/game/eventStore";
+import {
+  flattenMoveSequences,
+  generateMoveSequences,
+} from "@/game/moveGenerator";
 
 type JoinPayload = { gameId: number; userId: number };
 
@@ -20,7 +24,6 @@ export async function handleJoin(
 ) {
   const { gameId, userId } = payload;
 
-  // ذخیره userId در کانتکست برای استفاده در سایر هندلرها
   ctx.userId = userId;
 
   try {
@@ -43,22 +46,23 @@ export async function handleJoin(
       const color = game.players.length === 0 ? "white" : "black";
       game.players.push({ id: userId, color });
 
-      // اختصاص رنگ و شناسه عددی به بازیکن
       ctx.send({
         type: "player.assign",
         payload: { color, playerId: userId },
       });
 
-      // اگر نفر دوم آمد
       if (game.players.length === 2) {
         game.status = "ready";
-
         rooms.broadcast(gameId, {
           type: "room.ready",
           payload: { gameId },
         });
-
         game.status = "starting";
+        // طبق سناریو، در فاز starting نوبت را به بازیکن سفید (بازیکن اول) اختصاص می‌دهیم
+        const whitePlayer = game.players.find((p) => p.color === "white");
+        if (whitePlayer) {
+          game.turn = whitePlayer.id;
+        }
       }
 
       saveGame(game);
@@ -66,10 +70,21 @@ export async function handleJoin(
 
     rooms.join(gameId, ctx, "player");
 
-    // ارسال وضعیت کامل بازی به همه
+    const subStatus = calculateSubStatus(game);
+    let legalMoves: any[] = [];
+    if (game.turn !== null) {
+      legalMoves = generateMoveSequences(game, game.turn);
+    }
+    const flatLegalMoves = flattenMoveSequences(legalMoves);
+    const stateToSend = {
+      ...game,
+      subStatus,
+      legalMoves: flatLegalMoves,
+    };
+
     rooms.broadcast(gameId, {
       type: "game.state",
-      payload: onOkSocketResponse(game),
+      payload: onOkSocketResponse(stateToSend),
     });
   } catch (err) {
     console.error("Join Error:", err);

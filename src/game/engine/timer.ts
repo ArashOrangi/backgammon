@@ -8,12 +8,14 @@ export async function checkGameTimeouts(rooms: RoomManager) {
   const now = Date.now();
 
   for (const game of games) {
+    // if (game.status !== "in-progress" && game.status !== "starting") continue;
     if (game.status !== "in-progress" && game.status !== "starting") continue;
-
     const gameId = game.id; // number
 
     // 1. Turn timeout (30 seconds)
-    if (game.turn && game.turnStartedAt) {
+    //TODO
+    // if (game.turn && game.turnStartedAt) {
+    if (game.status === "in-progress" && game.turn && game.turnStartedAt) {
       const turnDuration = now - game.turnStartedAt;
       if (turnDuration > 30000) {
         await handleTimeout(gameId, "TURN_TIMEOUT", game.turn, rooms);

@@ -116,3 +116,12 @@ export function applyMove(
   consumeDie(game, die);
   return { hit, borneOff: borneOffFlag, dieUsed: die };
 }
+
+export function undoMove(game: GameState, dieUsed: number) {
+  if (!game.dice) game.dice = [];
+  game.dice.push(dieUsed);
+  // توجه: ما کل استیت رو از اول لود می‌کنیم،
+  // پس نیازی به جابه‌جا کردن مهره‌ها در اینجا نیست.
+  // فقط برگرداندن تاس به لیست تاس‌های موجود کافیه
+  // چون لود مجدد بازی از دیتابیس (بدون ایونتِ Undo شده) مهره‌ها رو سر جای قبلی میاره.
+}
