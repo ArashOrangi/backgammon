@@ -5,6 +5,8 @@ import {
   validateJoin,
   validateLeave,
   validateRoll,
+  validateReady,
+  validateEndTurn,
 } from "@/validations/socket";
 import { validateMove } from "@/game/ruleValidator";
 import { Value } from "@sinclair/typebox/value";
@@ -86,16 +88,16 @@ export class MessageRouter {
     switch (message.type) {
       case "game.join":
         return validateJoin(message.payload);
-
       case "game.roll":
         return validateRoll(message.payload);
-
       case "game.move":
         return Value.Check(MovePieceSchema, message.payload);
-
       case "player.leave":
         return validateLeave(message.payload);
-
+      case "player.ready":
+        return validateReady(message.payload);
+      case "game.endTurn":
+        return validateEndTurn(message.payload);
       default:
         return false;
     }

@@ -3,54 +3,41 @@ import { IDataResponse } from "@/responses/ResponseStates";
 
 // ---------- Client Messages ----------
 export type ClientMessage =
-  | {
-      type: "game.join";
-      payload: { gameId: number; userId: number };
-    }
-  | {
-      type: "game.roll";
-      payload: { gameId: number };
-    }
+  | { type: "game.join"; payload: { gameId: number; userId: number } }
+  | { type: "game.roll"; payload: { gameId: number } }
   | {
       type: "game.move";
-      payload: { gameId: number; from: number; to: number; die: number };
+      payload: {
+        gameId: number;
+        from: number;
+        to: number;
+        die?: number; // عدد تاس مصرفی (در صورت نیاز)
+        isUndo?: boolean; // true اگر درخواست برگشت حرکت است
+      };
     }
-  | {
-      type: "game.endTurn";
-      payload: { gameId: number };
-    }
-  | {
-      type: "player.leave";
-      payload: { gameId: number };
-    };
+  | { type: "player.leave"; payload: { gameId: number } }
+  | { type: "player.ready"; payload: { gameId: number } }
+  | { type: "game.endTurn"; payload: { gameId: number } };
 
 // ---------- Server Messages ----------
 export type ServerMessage =
   // General responses
   | {
       type: "game.state";
-      payload: IDataResponse<GameState>;
+      payload: IDataResponse<GameState>; // درون data.subStatus وضعیت دقیق (gameReady, turnRoll, playDice, ...)
     }
   | {
       type: "game.error";
-      payload: IDataResponse<any, any>; //  اجازه هر نوع extra
+      payload: IDataResponse<any, any>;
     }
-  // Game flow events
-  | {
-      type: "player.assign";
-      payload: { color: "white" | "black"; playerId: number };
-    }
-  | {
-      type: "room.ready";
-      payload: { gameId: number };
-    }
+  // Game flow events (بدون player.assign و room.ready)
   | {
       type: "dice.result";
       payload: { dice: number[]; playerId: number; type?: "starting" };
     }
   | {
       type: "game.turn";
-      payload: { playerId: number; color: "white" | "black" };
+      payload: { playerId: number; color?: "white" | "black" };
     }
   | {
       type: "player.move";
@@ -74,7 +61,7 @@ export type ServerMessage =
     }
   | {
       type: "game.legalMoves";
-      payload: IDataResponse<any>;
+      payload: IDataResponse<any>; // آرایه‌ای از مسیرهای حرکتی
     }
   | {
       type: "turn.timeout";
@@ -91,8 +78,5 @@ export type ServerMessage =
         winType?: "normal" | "mars" | "backgammon";
         reason: string;
       };
-    }
-  | {
-      type: "game.undo";
-      payload: { gameId: number };
     };
+// حذف شد: player.assign, room.ready, game.undo (چون undo از طریق game.move.isUndo=true انجام می‌شود)

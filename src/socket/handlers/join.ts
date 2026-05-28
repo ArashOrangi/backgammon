@@ -23,7 +23,6 @@ export async function handleJoin(
   rooms: RoomManager,
 ) {
   const { gameId, userId } = payload;
-
   ctx.userId = userId;
 
   try {
@@ -34,7 +33,6 @@ export async function handleJoin(
     }
 
     const alreadyInGame = game.players.find((p) => p.id === userId);
-
     if (!alreadyInGame) {
       if (game.players.length >= 2) {
         return ctx.send({
@@ -46,30 +44,29 @@ export async function handleJoin(
       const color = game.players.length === 0 ? "white" : "black";
       game.players.push({ id: userId, color });
 
-      ctx.send({
-        type: "player.assign",
-        payload: { color, playerId: userId },
-      });
+      // حذف ارسال player.assign - رنگ از طریق game.state در اختیار کلاینت قرار می‌گیرد
 
       if (game.players.length === 2) {
+        // پس از دومین جوین، بازی آماده است ولی هنوز شروع نشده
         game.status = "ready";
-        rooms.broadcast(gameId, {
-          type: "room.ready",
-          payload: { gameId },
-        });
-        game.status = "starting";
-        // طبق سناریو، در فاز starting نوبت را به بازیکن سفید (بازیکن اول) اختصاص می‌دهیم
-        const whitePlayer = game.players.find((p) => p.color === "white");
-        if (whitePlayer) {
-          game.turn = whitePlayer.id;
-        }
-      }
+        game.subStatus = "gameReady";
+        // نوبت را خالی می‌گذاریم (بعد از دریافت player.readyها مشخص می‌شود)
+        game.turn = null;
+        saveGame(game);
 
+        rooms.broadcast(gameId, {
+          type: "game.state",
+          payload: onOkSocketResponse(game),
+        });
+        // دیگر status را به starting تغییر نمی‌دهیم
+        // منتظر می‌مانیم تا handleReady کار خود را انجام دهد
+      }
       saveGame(game);
     }
 
     rooms.join(gameId, ctx, "player");
 
+    // محاسبه subStatus و legalMoves برای ارسال state نهایی
     const subStatus = calculateSubStatus(game);
     let legalMoves: any[] = [];
     if (game.turn !== null) {

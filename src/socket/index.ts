@@ -12,6 +12,7 @@ import { handleEndTurn } from "./handlers/endTurn"; // <--- ۱. اضافه کر�
 
 import { getGame } from "@/game/gameStore";
 import { onErrorSocketResponse } from "@/responses/response-builder";
+import { handleReady } from "./handlers/ready";
 
 export function registerSocketHandlers(
   wss: WebSocketServer,
@@ -20,6 +21,7 @@ export function registerSocketHandlers(
   const router = new MessageRouter(rooms);
 
   router.register("game.join", handleJoin);
+  router.register("player.ready", handleReady);
   router.register("game.roll", handleRoll);
   router.register("game.move", handleMove);
   router.register("player.leave", handleLeave);

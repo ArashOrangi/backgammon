@@ -37,7 +37,7 @@ export interface GameState {
 
   /** وضعیت فعلی بازی */
   status: GameStatus;
-  subStatus?: SubStatus;
+  subStatus?: GameSubStatus;
   /** تاس جاری */
   dice?: number[];
 
@@ -67,6 +67,8 @@ export interface GameState {
   turnStartedAt?: number;
   turnTimeLimit?: number;
   lastActionAt?: number;
+  //---
+  readyPlayers?: number[];
 }
 
 export type GameStatus =
@@ -75,6 +77,13 @@ export type GameStatus =
   | "starting"
   | "in-progress"
   | "finished";
+
+export type GameSubStatus =
+  | "gameReady" // هر دو بازیکن حاضرند، منتظر اعلام آمادگی
+  | "turnRoll" // نوبت ریختن تاس شروع
+  | "waitForRoll" // منتظر درخواست تاس (بعد از اعلام نوبت)
+  | "playDice" // در حال انجام حرکت با تاس
+  | "mustEndTurn"; // نوبت تمام شده، باید م
 
 export const SPECIAL_POSITIONS = {
   BAR: -50,
