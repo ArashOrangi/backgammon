@@ -27,9 +27,13 @@ export async function handleJoin(
       const matchedGameId = await addToMatchmaking(userId);
       if (matchedGameId === 0) {
         // در صف قرار گرفت، منتظر حریف – استفاده از as any برای رفع موقت خطای تایپ
+        const waitingGame = createInitialGameState(-1);
+        waitingGame.status = "waiting";
+        waitingGame.subStatus = "playerJoin";
+        waitingGame.players = [{ id: userId, color: "white" }];
         return ctx.send({
           type: "game.state",
-          payload: onOkSocketResponse(undefined, "Waiting for opponent"),
+          payload: onOkSocketResponse(waitingGame, "Waiting for opponent"),
         } as any);
       } else {
         gameId = matchedGameId;
@@ -67,6 +71,7 @@ export async function handleJoin(
         } as any);
       } else if (game.players.length === 2) {
         // دومین بازیکن: بازی آماده است، وضعیت کامل را به همه بفرست
+        rooms.join(gameId, ctx, "player");
         game.status = "ready";
         game.subStatus = "gameReady";
         game.turn = null;

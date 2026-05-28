@@ -83,7 +83,8 @@ export type GameSubStatus =
   | "turnRoll" // نوبت ریختن تاس شروع
   | "waitForRoll" // منتظر درخواست تاس (بعد از اعلام نوبت)
   | "playDice" // در حال انجام حرکت با تاس
-  | "mustEndTurn"; // نوبت تمام شده، باید م
+  | "mustEndTurn" // نوبت تمام شده، باید م
+  | "playerJoin";
 
 export const SPECIAL_POSITIONS = {
   BAR: -50,
