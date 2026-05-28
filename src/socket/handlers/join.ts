@@ -62,12 +62,15 @@ export async function handleJoin(
 
       if (game.players.length === 1) {
         // اولین بازیکن: فقط تأیید (بدون data)
-        ctx.send({
+
+        const waiter = {
+          status: "waiting",
+          subStatus: "playerJoin",
+          players: [{ id: userId, color: "white" }],
+        };
+        return ctx.send({
           type: "game.state",
-          payload: onOkSocketResponse(
-            undefined,
-            "Joined, waiting for opponent",
-          ),
+          payload: onOkSocketResponse(waiter, "Waiting for opponent"),
         } as any);
       } else if (game.players.length === 2) {
         // دومین بازیکن: بازی آماده است، وضعیت کامل را به همه بفرست
