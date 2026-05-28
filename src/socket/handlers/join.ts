@@ -54,12 +54,12 @@ export async function handleJoin(
         game.turn = null;
         saveGame(game);
 
-        // rooms.broadcast(gameId, {
-        //   type: "game.state",
-        //   payload: onOkSocketResponse(game),
-        // });
-        // // دیگر status را به starting تغییر نمی‌دهیم
-        // // منتظر می‌مانیم تا handleReady کار خود را انجام دهد
+        rooms.broadcast(gameId, {
+          type: "game.state",
+          payload: onOkSocketResponse(game),
+        });
+        // دیگر status را به starting تغییر نمی‌دهیم
+        // منتظر می‌مانیم تا handleReady کار خود را انجام دهد
       }
       saveGame(game);
     }
