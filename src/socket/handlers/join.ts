@@ -9,11 +9,7 @@ import {
   onErrorSocketResponse,
   onOkSocketResponse,
 } from "@/responses/response-builder";
-import { calculateSubStatus } from "@/game/eventStore";
-import {
-  flattenMoveSequences,
-  generateMoveSequences,
-} from "@/game/moveGenerator";
+import { addToMatchmaking } from "@/models/matchmaking"; // فرض می‌کنیم این فایل ساخته شده
 
 type JoinPayload = { gameId: number; userId: number };
 
@@ -22,10 +18,25 @@ export async function handleJoin(
   payload: JoinPayload,
   rooms: RoomManager,
 ) {
-  const { gameId, userId } = payload;
+  let { gameId, userId } = payload;
   ctx.userId = userId;
-
+  // TODO: مچ‌میکینگ موقت برای دولوپ، بعداً حذف میشه
   try {
+    // ---------- حالت مچ‌میکینگ (خودکار) ----------
+    if (gameId === -1) {
+      const matchedGameId = await addToMatchmaking(userId);
+      if (matchedGameId === 0) {
+        // در صف قرار گرفت، منتظر حریف – استفاده از as any برای رفع موقت خطای تایپ
+        return ctx.send({
+          type: "game.state",
+          payload: onOkSocketResponse(undefined, "Waiting for opponent"),
+        } as any);
+      } else {
+        gameId = matchedGameId;
+      }
+    }
+
+    // ---------- حالت عادی (با gameId مشخص) ----------
     let game = getGame(gameId);
     if (!game) {
       game = createInitialGameState(gameId);
@@ -43,46 +54,39 @@ export async function handleJoin(
 
       const color = game.players.length === 0 ? "white" : "black";
       game.players.push({ id: userId, color });
+      saveGame(game);
 
-      // حذف ارسال player.assign - رنگ از طریق game.state در اختیار کلاینت قرار می‌گیرد
-
-      if (game.players.length === 2) {
-        // پس از دومین جوین، بازی آماده است ولی هنوز شروع نشده
+      if (game.players.length === 1) {
+        // اولین بازیکن: فقط تأیید (بدون data)
+        ctx.send({
+          type: "game.state",
+          payload: onOkSocketResponse(
+            undefined,
+            "Joined, waiting for opponent",
+          ),
+        } as any);
+      } else if (game.players.length === 2) {
+        // دومین بازیکن: بازی آماده است، وضعیت کامل را به همه بفرست
         game.status = "ready";
         game.subStatus = "gameReady";
-        // نوبت را خالی می‌گذاریم (بعد از دریافت player.readyها مشخص می‌شود)
         game.turn = null;
         saveGame(game);
 
         rooms.broadcast(gameId, {
           type: "game.state",
-          payload: onOkSocketResponse(game),
+          payload: onOkSocketResponse(game, "Both players joined, ready"),
         });
-        // دیگر status را به starting تغییر نمی‌دهیم
-        // منتظر می‌مانیم تا handleReady کار خود را انجام دهد
       }
-      saveGame(game);
+    } else {
+      // بازیکن قبلاً در بازی بوده (reconnect) – وضعیت کامل را فقط برای خودش بفرست
+      ctx.send({
+        type: "game.state",
+        payload: onOkSocketResponse(game, "Rejoined"),
+      });
     }
 
+    // همیشه بازیکن را به اتاق اضافه کن (برای دریافت پیام‌های گروهی بعدی)
     rooms.join(gameId, ctx, "player");
-
-    // محاسبه subStatus و legalMoves برای ارسال state نهایی
-    const subStatus = calculateSubStatus(game);
-    let legalMoves: any[] = [];
-    if (game.turn !== null) {
-      legalMoves = generateMoveSequences(game, game.turn);
-    }
-    const flatLegalMoves = flattenMoveSequences(legalMoves);
-    const stateToSend = {
-      ...game,
-      subStatus,
-      legalMoves: flatLegalMoves,
-    };
-
-    // rooms.broadcast(gameId, {
-    //   type: "game.state",
-    //   payload: onOkSocketResponse(stateToSend),
-    // });
   } catch (err) {
     console.error("Join Error:", err);
     ctx.send({
