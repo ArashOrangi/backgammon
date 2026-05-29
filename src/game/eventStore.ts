@@ -59,6 +59,8 @@ export type GameStartedEvent = {
     whitePlayerId: PlayerId;
     blackPlayerId: PlayerId;
     startingPlayerId: PlayerId;
+    primarySeconds: number;
+    secondarySeconds: number;
   };
 };
 
@@ -154,6 +156,7 @@ function isEventRow(value: unknown): value is {
 /**
  * این تابع "حقیقت" بازی رو از روی ایونت‌ها می‌سازه.
  * هر تغییری در منطق بازی باید اینجا منعکس بشه.
+ * توجه: این تابع باید همزمان (synchronous) باشد تا در replay رویدادها بدون مشکل اجرا شود.
  */
 function applyEvent(state: GameState, event: GameEvent): GameState {
   // ثبت زمان آخرین تعامل برای مدیریت تایم‌اوت شبکه
@@ -188,18 +191,29 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
     }
 
     case "GAME_STARTED": {
-      const { whitePlayerId, blackPlayerId, startingPlayerId } = event.payload;
+      const {
+        whitePlayerId,
+        blackPlayerId,
+        startingPlayerId,
+        primarySeconds,
+        secondarySeconds,
+      } = event.payload;
       state.status = "in-progress";
       state.turn = startingPlayerId;
       state.board = createInitialBoard(whitePlayerId, blackPlayerId);
       state.turnStartedAt = Date.now();
+      // استفاده از مقادیر ارسالی در ایونت (که قبلاً از دیتابیس خوانده شده‌اند)
+      state.primaryTimePerTurn = primarySeconds;
+      state.secondaryTimeBank = {
+        [whitePlayerId]: secondarySeconds,
+        [blackPlayerId]: secondarySeconds,
+      };
       return state;
     }
 
     case "DICE_ROLLED": {
       state.dice = event.payload.dice;
       state.turnStartedAt = Date.now();
-      //  اینجا لازم نیست subStatus را ست کنیم، چون داینامیک حسابش می‌کنیم
       return state;
     }
 
@@ -211,21 +225,19 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
         event.payload.to,
         event.payload.die,
       );
-      // بعد از حرکت، اگر تاس‌ها تمام شده باشند، در محاسبه داینامیک subStatus خودبخود به mustEndTurn می‌رویم
       return state;
     }
 
     case "TURN_PASSED": {
       switchTurn(state);
-      state.dice = []; // مهم: تاس‌ها برای نفر بعدی باید خالی شوند
+      state.dice = [];
       state.turnStartedAt = Date.now();
       return state;
     }
 
     case "TURN_TIMEOUT":
     case "NETWORK_TIMEOUT": {
-      // این ایونت‌ها صرفاً جهت ثبت در لاگ و تاریخچه هستند.
-      // تغییر اصلی استیت توسط GAME_FINISHED که بلافاصله بعد از اینها میاد انجام میشه.
+      // فقط ثبت در لاگ، تغییری در استیت ایجاد نمی‌شود
       return state;
     }
 
@@ -262,7 +274,6 @@ export async function loadGameState(gameId: number): Promise<GameState | null> {
 
   for (const row of events) {
     if (!isEventRow(row)) continue;
-    //  cast کردن به هر ایونتی اینجا لازمه چون از دیتابیس میاد
     state = applyEvent(state, { type: row.type, payload: row.payload } as any);
   }
 
@@ -285,8 +296,7 @@ export async function appendGameEvent(gameId: number, event: GameEvent) {
     throw new Error(`Failed to append event: ${JSON.stringify(created)}`);
   }
 
-  // مکانیسم Snapshotting برای بهینه‌سازی سرعت Load در بازی‌های طولانی
-  // منطق اسنپ‌شات (هر ۲۰ ایونت یکبار)
+  // Snapshotting هر ۲۰ ایونت
   if (nextSequence % SNAPSHOT_INTERVAL === 0) {
     const state = await loadGameState(gameId);
     if (state) {
@@ -333,35 +343,26 @@ export async function loadGameStateUntil(
 export function calculateSubStatus(state: GameState): SubStatus {
   if (state.status !== "in-progress" || !state.turn) return "turnRoll";
 
-  // ۱. اگر تاسی ریخته نشده باشد (یا آرایه خالی باشد)
   if (!state.dice || state.dice.length === 0) {
     return "turnRoll";
   }
 
-  // ۲. اصلاح فراخوانی: متد تو فقط 2 ورودی می‌گیرد (game و playerId)
-  // فایل moveGenerator.ts خط ۲۱ رو ببین، ورودی اول کل GameState است.
   const legalMoves = generateMoveSequences(state, state.turn);
 
   if (legalMoves && legalMoves.length > 0) {
     return "playDice";
   } else {
-    // ۳. تاس هست ولی هیچ حرکت قانونی (حتی با ترکیب‌های مختلف) وجود ندارد
     return "mustEndTurn";
   }
 }
 
 export async function undoLastMove(gameId: number, playerId: PlayerId) {
-  // 1. مارک کردن در دیتابیس
   const result = await prismaGameEventMarkAsUndo(gameId, playerId);
 
-  // بررسی اینکه آیا خروجی خطا بوده یا نه
   if (result === OrmState.Error || !result) {
     return null;
   }
 
-  // حالا TypeScript می‌فهمه که result حتماً یک GameEvent هست
   const undoneEvent = result as GameEvent;
-
-  // 2. برگرداندن پلود برای بازیابی تاس در منطق انجین
   return undoneEvent.payload;
 }

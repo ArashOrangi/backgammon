@@ -16,7 +16,8 @@ import {
 } from "@/game/engine";
 import { createInitialBoard } from "@/game/board";
 import { GameQueue } from "@/game/gameQueue";
-import { appendGameEvent, calculateSubStatus } from "@/game/eventStore"; // اضافه کردن calculateSubStatus
+import { appendGameEvent, calculateSubStatus } from "@/game/eventStore";
+import { getTimerPresetByLeagueAndType } from "@/models/timerPreset";
 
 const gameQueue = new GameQueue();
 
@@ -73,7 +74,7 @@ export async function handleRoll(
 
         rooms.broadcast(gameId, {
           type: "dice.result",
-          payload: { dice: [value], playerId, type: "starting" }, // طبق سناریو، type: "starting"
+          payload: { dice: [value], playerId, type: "starting" },
         });
 
         const didStart = tryResolveStartingRoll(game);
@@ -81,6 +82,16 @@ export async function handleRoll(
         if (didStart) {
           const whitePlayer = game.players.find((p) => p.color === "white")!;
           const blackPlayer = game.players.find((p) => p.color === "black")!;
+
+          // دریافت مقادیر تایمر از دیتابیس (Remote Config)
+          let leagueLevel: number | undefined = undefined; // در آینده از پروفایل بازیکن خوانده شود
+          const gameType = "casual";
+          const preset = await getTimerPresetByLeagueAndType(
+            leagueLevel,
+            gameType,
+          );
+          const primarySeconds = preset?.primarySeconds ?? 12;
+          const secondarySeconds = preset?.secondarySeconds ?? 120;
 
           game.board = createInitialBoard(whitePlayer.id, blackPlayer.id);
 
@@ -90,6 +101,8 @@ export async function handleRoll(
               whitePlayerId: whitePlayer.id,
               blackPlayerId: blackPlayer.id,
               startingPlayerId: game.turn!,
+              primarySeconds,
+              secondarySeconds,
             },
           });
 
@@ -104,12 +117,13 @@ export async function handleRoll(
         }
 
         saveGame(game);
-        // محاسبه زیروضعیت و حرکات قانونی برای وضعیت فعلی (starting)
         const subStatus = calculateSubStatus(game);
-        //TODO ! WARN
-        const legalMoves = generateMoveSequences(game, game.turn!);
-        const flatLegalMoves = flattenMoveSequences(legalMoves);
-        const stateToSend = { ...game, subStatus, legalMoves: flatLegalMoves };
+        let legalMoves: any[] = [];
+        if (game.turn !== null) {
+          const moves = generateMoveSequences(game, game.turn);
+          legalMoves = flattenMoveSequences(moves);
+        }
+        const stateToSend = { ...game, subStatus, legalMoves };
         rooms.broadcast(gameId, {
           type: "game.state",
           payload: onOkSocketResponse(stateToSend),
@@ -125,32 +139,28 @@ export async function handleRoll(
         });
       }
 
-      const dice = rollDice(game); // خروجی آرایه دو عضوی
+      const dice = rollDice(game);
 
       await appendGameEvent(game.id, {
         type: "DICE_ROLLED",
         payload: { playerId, dice },
       });
 
-      // برادکست نتیجه تاس (بدون فیلد type)
       rooms.broadcast(gameId, {
         type: "dice.result",
         payload: { dice, playerId },
       });
 
-      const legalMoves = generateMoveSequences(game, playerId);
-      const flatLegalMoves = flattenMoveSequences(legalMoves);
-      if (legalMoves.length === 0) {
+      const legalMovesSequences = generateMoveSequences(game, playerId);
+      const flatLegalMoves = flattenMoveSequences(legalMovesSequences);
+      if (legalMovesSequences.length === 0) {
         await appendGameEvent(game.id, {
           type: "TURN_PASSED",
           payload: { playerId, reason: "NO_LEGAL_MOVES" },
         });
-        // نوبت عوض می‌شود، پس از آن وضعیت جدید ارسال می‌گردد
       }
 
       saveGame(game);
-
-      // محاسبه زیروضعیت و الحاق حرکات قانونی به وضعیت
       const subStatus = calculateSubStatus(game);
       const stateToSend = { ...game, subStatus, legalMoves: flatLegalMoves };
       rooms.broadcast(gameId, {

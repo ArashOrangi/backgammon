@@ -72,6 +72,8 @@ export function createInitialGameState(gameId: number): GameState {
     lastActionAt: Date.now(), // برای Network Timeout ضروریه
     turnStartedAt: undefined,
     turnTimeLimit: 30, // پیش‌فرض ۳۰ ثانیه
+    primaryTimePerTurn: 12,
+    secondaryTimeBank: {},
   };
 }
 

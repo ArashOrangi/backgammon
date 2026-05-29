@@ -8,29 +8,42 @@ export async function checkGameTimeouts(rooms: RoomManager) {
   const now = Date.now();
 
   for (const game of games) {
-    // if (game.status !== "in-progress" && game.status !== "starting") continue;
-    if (game.status !== "in-progress" && game.status !== "starting") continue;
-    const gameId = game.id; // number
+    // فقط بازی‌های در حال اجرا (in-progress) را چک می‌کنیم
+    if (game.status !== "in-progress") continue;
 
-    // 1. Turn timeout (30 seconds)
-    //TODO
-    // if (game.turn && game.turnStartedAt) {
-    if (game.status === "in-progress" && game.turn && game.turnStartedAt) {
-      const turnDuration = now - game.turnStartedAt;
-      if (turnDuration > 30000) {
-        await handleTimeout(gameId, "TURN_TIMEOUT", game.turn, rooms);
+    const gameId = game.id;
+    const currentPlayer = game.turn;
+    if (!currentPlayer) continue;
+
+    // محاسبه زمان سپری شده از شروع نوبت (به ثانیه)
+    const turnStarted = game.turnStartedAt ?? now;
+    const elapsed = (now - turnStarted) / 1000;
+    const primary = game.primaryTimePerTurn ?? 12;
+
+    if (elapsed > primary) {
+      const extra = elapsed - primary;
+      const bank = game.secondaryTimeBank[currentPlayer] ?? 0;
+
+      if (extra >= bank) {
+        // مخزن ثانویه تمام شده → بازیکن بازنده است
+        await handleTimeout(gameId, "TURN_TIMEOUT", currentPlayer, rooms);
         continue;
+      } else {
+        // کسر زمان اضافی از مخزن ثانویه
+        game.secondaryTimeBank[currentPlayer] = bank - extra;
+        // زمان شروع نوبت را به روز می‌کنیم تا دوباره کسر نشود (اختیاری)
+        game.turnStartedAt = now;
+        saveGame(game);
+        // می‌توانیم پیام هشدار به کلاینت بفرستیم (اختیاری)
+        // rooms.broadcast(gameId, { type: "timer.warning", payload: { remaining: game.secondaryTimeBank[currentPlayer] } });
       }
     }
 
-    // 2. Network / disconnect timeout (60 seconds)
-    if (game.lastActionAt) {
-      const inactiveDuration = now - game.lastActionAt;
-      if (inactiveDuration > 60000) {
-        const loserId = game.turn ?? game.players[0]?.id;
-        if (loserId !== undefined) {
-          await handleTimeout(gameId, "NETWORK_TIMEOUT", loserId, rooms);
-        }
+    // تایم‌اوت شبکه (۶۰ ثانیه عدم فعالیت) - مستقل از تایمر نوبت
+    if (game.lastActionAt && now - game.lastActionAt > 60000) {
+      const loserId = game.turn ?? game.players[0]?.id;
+      if (loserId) {
+        await handleTimeout(gameId, "NETWORK_TIMEOUT", loserId, rooms);
       }
     }
   }
@@ -50,13 +63,13 @@ async function handleTimeout(
   const winner = state.players.find((p) => p.id !== loserId);
   if (!winner) return;
 
-  // Store timeout event
+  // ثبت رویداد تایم‌اوت
   await appendGameEvent(gameId, {
     type: type === "TURN_TIMEOUT" ? "TURN_TIMEOUT" : "NETWORK_TIMEOUT",
     payload: { playerId: loserId },
   });
 
-  // Store game finished event
+  // ثبت رویداد پایان بازی
   await appendGameEvent(gameId, {
     type: "GAME_FINISHED",
     payload: {
@@ -70,7 +83,7 @@ async function handleTimeout(
   if (finalGame) {
     saveGame(finalGame);
 
-    // Broadcast result
+    // پخش نتیجه برای همه
     rooms.broadcast(gameId, {
       type: "game.result",
       payload: {

@@ -103,10 +103,28 @@ model GameSnapshots {
   gameId    Int
   sequence  Int       // event sequence at the moment of snapshot
   state     Json      // full board state
-  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
   lastSequence  Int?
   game      Games     @relation(fields: [gameId], references: [id])
 
   // @@index([gameId])
   @@unique([gameId, sequence])
+}
+
+
+// ----------------------
+//  times Table
+// ----------------------
+model TimerPreset {
+  id               Int      @id @default(autoincrement())
+  name             String   @unique
+  primarySeconds   Int
+  secondarySeconds Int
+  leagueLevel      Int?     
+  gameType         String?  // "casual", "tournament"
+  isDefault        Boolean  @default(false)
+  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @db.Timestamptz(3)
+
+  @@map("timer_presets")
 }

@@ -9,6 +9,7 @@ import { userRoutes } from "./routes/users";
 import { registerSocketHandlers } from "./socket";
 import { RoomManager } from "./socket/room-manager";
 import { checkGameTimeouts } from "./game/engine/timer";
+import { timerConfigRoutes } from "./routes/timerConfig";
 
 dotenv.config();
 
@@ -20,6 +21,7 @@ app.get("/api", (c) => c.text("Hello Hono!"));
 app.route("/api/users", userRoutes);
 app.route("/api/games", gameRoutes);
 app.route("/api/history", history);
+app.route("/api/timer-presets", timerConfigRoutes);
 
 const PORT = Number(process.env.PORT) || 8080;
 

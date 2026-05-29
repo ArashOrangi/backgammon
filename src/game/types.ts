@@ -65,7 +65,9 @@ export interface GameState {
 
   /** تایمر نوبت */
   turnStartedAt?: number;
-  turnTimeLimit?: number;
+  turnTimeLimit?: number; //TODO MAY I REMOVE IT
+  primaryTimePerTurn: number; // زمان تایمر اولیه برای هر نوبت (ثانیه)
+  secondaryTimeBank: Record<PlayerId, number>; // مخزن زمانی ثانویه هر بازیکن
   lastActionAt?: number;
   //---
   readyPlayers?: number[];
