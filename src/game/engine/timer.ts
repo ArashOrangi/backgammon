@@ -86,10 +86,10 @@ async function handleTimeout(
     // پخش نتیجه برای همه
     rooms.broadcast(gameId, {
       type: "game.result",
-      payload: {
+      payload: onOkSocketResponse({
         winner: winner.id,
         reason: type === "TURN_TIMEOUT" ? "timeout" : "disconnect",
-      },
+      }),
     });
 
     rooms.broadcast(gameId, {

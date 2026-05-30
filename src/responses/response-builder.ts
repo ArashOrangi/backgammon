@@ -40,8 +40,8 @@ export function onValidationSocketResponse(
 // Server error / generic error
 export function onErrorSocketResponse(
   message: string,
-  extra?: unknown,
-): IDataResponse<undefined, unknown> {
+  extra?: any,
+): IDataResponse<any, any> {
   return {
     responseState: ResponseStates.ServerError,
     message,
@@ -63,6 +63,15 @@ export function onNoAccessMessageResponse(
 ): IDataResponse {
   return {
     responseState: ResponseStates.NoAccessMessage,
+    message,
+  };
+}
+
+//برای پیام های خاص
+export function onGameEventSocketResponse<T>(data: T, message?: string) {
+  return {
+    responseState: ResponseStates.Ok,
+    data,
     message,
   };
 }

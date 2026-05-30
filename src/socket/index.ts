@@ -11,7 +11,10 @@ import { handleLeave } from "./handlers/leave";
 import { handleEndTurn } from "./handlers/endTurn"; // <--- ۱. اضافه کردن هندلر جدید
 
 import { getGame } from "@/game/gameStore";
-import { onErrorSocketResponse } from "@/responses/response-builder";
+import {
+  onErrorSocketResponse,
+  onOkSocketResponse,
+} from "@/responses/response-builder";
 import { handleReady } from "./handlers/ready";
 
 export function registerSocketHandlers(
@@ -59,11 +62,11 @@ export function registerSocketHandlers(
 
           rooms.broadcast(gameId, {
             type: "network.timeout",
-            payload: {
+            payload: onOkSocketResponse({
               playerId: disconnectingPlayerId,
               timeoutAt: Date.now() + 60000,
-            },
-          } as any);
+            }),
+          });
         }
       }
       rooms.leave(ctx);

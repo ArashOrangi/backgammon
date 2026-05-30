@@ -261,7 +261,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
 export async function loadGameState(gameId: number): Promise<GameState | null> {
   const snapshot = await prismaGameSnapshotGetLast(gameId);
   let state: GameState;
-  let sequence = 0;
+  let sequence = -1;
 
   if (isSnapshotRow(snapshot)) {
     state = snapshot.state as unknown as GameState;
@@ -316,7 +316,7 @@ export async function loadGameStateUntil(
 ): Promise<GameState | null> {
   const snapshot = await prismaGameSnapshotGetLast(gameId);
   let state: GameState;
-  let sequence = 0;
+  let sequence = -1;
 
   if (isSnapshotRow(snapshot)) {
     state = snapshot.state as unknown as GameState;

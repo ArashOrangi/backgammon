@@ -74,7 +74,11 @@ export async function handleRoll(
 
         rooms.broadcast(gameId, {
           type: "dice.result",
-          payload: { dice: [value], playerId, type: "starting" },
+          payload: onOkSocketResponse({
+            dice: [value],
+            playerId,
+            type: "starting",
+          }), // طبق سناریو، type: "starting"
         });
 
         const didStart = tryResolveStartingRoll(game);
@@ -109,10 +113,10 @@ export async function handleRoll(
           // ارسال پیام game.turn طبق سناریو
           rooms.broadcast(gameId, {
             type: "game.turn",
-            payload: {
+            payload: onOkSocketResponse({
               playerId: game.turn!,
               color: game.players.find((p) => p.id === game.turn)!.color,
-            },
+            }),
           });
         }
 
@@ -148,7 +152,7 @@ export async function handleRoll(
 
       rooms.broadcast(gameId, {
         type: "dice.result",
-        payload: { dice, playerId },
+        payload: onOkSocketResponse({ dice, playerId }),
       });
 
       const legalMovesSequences = generateMoveSequences(game, playerId);

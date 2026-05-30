@@ -22,61 +22,53 @@ export type ClientMessage =
 // ---------- Server Messages ----------
 export type ServerMessage =
   // General responses
-  | {
-      type: "game.state";
-      payload: IDataResponse<GameState>; // درون data.subStatus وضعیت دقیق (gameReady, turnRoll, playDice, ...)
-    }
-  | {
-      type: "game.error";
-      payload: IDataResponse<any, any>;
-    }
-  // Game flow events (بدون player.assign و room.ready)
+  | { type: "game.state"; payload: IDataResponse<GameState> }
+  | { type: "game.error"; payload: IDataResponse<any> }
+  | { type: "game.legalMoves"; payload: IDataResponse<any> }
+  // Game flow events (حالا همگی IDataResponse دارند)
   | {
       type: "dice.result";
-      payload: { dice: number[]; playerId: number; type?: "starting" };
+      payload: IDataResponse<{
+        dice: number[];
+        playerId: number;
+        type?: "starting";
+      }>;
     }
   | {
       type: "game.turn";
-      payload: { playerId: number; color?: "white" | "black" };
+      payload: IDataResponse<{ playerId: number; color?: "white" | "black" }>;
     }
-  | {
-      type: "player.move";
-      payload:
-        | {
-            playerId: number;
-            from: number;
-            to: number;
-            die: number;
-            ownerId: number;
-            isUndo?: boolean;
-          }
-        | Array<{
-            playerId: number;
-            from: number;
-            to: number;
-            die: number;
-            ownerId: number;
-            isUndo?: boolean;
-          }>;
-    }
-  | {
-      type: "game.legalMoves";
-      payload: IDataResponse<any>; // آرایه‌ای از مسیرهای حرکتی
-    }
-  | {
-      type: "turn.timeout";
-      payload: { playerId: number };
-    }
+  | { type: "player.move"; payload: IDataResponse<MovePayload> } // MovePayload می‌تواند تکی یا آرایه‌ای باشد
+  | { type: "turn.timeout"; payload: IDataResponse<{ playerId: number }> }
   | {
       type: "network.timeout";
-      payload: { playerId: number; timeoutAt?: number };
+      payload: IDataResponse<{ playerId: number; timeoutAt?: number }>;
     }
   | {
       type: "game.result";
-      payload: {
+      payload: IDataResponse<{
         winner: number;
         winType?: "normal" | "mars" | "backgammon";
         reason: string;
-      };
+      }>;
     };
+
+// تعریف نوع MovePayload در همان فایل یا فایل جداگانه
+export type MovePayload =
+  | {
+      playerId: number;
+      from: number;
+      to: number;
+      die: number;
+      ownerId: number;
+      isUndo?: boolean;
+    }
+  | Array<{
+      playerId: number;
+      from: number;
+      to: number;
+      die: number;
+      ownerId: number;
+      isUndo?: boolean;
+    }>;
 // حذف شد: player.assign, room.ready, game.undo (چون undo از طریق game.move.isUndo=true انجام می‌شود)
