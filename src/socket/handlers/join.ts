@@ -13,6 +13,7 @@ import { addToMatchmaking } from "@/models/matchmaking"; // فرض می‌کنی
 import { loadGameState } from "@/game/eventStore";
 
 type JoinPayload = { gameId: number; userId: number };
+const waitingSockets = new Map<number, SocketContext>();
 
 export async function handleJoin(
   ctx: SocketContext,
@@ -24,22 +25,22 @@ export async function handleJoin(
   // TODO: مچ‌میکینگ موقت برای دولوپ، بعداً حذف میشه
   try {
     // ---------- حالت مچ‌میکینگ (خودکار) ----------
-    // در بالای فایل join.ts، خارج از تابع handleJoin
-    const waitingSockets = new Map<number, SocketContext>();
+    // خارج از تابع handleJoin، یک Map برای نگهداری سوکت کاربران در صف
+    // خارج از تابع handleJoin، یک Map برای نگهداری سوکت کاربران در صف
 
-    // داخل handleJoin، در حالت gameId === -1
+    // داخل handleJoin، بخش gameId === -1
     if (gameId === -1) {
-      // اگر کاربر قبلاً در صف است؟ (احتمال درخواست تکراری)
+      // اگر کاربر قبلاً در صف است
       if (waitingSockets.has(userId)) {
         return ctx.send({
           type: "game.error",
-          payload: onErrorSocketResponse("Already in matchmaking queue"),
+          payload: onErrorSocketResponse("Already in queue"),
         });
       }
 
       const matchedGameId = await addToMatchmaking(userId);
       if (matchedGameId === 0) {
-        // در صف قرار می‌گیرد
+        // وارد صف شد
         waitingSockets.set(userId, ctx);
         const waitingGame = createInitialGameState(-1);
         waitingGame.status = "waiting";
@@ -48,53 +49,46 @@ export async function handleJoin(
         return ctx.send({
           type: "game.state",
           payload: onOkSocketResponse(waitingGame, "Waiting for opponent"),
-        } as any);
+        });
       } else {
-        // جفت شد: بازی با gameId = matchedGameId ساخته شده است
-        // بارگذاری وضعیت بازی از دیتابیس
+        // جفت شد: بازی با matchedGameId ساخته شده و ایونت‌ها ثبت شده‌اند
         const game = await loadGameState(matchedGameId);
         if (!game) {
           return ctx.send({
             type: "game.error",
-            payload: onErrorSocketResponse("Game not found after matchmaking"),
+            payload: onErrorSocketResponse("Game not found"),
           });
         }
 
-        // اضافه کردن هر دو بازیکن به اتاق
+        // هر دو بازیکن را به اتاق اضافه کن
+        const players = game.players; // حالا پر است
+        console.log({ players, len: players.length });
+
+        for (const p of players) {
+          console.log({ p });
+
+          const socket = waitingSockets.get(p.id);
+          if (socket) {
+            rooms.join(matchedGameId, socket, "player");
+            waitingSockets.delete(p.id);
+          }
+        }
+        // خود این سوکت (دومین بازیکن) را هم اضافه کن
         rooms.join(matchedGameId, ctx, "player");
-        // پیدا کردن سوکت بازیکن اول (که در صف انتظار است)
-        const firstPlayerId = game.players.find((p) => p.id !== userId)?.id;
-        if (firstPlayerId && waitingSockets.has(firstPlayerId)) {
-          const firstSocket = waitingSockets.get(firstPlayerId)!;
-          rooms.join(matchedGameId, firstSocket, "player");
-          waitingSockets.delete(firstPlayerId);
-          // ارسال وضعیت ready به بازیکن اول
-          firstSocket.send({
-            type: "game.state",
-            payload: onOkSocketResponse(game, "Both players joined, ready"),
-          });
-        }
 
-        // تنظیم وضعیت بازی در حافظه
-        if (game.status === "waiting") {
-          game.status = "ready";
-          game.subStatus = "gameReady";
-          saveGame(game);
-        }
+        // وضعیت بازی را به ready تغییر بده
+        game.status = "ready";
+        game.subStatus = "gameReady";
+        saveGame(game);
+        console.log({ matchedGameId });
 
-        // ارسال وضعیت به بازیکن دوم (فعلی)
-        ctx.send({
-          type: "game.state",
-          payload: onOkSocketResponse(game, "Both players joined, ready"),
-        });
-
-        // برودکست به همه (برای اطمینان، اگر کسی دیگر نباشد)
+        // به همه در اتاق برودکست کن
         rooms.broadcast(matchedGameId, {
           type: "game.state",
           payload: onOkSocketResponse(game, "Both players joined, ready"),
         });
 
-        return; // پایان کار
+        return;
       }
     }
 
