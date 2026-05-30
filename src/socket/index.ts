@@ -42,7 +42,7 @@ export function registerSocketHandlers(
       } catch {
         ctx.send({
           type: "game.error",
-          payload: onErrorSocketResponse({ message: "Invalid JSON format" }),
+          payload: onErrorSocketResponse("Invalid JSON format"),
         });
       }
     });
