@@ -92,7 +92,7 @@ export async function handleLeave(
 
       rooms.broadcast(gameId, {
         type: "network.timeout",
-        payload: { playerId, timeoutAt: Date.now() + 60000 },
+        payload: onOkSocketResponse({ playerId, timeoutAt: Date.now() + 60000 }),
       });
     } catch (err) {
       console.error("Leave Error:", err);

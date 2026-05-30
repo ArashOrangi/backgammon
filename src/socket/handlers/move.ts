@@ -183,7 +183,11 @@ export async function handleMove(
           // برادکست نتیجه و وضعیت نهایی
           rooms.broadcast(gameId, {
             type: "game.result",
-            payload: { winner: playerId, winType, reason: "REGULAR" },
+            payload: onOkSocketResponse({
+              winner: playerId,
+              winType,
+              reason: "REGULAR",
+            }),
           });
           const finalStateWithMeta = {
             ...finalGame,
@@ -225,7 +229,7 @@ export async function handleMove(
         broadcastMoves.length === 1 ? broadcastMoves[0] : broadcastMoves;
       rooms.broadcast(gameId, {
         type: "player.move",
-        payload: payloadToSend,
+        payload: onOkSocketResponse(payloadToSend),
       });
     }
   });

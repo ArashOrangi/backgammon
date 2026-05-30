@@ -113,10 +113,10 @@ export async function handleReady(
       // game.turn بدون responseState (مثل بقیه جاها)
       rooms.broadcast(gameId, {
         type: "game.turn",
-        payload: {
+        payload: onOkSocketResponse({
           playerId: startingPlayerId,
           color: startingPlayerId === whitePlayer.id ? "white" : "black",
-        },
+        }),
       });
     }
   } else {

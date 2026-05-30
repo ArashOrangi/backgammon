@@ -40,8 +40,8 @@ export function onValidationSocketResponse(
 // Server error / generic error
 export function onErrorSocketResponse(
   message: string,
-  extra?: unknown,
-): IDataResponse<undefined, unknown> {
+  extra?: any,
+): IDataResponse<any, any> {
   return {
     responseState: ResponseStates.ServerError,
     message,
