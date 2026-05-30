@@ -66,6 +66,15 @@ export function onNoAccessMessageResponse(
     message,
   };
 }
+
+//برای پیام های خاص
+export function onGameEventSocketResponse<T>(data: T, message?: string) {
+  return {
+    responseState: ResponseStates.Ok,
+    data,
+    message,
+  };
+}
 //#endregion socket
 
 //============================
