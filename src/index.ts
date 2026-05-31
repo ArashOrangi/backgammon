@@ -10,13 +10,15 @@ import { registerSocketHandlers } from "./socket";
 import { RoomManager } from "./socket/room-manager";
 import { checkGameTimeouts } from "./game/engine/timer";
 import { timerConfigRoutes } from "./routes/timerConfig";
+import { prismaUserGetOrCreate } from "./models/user";
+import { OrmState } from "./models/enums";
 
 dotenv.config();
 
-const app = new Hono(); // بدون basePath
+const app = new Hono();
 app.use(logger());
 
-// مسیرهای API با پیشوند /api
+// مسیرهای API
 app.get("/api", (c) => c.text("Hello Hono!"));
 app.route("/api/users", userRoutes);
 app.route("/api/games", gameRoutes);
@@ -36,65 +38,85 @@ async function readBodyString(
   return Buffer.concat(chunks).toString("utf-8");
 }
 
-const server = createServer(async (req, res) => {
-  if (req.url?.startsWith("/api")) {
-    try {
-      const url = new URL(req.url || "", `http://${req.headers.host}`);
-      let body: string | null = null;
-      if (req.method !== "GET" && req.method !== "HEAD") {
-        body = await readBodyString(req);
-      }
-      const headers = new Headers();
-      for (const [key, value] of Object.entries(req.headers)) {
-        if (value !== undefined) {
-          if (Array.isArray(value)) {
-            headers.append(key, value.join(", "));
-          } else {
-            headers.append(key, value);
+// ------------------------------------------------------------
+// راه‌اندازی سرور فقط پس از آماده شدن بات
+// ------------------------------------------------------------
+(async () => {
+  // ۱. ایجاد / دریافت کاربر بات
+  try {
+    const bot = await prismaUserGetOrCreate("SystemBot");
+    if (bot === OrmState.Error) {
+      console.error("Failed to create/get bot user: OrmState.Error");
+      process.env.BOT_USER_ID = "999999"; // fallback
+    } else {
+      console.log(`🤖 Bot user ready with id: ${bot.id}`);
+      process.env.BOT_USER_ID = bot.id.toString();
+    }
+  } catch (error) {
+    console.error("Failed to create bot user:", error);
+    process.env.BOT_USER_ID = "999999";
+  }
+
+  // ۲. ایجاد HTTP server
+  const server = createServer(async (req, res) => {
+    if (req.url?.startsWith("/api")) {
+      try {
+        const url = new URL(req.url || "", `http://${req.headers.host}`);
+        let body: string | null = null;
+        if (req.method !== "GET" && req.method !== "HEAD") {
+          body = await readBodyString(req);
+        }
+        const headers = new Headers();
+        for (const [key, value] of Object.entries(req.headers)) {
+          if (value !== undefined) {
+            if (Array.isArray(value)) {
+              headers.append(key, value.join(", "));
+            } else {
+              headers.append(key, value);
+            }
           }
         }
+        const request = new Request(url, {
+          method: req.method,
+          headers,
+          body,
+        });
+        const honoRes = await app.fetch(request);
+        res.writeHead(
+          honoRes.status,
+          Object.fromEntries(honoRes.headers.entries()),
+        );
+        const responseBody = await honoRes.text();
+        res.end(responseBody);
+      } catch (err) {
+        console.error("Error handling request:", err);
+        res.writeHead(500);
+        res.end("Internal Server Error");
       }
-      const request = new Request(url, {
-        method: req.method,
-        headers,
-        body,
-      });
-      const honoRes = await app.fetch(request);
-      res.writeHead(
-        honoRes.status,
-        Object.fromEntries(honoRes.headers.entries()),
-      );
-      const responseBody = await honoRes.text();
-      res.end(responseBody);
-    } catch (err) {
-      console.error("Error handling request:", err);
-      res.writeHead(500);
-      res.end("Internal Server Error");
+    } else {
+      res.writeHead(404);
+      res.end("Not Found");
     }
-  } else {
-    res.writeHead(404);
-    res.end("Not Found");
-  }
-});
-// ۱. ایجاد RoomManager به صورت واحد (Shared Instance)
-const rooms = new RoomManager();
+  });
 
-// ۲. اتصال WebSocket
-const wss = new WebSocketServer({ server });
-registerSocketHandlers(wss, rooms);
+  // ۳. RoomManager و WebSocket
+  const rooms = new RoomManager();
+  const wss = new WebSocketServer({ server });
+  registerSocketHandlers(wss, rooms);
 
-// ۳. ایجاد Game Loop (قلب تپنده)
-// هر ۲ ثانیه یکبار بازی‌ها رو چک می‌کنه
-const TICK_RATE = 2000;
-setInterval(async () => {
-  try {
-    await checkGameTimeouts(rooms);
-  } catch (err) {
-    console.error("Critical Game Loop Error:", err);
-  }
-}, TICK_RATE);
+  // ۴. Game Loop (تایمر)
+  const TICK_RATE = 2000;
+  setInterval(async () => {
+    try {
+      await checkGameTimeouts(rooms);
+    } catch (err) {
+      console.error("Critical Game Loop Error:", err);
+    }
+  }, TICK_RATE);
 
-server.listen(PORT, () => {
-  console.log(`🚀 REST API running on http://localhost:${PORT}/api`);
-  console.log(`🔌 WebSocket server running on ws://localhost:${PORT}`);
-});
+  // ۵. شروع listening
+  server.listen(PORT, () => {
+    console.log(`🚀 REST API running on http://localhost:${PORT}/api`);
+    console.log(`🔌 WebSocket server running on ws://localhost:${PORT}`);
+  });
+})();
