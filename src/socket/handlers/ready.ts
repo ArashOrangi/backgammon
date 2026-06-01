@@ -8,6 +8,7 @@ import {
 import { appendGameEvent, loadGameState } from "@/game/eventStore";
 import { createInitialBoard } from "@/game/board";
 import { rollDie } from "@/utils/dice";
+import { getDefaultTimerPreset } from "@/models/timerPreset";
 
 export async function handleReady(
   ctx: SocketContext,
@@ -16,6 +17,8 @@ export async function handleReady(
 ) {
   const { gameId } = payload;
   const userId = ctx.userId;
+  const timerSettings = await getDefaultTimerPreset();
+
   if (!userId) {
     return ctx.send({
       type: "game.error",
@@ -91,8 +94,8 @@ export async function handleReady(
         whitePlayerId: whitePlayer.id,
         blackPlayerId: blackPlayer.id,
         startingPlayerId,
-        primarySeconds: 30, // اضافه شد – تایمر اصلی نوبت
-        secondarySeconds: 30, // اضافه شد – تایمر ثانویه (در صورت نیاز)
+        primarySeconds: timerSettings.primarySeconds, // اضافه شد – تایمر اصلی نوبت
+        secondarySeconds: timerSettings.secondarySeconds, // اضافه شد – تایمر ثانویه (در صورت نیاز)
       },
     });
 

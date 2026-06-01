@@ -23,7 +23,10 @@ const waitingSockets = new Map<number, SocketContext>();
 // تایمرهای مربوط به هر کاربر در صف (برای ساخت بات)
 const waitingTimers = new Map<number, NodeJS.Timeout>();
 // شناسه بات (حتماً باید در دیتابیس وجود داشته باشد)
-const BOT_ID = Number(process.env.BOT_USER_ID) || 999999;
+function getBotId(): number {
+  const id = Number(process.env.BOT_USER_ID);
+  return isNaN(id) || id === 0 ? 999999 : id;
+}
 
 export async function handleJoin(
   ctx: SocketContext,
@@ -65,7 +68,7 @@ export async function handleJoin(
             waitingTimers.delete(userId);
 
             // ساخت بازی با بات
-            const gameIdForBot = await createGameWithBot(userId, BOT_ID);
+            const gameIdForBot = await createGameWithBot(userId, getBotId());
             if (!gameIdForBot) {
               console.error(`Failed to create bot game for user ${userId}`);
               return;
@@ -88,7 +91,7 @@ export async function handleJoin(
             });
 
             // اضافه کردن بات به اتاق و شروع آن
-            await addBotToGame(gameIdForBot, BOT_ID, rooms);
+            await addBotToGame(gameIdForBot, getBotId(), rooms);
           }
         }, 10000); // ۱۰ ثانیه
 
@@ -199,11 +202,20 @@ async function createGameWithBot(
   botId: number,
 ): Promise<number | null> {
   const game = await prismaGameCreate(whiteId);
-  if (!game || game === OrmState.Error) return null;
+  if (!game || game === OrmState.Error) {
+    console.error(
+      `[createGameWithBot] prismaGameCreate failed for whiteId=${whiteId}`,
+    );
+    return null;
+  }
+  console.log(`[createGameWithBot] game created with id=${game.id}`);
+
   await prisma.games.update({
     where: { id: game.id },
     data: { blackPlayerId: botId },
   });
+  console.log(`[createGameWithBot] updated game with blackPlayerId=${botId}`);
+
   await appendGameEvent(game.id, {
     type: "PLAYER_JOINED",
     payload: { playerId: whiteId, color: "white" },

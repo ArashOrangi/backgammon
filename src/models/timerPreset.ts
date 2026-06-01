@@ -70,3 +70,28 @@ export async function deleteTimerPreset(id: number) {
     return errorHandlersOnPrisma({ error });
   }
 }
+
+export async function getDefaultTimerPreset(): Promise<{
+  primarySeconds: number;
+  secondarySeconds: number;
+}> {
+  try {
+    const preset = await prisma.timerPreset.findFirst({
+      where: { isDefault: true },
+    });
+    if (preset) {
+      return {
+        primarySeconds: preset.primarySeconds,
+        secondarySeconds: preset.secondarySeconds,
+      };
+    }
+    // Fallback پیش‌فرض (اگر هیچ رکوردی در دیتابیس نباشد)
+    console.warn(
+      "No default timer preset found, using fallback values (12s / 120s)",
+    );
+    return { primarySeconds: 12, secondarySeconds: 120 };
+  } catch (error) {
+    console.error("Error fetching default timer preset:", error);
+    return { primarySeconds: 12, secondarySeconds: 120 };
+  }
+}

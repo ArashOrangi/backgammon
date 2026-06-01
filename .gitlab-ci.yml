@@ -33,6 +33,7 @@ deploy:
     # - npx prisma migrate reset -f
     - npx prisma migrate dev --name add_TimerPreset
     - npx prisma generate
+    - npx tsx scripts/seed-chat.ts
     - Write-Host "Starting deployment script..."
     - powershell -ExecutionPolicy Bypass -File .\deploy.ps1 -SiteName "$env:SITE_NAME"
   environment:

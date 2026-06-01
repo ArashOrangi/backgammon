@@ -18,7 +18,7 @@ model Users {
   userName   String   @unique
   winRate    Float    @default(0)
    createdAt   DateTime      @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime      @updatedAt @db.Timestamptz(3)
+  updatedAt   DateTime?      @updatedAt @db.Timestamptz(3)
   gender     GENDER   @default(MAN)
   whiteGames Games[]  @relation("WhitePlayerRelation")
   blackGames Games[]  @relation("BlackPlayerRelation")
@@ -37,7 +37,7 @@ model Games {
   id          Int      @id @default(autoincrement())
   status      GAMESTATUS    @default(PENDING)
   createdAt   DateTime      @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime      @updatedAt @db.Timestamptz(3)
+  updatedAt   DateTime?      @updatedAt @db.Timestamptz(3)
 
   // players
   whitePlayerId Int?     
@@ -70,7 +70,7 @@ model GameEvents {
   type      EVENTTYPE
   payload   Json
   createdAt   DateTime      @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime      @updatedAt @db.Timestamptz(3)
+  updatedAt   DateTime?      @updatedAt @db.Timestamptz(3)
   isUndo    Boolean      @default(false)
   game      Games        @relation(fields: [gameId], references: [id])
 
@@ -124,7 +124,38 @@ model TimerPreset {
   gameType         String?  // "casual", "tournament"
   isDefault        Boolean  @default(false)
   createdAt   DateTime      @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime      @updatedAt @db.Timestamptz(3)
+  updatedAt   DateTime?      @updatedAt @db.Timestamptz(3)
 
   @@map("timer_presets")
+}
+
+// ----------------------
+//  mini static chat 
+// ----------------------
+model MessagesCategory {
+  id         Int      @id @default(autoincrement())
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+  isActive  Boolean  @default(true)
+  nameFa     String   @unique
+  nameEn     String?
+  isFree     Boolean  @default(false)
+  buyCount   Int?            // در صورت نیاز بعداً مقداردهی می‌شود
+  conditions Json?    @db.Json
+  lock       Boolean  @default(false)
+  messages   StaticMessages[] @relation("MSG_CATEGORY")
+}
+
+model StaticMessages {
+  id         Int      @id @default(autoincrement())
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+  isActive   Boolean  @default(true)
+  message    String
+  order      Int?
+  categoryId Int
+  category   MessagesCategory @relation("MSG_CATEGORY", fields: [categoryId], references: [id])
+
+  @@index([categoryId])
+  @@index([isActive])
 }
