@@ -54,7 +54,7 @@ chatRoutes.get("/categories/:id", async (ctx) => {
 // ایجاد دسته‌بندی (Admin)
 chatRoutes.post("/categories", async (ctx) => {
   const body = await ctx.req.json();
-  const { nameFa, nameEn, isFree, conditions, lock, appAction } = body;
+  const { nameFa, nameEn, isFree, conditions, lock, isActive } = body;
   if (!nameFa) {
     return onValidationsRestResponse({
       ctx: ctx,
@@ -67,7 +67,7 @@ chatRoutes.post("/categories", async (ctx) => {
     isFree,
     conditions,
     lock,
-    appAction,
+    isActive,
   });
   if (!result || result === OrmState.Error) {
     return onErrorRestResponse({
@@ -82,14 +82,14 @@ chatRoutes.post("/categories", async (ctx) => {
 chatRoutes.put("/categories/:id", async (ctx) => {
   const id = Number(ctx.req.param("id"));
   const body = await ctx.req.json();
-  const { nameFa, nameEn, isFree, conditions, lock, appAction } = body;
+  const { nameFa, nameEn, isFree, conditions, lock, isActive } = body;
   const result = await updateCategory(id, {
     nameFa,
     nameEn,
     isFree,
     conditions,
     lock,
-    appAction,
+    isActive,
   });
   if (!result || result === OrmState.Error) {
     return onErrorRestResponse({

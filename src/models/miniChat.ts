@@ -43,7 +43,7 @@ export async function createCategory(data: {
   isFree?: boolean;
   conditions?: any;
   lock?: boolean;
-  appAction?: boolean;
+  isActive?: boolean;
 }) {
   try {
     return await prisma.messagesCategory.create({
@@ -53,7 +53,7 @@ export async function createCategory(data: {
         isFree: data.isFree ?? false,
         conditions: data.conditions,
         lock: data.lock ?? false,
-        appAction: data.appAction ?? true,
+        isActive: data.isActive ?? true,
       },
     });
   } catch (error) {
@@ -69,7 +69,7 @@ export async function updateCategory(
     isFree: boolean;
     conditions: any;
     lock: boolean;
-    appAction: boolean;
+    isActive: boolean;
   }>,
 ) {
   try {

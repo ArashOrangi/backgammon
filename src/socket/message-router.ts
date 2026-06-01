@@ -10,7 +10,7 @@ import {
 } from "@/validations/socket";
 import { validateMove } from "@/game/ruleValidator";
 import { Value } from "@sinclair/typebox/value";
-import { MovePieceSchema } from "@/validations/game.move";
+import { MoveArraySchema, MovePieceSchema } from "@/validations/game.move";
 
 import {
   onValidationSocketResponse,
@@ -91,7 +91,7 @@ export class MessageRouter {
       case "game.roll":
         return validateRoll(message.payload);
       case "game.move":
-        return Value.Check(MovePieceSchema, message.payload);
+        return Value.Check(MoveArraySchema, message.payload);
       case "player.leave":
         return validateLeave(message.payload);
       case "player.ready":

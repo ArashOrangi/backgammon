@@ -1,4 +1,4 @@
-import { getGame, saveGame } from "../../game/gameStore";
+import { saveGame } from "../../game/gameStore";
 import { SocketContext } from "../socket-context";
 import { RoomManager } from "../room-manager";
 import {
@@ -34,8 +34,8 @@ export async function handleEndTurn(
   }
 
   await gameQueue.enqueue(gameId, async () => {
-    const game = getGame(gameId);
-
+    // استفاده از loadGameState به جای getGame
+    const game = await loadGameState(gameId);
     if (!game) {
       return ctx.send({
         type: "game.error",
@@ -77,10 +77,7 @@ export async function handleEndTurn(
 
       saveGame(updatedGame);
 
-      // طبق سناریو، بعد از پایان نوبت، subStatus باید "mustEndTurn" باشد
-      // (حتی اگر طبق منطق عادی باید "turnRoll" باشد، برای تطابق با سناریو مقدار را دستی تنظیم می‌کنیم)
-      const forcedSubStatus: any = "mustEndTurn";
-      // محاسبه حرکات قانونی برای بازیکن جدید (در صورت وجود)
+      const subStatus = calculateSubStatus(updatedGame);
       let legalMoves: any[] = [];
       if (updatedGame.turn !== null) {
         legalMoves = generateMoveSequences(updatedGame, updatedGame.turn);
@@ -88,16 +85,14 @@ export async function handleEndTurn(
       const flatLegalMoves = flattenMoveSequences(legalMoves);
       const stateToSend = {
         ...updatedGame,
-        subStatus: forcedSubStatus,
-        legalMoves: flatLegalMoves, // آرایه حرکات قانونی داخل game.state
+        subStatus,
+        legalMoves: flatLegalMoves,
       };
 
       rooms.broadcast(gameId, {
         type: "game.state",
         payload: onOkSocketResponse(stateToSend, "Turn passed successfully"),
       });
-
-      // دیگر نیازی به ارسال جداگانه game.legalMoves نیست، زیرا داخل game.state جای گرفته است
     } catch (err) {
       console.error("EndTurn Error:", err);
       ctx.send({

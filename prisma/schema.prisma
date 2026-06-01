@@ -159,3 +159,32 @@ model StaticMessages {
   @@index([categoryId])
   @@index([isActive])
 }
+
+model Provinces {
+  id        Int       @id @default(autoincrement())
+  isActive Boolean   @default(true)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime? @updatedAt @db.Timestamptz(3)
+  faName    String    @unique @db.VarChar(99)
+  isCapital Boolean   @default(false)
+  enName    String?   @unique @db.VarChar(99)
+  about     String?
+  cities    Cities[]  @relation("PROVINCE_CITIES")
+}
+
+model Cities {
+  id         Int           @id @default(autoincrement())
+  isActive  Boolean       @default(true)
+  createdAt  DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime?     @updatedAt @db.Timestamptz(3)
+  faName     String        @db.VarChar(99)
+  isCapital  Boolean       @default(false)
+  enName     String?       @db.VarChar(99)
+  about      String?
+  latitude   Float?
+  longitude  Float?
+  population Int?
+  provinceId Int
+  province   Provinces     @relation("PROVINCE_CITIES", fields: [provinceId], references: [id])
+
+}

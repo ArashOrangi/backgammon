@@ -107,6 +107,7 @@ export async function handleRoll(
               startingPlayerId: game.turn!,
               primarySeconds,
               secondarySeconds,
+              dice: [game.dice?.[0] ?? 0, game.dice?.[1] ?? 0],
             },
           });
 

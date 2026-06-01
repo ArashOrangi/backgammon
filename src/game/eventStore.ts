@@ -61,6 +61,7 @@ export type GameStartedEvent = {
     startingPlayerId: PlayerId;
     primarySeconds: number;
     secondarySeconds: number;
+    dice: number[];
   };
 };
 
@@ -197,17 +198,18 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
         startingPlayerId,
         primarySeconds,
         secondarySeconds,
+        dice, // اضافه شد
       } = event.payload;
       state.status = "in-progress";
       state.turn = startingPlayerId;
       state.board = createInitialBoard(whitePlayerId, blackPlayerId);
       state.turnStartedAt = Date.now();
-      // استفاده از مقادیر ارسالی در ایونت (که قبلاً از دیتابیس خوانده شده‌اند)
       state.primaryTimePerTurn = primarySeconds;
       state.secondaryTimeBank = {
         [whitePlayerId]: secondarySeconds,
         [blackPlayerId]: secondarySeconds,
       };
+      state.dice = dice; // تنظیم تاس‌های شروع
       return state;
     }
 

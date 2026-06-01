@@ -3,8 +3,15 @@ import {
   generateMoveSequences,
   flattenMoveSequences,
 } from "@/game/moveGenerator";
-import { loadGameState } from "@/game/eventStore";
+import {
+  appendGameEvent,
+  loadGameState,
+  calculateSubStatus,
+} from "@/game/eventStore";
 import { RoomManager } from "@/socket/room-manager";
+import { saveGame } from "@/game/gameStore";
+import { onOkSocketResponse } from "@/responses/response-builder";
+import { rollDice as rollDiceUtil } from "@/utils/dice";
 
 export class BotPlayer {
   private botId: PlayerId;
@@ -22,24 +29,32 @@ export class BotPlayer {
   async start() {
     this.interval = setInterval(async () => {
       const now = Date.now();
-      if (now - this.lastActionTimestamp < 600) return; // جلوگیری از اجرای همزمان
+      if (now - this.lastActionTimestamp < 800) return;
       this.lastActionTimestamp = now;
 
-      const state = await loadGameState(this.gameId);
-      if (!state) return;
-      if (state.status === "finished") {
-        this.stop();
-        return;
-      }
-      if (state.status !== "in-progress") return;
-      if (state.turn !== this.botId) return;
+      try {
+        const state = await loadGameState(this.gameId);
+        if (!state) return;
+        if (state.status === "finished") {
+          this.stop();
+          return;
+        }
+        if (state.status !== "in-progress") return;
+        if (state.turn !== this.botId) return;
 
-      if (!state.dice || state.dice.length === 0) {
-        await this.rollDice();
-      } else {
-        await this.makeBestMove(state);
+        if (!state.dice || state.dice.length === 0) {
+          await this.rollDice(state);
+        } else {
+          await this.makeBestMove(state);
+        }
+      } catch (err) {
+        console.error(`[Bot] Error in interval:`, err);
+        try {
+          await this.endTurn();
+        } catch (e) {}
+        this.lastActionTimestamp = Date.now();
       }
-    }, 500); // هر نیم ثانیه چک کن
+    }, 800);
   }
 
   stop() {
@@ -49,23 +64,82 @@ export class BotPlayer {
     }
   }
 
-  private async rollDice() {
-    const fakeCtx = { userId: this.botId, send: () => {} } as any;
-    const { handleRoll } = await import("@/socket/handlers/roll");
-    await handleRoll(fakeCtx, { gameId: this.gameId }, this.rooms);
+  private async rollDice(state: GameState) {
+    const dice = rollDiceUtil();
+    await appendGameEvent(this.gameId, {
+      type: "DICE_ROLLED",
+      payload: { playerId: this.botId, dice },
+    });
+    const newState = await loadGameState(this.gameId);
+    if (newState) {
+      saveGame(newState);
+      await this.broadcastState(newState);
+    }
     this.lastActionTimestamp = Date.now();
   }
 
-  // --------------------------------------------------------------
-  // ارزیابی پیشرفته حرکت
-  // --------------------------------------------------------------
+  private async makeBestMove(state: GameState) {
+    const moves = generateMoveSequences(state, this.botId);
+    const flatMoves = flattenMoveSequences(moves);
+    if (flatMoves.length === 0) {
+      console.log(`[Bot] No legal moves, ending turn.`);
+      await this.endTurn();
+      return;
+    }
+
+    let bestMove = flatMoves[0];
+    let bestScore = this.evaluateMove(state, bestMove, this.botId);
+    for (let i = 1; i < flatMoves.length; i++) {
+      const score = this.evaluateMove(state, flatMoves[i], this.botId);
+      if (score > bestScore) {
+        bestScore = score;
+        bestMove = flatMoves[i];
+      }
+    }
+
+    await appendGameEvent(this.gameId, {
+      type: "MOVE_APPLIED",
+      payload: {
+        playerId: this.botId,
+        from: bestMove.from,
+        to: bestMove.to,
+        die: bestMove.die,
+      },
+    });
+
+    const newState = await loadGameState(this.gameId);
+    if (newState) {
+      saveGame(newState);
+      await this.broadcastState(newState);
+    }
+
+    this.lastActionTimestamp = Date.now();
+
+    if (newState && (!newState.dice || newState.dice.length === 0)) {
+      await this.endTurn();
+    }
+  }
+
+  private async endTurn() {
+    await appendGameEvent(this.gameId, {
+      type: "TURN_PASSED",
+      payload: { playerId: this.botId, reason: "MANUAL_END" },
+    });
+    const newState = await loadGameState(this.gameId);
+    if (newState) {
+      saveGame(newState);
+      await this.broadcastState(newState);
+    }
+    this.lastActionTimestamp = Date.now();
+  }
+
   private evaluateMove(
     state: GameState,
     move: any,
     playerId: PlayerId,
   ): number {
     let score = 0;
-    const { from, to, die, ownerId } = move;
+    const { from, to } = move;
     const targetPoint = state.board.points[to];
     const isBearOff =
       to === SPECIAL_POSITIONS.BEAR_OFF_WHITE ||
@@ -74,24 +148,12 @@ export class BotPlayer {
     const player = state.players.find((p) => p.id === playerId)!;
     const opponent = state.players.find((p) => p.id !== playerId)!;
 
-    // 1. خارج کردن از نوار (اورژانسی)
     if (isBar) score += 200;
-
-    // 2. زدن مهره حریف (hit)
-    if (targetPoint.owner === opponent.id && targetPoint.count === 1) {
+    if (targetPoint.owner === opponent.id && targetPoint.count === 1)
       score += 150;
-    }
-
-    // 3. خارج کردن مهره (bear off) – اگر همه مهره‌ها در خانه انتهایی باشند
-    if (isBearOff) {
-      // فقط در صورتی که واقعاً مجاز به bear off باشیم (توسط validateMove قبلاً چک شده)
-      score += 120;
-    }
-
-    // 4. ساخت بلوک (دو مهره یا بیشتر) – دفاع
+    if (isBearOff) score += 120;
     if (targetPoint.owner === playerId && targetPoint.count >= 2) {
       score += 40;
-      // اگر بلوک متوالی با خانه‌های دیگر ایجاد کند، امتیاز اضافه
       let consecutive = 1;
       let idx = to;
       const dir = player.color === "white" ? -1 : 1;
@@ -108,87 +170,52 @@ export class BotPlayer {
       }
       score += consecutive * 10;
     }
-
-    // 5. پیشرفت به سمت خانه انتهایی
     const homeStart = player.color === "white" ? 18 : 0;
     const homeEnd = player.color === "white" ? 23 : 5;
-    let progress = 0;
     if (to >= homeStart && to <= homeEnd) {
-      progress =
+      const progress =
         player.color === "white" ? to - homeStart + 1 : homeEnd - to + 1;
       score += progress * 3;
     } else {
-      // اگر هنور دور است، هر چه به خانه نزدیک‌تر باشد بهتر
       const distanceToHome =
         player.color === "white" ? homeStart - to : to - homeEnd;
       if (distanceToHome > 0) score += (24 - distanceToHome) / 2;
     }
-
-    // 6. جلوگیری از تنها ماندن مهره (ریسک hit شدن) – جریمه
     if (
       targetPoint.owner === playerId &&
       targetPoint.count === 1 &&
       !isBearOff &&
       !isBar
     ) {
-      // آیا حریف در برد 6 خانه می‌تواند به این خانه برسد؟ (ساده)
-      const opponentHome = opponent.color === "white" ? [0, 5] : [18, 23];
       const canBeHit = player.color === "white" ? to <= 5 : to >= 18;
       if (canBeHit) score -= 20;
     }
-
-    // 7. مصرف تاس دابل (اگر دابل باشد، حرکات تکراری ارزش بیشتری دارند)
     if (
       state.dice &&
       state.dice.length === 4 &&
       state.dice[0] === state.dice[1]
     ) {
-      score += 25; // اولویت استفاده از دابل
+      score += 25;
     }
-
-    // 8. اگر حرکت باعث شود مهره از روی نوار وارد خانه‌ای شود که در معرض خطر است (تک مهره) – جریمه
     if (isBar && targetPoint.owner === playerId && targetPoint.count === 1) {
       score -= 15;
     }
-
     return score;
   }
 
-  private async makeBestMove(state: GameState) {
-    const moves = generateMoveSequences(state, this.botId);
-    const flatMoves = flattenMoveSequences(moves);
-    if (flatMoves.length === 0) {
-      await this.endTurn();
-      return;
-    }
-
-    // انتخاب بهترین حرکت (بیشترین امتیاز)
-    let bestMove = flatMoves[0];
-    let bestScore = this.evaluateMove(state, bestMove, this.botId);
-    for (let i = 1; i < flatMoves.length; i++) {
-      const score = this.evaluateMove(state, flatMoves[i], this.botId);
-      if (score > bestScore) {
-        bestScore = score;
-        bestMove = flatMoves[i];
-      }
-    }
-
-    const payload = {
-      gameId: this.gameId,
-      from: bestMove.from,
-      to: bestMove.to,
-      die: bestMove.die,
+  private async broadcastState(state: GameState) {
+    const subStatus = calculateSubStatus(state);
+    const legalMoves = state.turn
+      ? flattenMoveSequences(generateMoveSequences(state, state.turn))
+      : [];
+    const stateToSend = {
+      ...state,
+      subStatus,
+      legalMoves,
     };
-    const fakeCtx = { userId: this.botId, send: () => {} } as any;
-    const { handleMove } = await import("@/socket/handlers/move");
-    await handleMove(fakeCtx, [payload], this.rooms);
-    this.lastActionTimestamp = Date.now();
-  }
-
-  private async endTurn() {
-    const fakeCtx = { userId: this.botId, send: () => {} } as any;
-    const { handleEndTurn } = await import("@/socket/handlers/endTurn");
-    await handleEndTurn(fakeCtx, { gameId: this.gameId }, this.rooms);
-    this.lastActionTimestamp = Date.now();
+    this.rooms.broadcast(this.gameId, {
+      type: "game.state",
+      payload: onOkSocketResponse(stateToSend),
+    });
   }
 }
