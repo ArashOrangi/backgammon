@@ -31,7 +31,7 @@ deploy:
     - xcopy /Y /E /I C:\Users\Public\forprisma node_modules
     - npm install --registry="https://mirror-npm.runflare.com"
     # - npx prisma migrate reset -f
-    - npx prisma migrate dev --name add_TimerPreset
+    - npx prisma migrate dev --name add_MiniChat
     - npx prisma generate
     - npx tsx scripts/seed-chat.ts
     - Write-Host "Starting deployment script..."

@@ -342,18 +342,9 @@ export async function loadGameStateUntil(
 
 export function calculateSubStatus(state: GameState): SubStatus {
   if (state.status !== "in-progress" || !state.turn) return "turnRoll";
-
-  if (!state.dice || state.dice.length === 0) {
-    return "turnRoll";
-  }
-
+  if (!state.dice || state.dice.length === 0) return "turnRoll";
   const legalMoves = generateMoveSequences(state, state.turn);
-
-  if (legalMoves && legalMoves.length > 0) {
-    return "playDice";
-  } else {
-    return "mustEndTurn";
-  }
+  return legalMoves && legalMoves.length > 0 ? "playDice" : "mustEndTurn";
 }
 
 export async function undoLastMove(gameId: number, playerId: PlayerId) {
