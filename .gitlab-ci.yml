@@ -34,6 +34,7 @@ deploy:
     - npx prisma migrate dev --name add_MiniChat
     - npx prisma generate
     - npx tsx scripts/seed-chat.ts
+    - npx tsx scripts/seed-timer.ts
     - Write-Host "Starting deployment script..."
     - powershell -ExecutionPolicy Bypass -File .\deploy.ps1 -SiteName "$env:SITE_NAME"
   environment:
