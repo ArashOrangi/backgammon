@@ -13,6 +13,7 @@ import { timerConfigRoutes } from "./routes/timerConfig";
 import { prismaUserGetOrCreate } from "./models/user";
 import { OrmState } from "./models/enums";
 import { chatRoutes } from "./routes/miniChat";
+import { locationRoutes } from "./routes/location";
 
 dotenv.config();
 
@@ -26,6 +27,7 @@ app.route("/api/games", gameRoutes);
 app.route("/api/history", history);
 app.route("/api/timer-presets", timerConfigRoutes);
 app.route("/api/miniChat", chatRoutes);
+app.route("/api/location", locationRoutes);
 
 const PORT = Number(process.env.PORT) || 8080;
 

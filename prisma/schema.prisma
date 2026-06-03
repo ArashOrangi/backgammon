@@ -17,11 +17,31 @@ model Users {
   id         Int      @id @default(autoincrement())
   userName   String   @unique
   winRate    Float    @default(0)
-   createdAt   DateTime      @default(now()) @db.Timestamptz(3)
+  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime?      @updatedAt @db.Timestamptz(3)
   gender     GENDER   @default(MAN)
+  level      Int?
+  password   String?
+  profile Profile?  @relation("USER_PROFILE")
   whiteGames Games[]  @relation("WhitePlayerRelation")
   blackGames Games[]  @relation("BlackPlayerRelation")
+}
+
+model Profile {
+  id     Int      @id @default(autoincrement())
+  createdAt   DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime?      @updatedAt @db.Timestamptz(3)
+  fullName    String         @db.VarChar(70)
+  provinceId  Int?
+  province    Provinces?     @relation("USER_PROVINCE", fields: [provinceId], references: [id])
+  cityId      Int?
+  city        Cities?        @relation("USER_CITY", fields: [cityId],references: [id])
+  image       String?
+  mobile      String?
+  userId Int?    @unique
+  user   Users?  @relation("USER_PROFILE",fields: [userId], references: [id])
+  @@index([id])
+  @@index([id,cityId])
 }
 
 enum GENDER {
@@ -170,6 +190,7 @@ model Provinces {
   enName    String?   @unique @db.VarChar(99)
   about     String?
   cities    Cities[]  @relation("PROVINCE_CITIES")
+  person    Profile[]  @relation("USER_PROVINCE")
 }
 
 model Cities {
@@ -186,5 +207,5 @@ model Cities {
   population Int?
   provinceId Int
   province   Provinces     @relation("PROVINCE_CITIES", fields: [provinceId], references: [id])
-
+  person     Profile[]     @relation("USER_CITY")
 }

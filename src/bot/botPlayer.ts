@@ -12,6 +12,7 @@ import { RoomManager } from "@/socket/room-manager";
 import { saveGame } from "@/game/gameStore";
 import { onOkSocketResponse } from "@/responses/response-builder";
 import { rollDice as rollDiceUtil } from "@/utils/dice";
+import { validateMove } from "@/game/ruleValidator";
 
 export class BotPlayer {
   private botId: PlayerId;
@@ -79,24 +80,45 @@ export class BotPlayer {
   }
 
   private async makeBestMove(state: GameState) {
-    const moves = generateMoveSequences(state, this.botId);
+    // همیشه آخرین وضعیت را بگیر (نه وضعیت پارامتر)
+    const latestState = await loadGameState(this.gameId);
+    if (!latestState || latestState.turn !== this.botId) return;
+
+    const moves = generateMoveSequences(latestState, this.botId);
     const flatMoves = flattenMoveSequences(moves);
     if (flatMoves.length === 0) {
-      console.log(`[Bot] No legal moves, ending turn.`);
       await this.endTurn();
       return;
     }
 
+    // انتخاب بهترین حرکت
     let bestMove = flatMoves[0];
-    let bestScore = this.evaluateMove(state, bestMove, this.botId);
+    let bestScore = this.evaluateMove(latestState, bestMove, this.botId);
     for (let i = 1; i < flatMoves.length; i++) {
-      const score = this.evaluateMove(state, flatMoves[i], this.botId);
+      const score = this.evaluateMove(latestState, flatMoves[i], this.botId);
       if (score > bestScore) {
         bestScore = score;
         bestMove = flatMoves[i];
       }
     }
 
+    // ✅ اعتبارسنجی مجدد با آخرین وضعیت
+    const validation = validateMove(
+      latestState,
+      this.botId,
+      bestMove.from,
+      bestMove.to,
+      [bestMove.die],
+    );
+    if (!validation.isValid) {
+      console.log(
+        `[Bot] Move invalid after recheck: ${validation.message}. Ending turn.`,
+      );
+      await this.endTurn();
+      return;
+    }
+
+    // ثبت حرکت
     await appendGameEvent(this.gameId, {
       type: "MOVE_APPLIED",
       payload: {
@@ -112,8 +134,6 @@ export class BotPlayer {
       saveGame(newState);
       await this.broadcastState(newState);
     }
-
-    this.lastActionTimestamp = Date.now();
 
     if (newState && (!newState.dice || newState.dice.length === 0)) {
       await this.endTurn();

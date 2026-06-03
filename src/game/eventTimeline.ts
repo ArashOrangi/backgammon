@@ -1,23 +1,12 @@
 import { GameEvent } from "./eventStore";
-// {
-//   Joined,
-//   RoomReady,
-//   Assign,
-//   Turn,
-//   RollDice,
-//   DiceResult,
-//   TurnTimeout,
-//   NetworkTimeout,
-//   Move,
-//   Result
-// }
+
 export function eventToTimeline(event: any) {
   const base = {
     id: event.id,
     time: new Date(event.createdAt).getTime(),
     roomId: event.gameId,
     seq: event.sequence,
-    revert: false,
+    revert: event.isUndo === true, // اصلاح: نمایش Undo
   };
 
   switch (event.type) {
@@ -28,31 +17,29 @@ export function eventToTimeline(event: any) {
         event: "Joined",
         details: event.payload.playerId,
       };
-
     case "GAME_STARTING":
+      return { ...base, initiator: null, event: "RoomReady", details: null };
+    case "STARTING_ROLLED": // اضافه شد
       return {
         ...base,
-        initiator: null,
-        event: "RoomReady",
-        details: null,
+        initiator: event.payload.playerId,
+        event: "StartingRolled",
+        details: event.payload.value.toString(),
       };
-
     case "GAME_STARTED":
       return {
         ...base,
         initiator: null,
         event: "Assign",
-        details: `${event.payload.whiteId},${event.payload.blackId}`,
+        details: `${event.payload.whitePlayerId},${event.payload.blackPlayerId}`,
       };
-
     case "DICE_ROLLED":
       return {
         ...base,
         initiator: event.payload.playerId,
         event: "DiceResult",
-        details: `${event.payload.dice[0]},${event.payload.dice[1]}`,
+        details: event.payload.dice.join(","),
       };
-
     case "MOVE_APPLIED":
       return {
         ...base,
@@ -60,7 +47,6 @@ export function eventToTimeline(event: any) {
         event: "Move",
         details: `${event.payload.from},${event.payload.to}`,
       };
-
     case "TURN_PASSED":
       return {
         ...base,
@@ -68,7 +54,6 @@ export function eventToTimeline(event: any) {
         event: "Turn",
         details: null,
       };
-
     case "GAME_FINISHED":
       return {
         ...base,
@@ -76,63 +61,7 @@ export function eventToTimeline(event: any) {
         event: "Result",
         details: event.payload.winner,
       };
-
     default:
-      return {
-        ...base,
-        initiator: null,
-        event: event.type,
-        details: null,
-      };
+      return { ...base, initiator: null, event: event.type, details: null };
   }
 }
-
-// import { GameEventWithMeta, mapGameEventToClientMessage } from "./protocol";
-
-// export function eventToTimeline(event: GameEventWithMeta) {
-//   const clientMessage = mapGameEventToClientMessage(event);
-
-//   if (!clientMessage) return null;
-
-//   const base = {
-//     id: event.id,
-//     time: new Date(event.createdAt).getTime(),
-//     roomId: String(event.gameId),
-//     seq: event.sequence,
-//     revert: false,
-//   };
-
-//   return {
-//     ...base,
-//     initiator: getInitiator(clientMessage),
-//     event: clientMessage.type,
-//     details: getDetails(clientMessage),
-//   };
-// }
-
-// function getInitiator(message: ServerMessage): string | null {
-//   switch (message.type) {
-//     case "Joined": return message.payload.playerId;
-//     case "DiceResult": return message.payload.playerId;
-//     case "Move": return message.payload.playerId;
-//     case "Turn": return message.payload.playerId;
-//     default: return null;
-//   }
-// }
-
-// function getDetails(message: ServerMessage): string | null {
-//   switch (message.type) {
-//     case "Assign":
-//       return `${message.payload.whitePlayerId},${message.payload.blackPlayerId}`;
-//     case "DiceResult":
-//       return message.payload.dice.join(",");
-//     case "Move":
-//       return `${message.payload.from},${message.payload.to}`;
-//     case "Result":
-//       return message.payload.winner;
-//     case "Joined":
-//       return message.payload.playerId;
-//     default:
-//       return null;
-//   }
-// }

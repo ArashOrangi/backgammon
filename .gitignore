@@ -32,3 +32,6 @@ dist/
 # prisma/migrations/migration_lock.toml
 prisma/migrations/
 # prisma/migrations/20260523115344_first_migrate/migration.sql
+test-undo.js
+scripts/city.json
+scripts/province.json

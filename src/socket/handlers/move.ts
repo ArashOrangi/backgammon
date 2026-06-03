@@ -88,21 +88,40 @@ export async function handleMove(
       const { from, to, die, isUndo } = moveItem;
 
       if (isUndo) {
+        console.log(
+          `[MOVE] Undo requested for game ${gameId}, player ${playerId}`,
+        );
         const currentSubStatus = calculateSubStatus(finalGame);
         if (finalGame.turn !== playerId || currentSubStatus === "mustEndTurn") {
+          console.log(`[MOVE] Undo rejected: turn mismatch or mustEndTurn`);
           return ctx.send({
             type: "game.error",
             payload: onErrorSocketResponse("Cannot undo after ending turn"),
           });
         }
-        // پس از برگشت، وضعیت جدید را لود می‌کنیم
+
+        // ⭐ ثبت Undo در دیتابیس (علامت زدن آخرین حرکت به عنوان isUndo=true)
+        const undonePayload = await undoLastMove(gameId, playerId);
+        if (!undonePayload) {
+          console.log(`[MOVE] Undo failed: no move to undo`);
+          return ctx.send({
+            type: "game.error",
+            payload: onErrorSocketResponse("No move to undo"),
+          });
+        }
+
+        // بارگذاری وضعیت جدید پس از اعمال Undo
         const stateAfterUndo = await loadGameState(gameId);
+        console.log(
+          `[UNDO] After undo: turn=${stateAfterUndo?.turn}, dice=${stateAfterUndo?.dice?.join(",")}`,
+        );
         if (!stateAfterUndo)
           throw new Error("Failed to rebuild state after undo");
+
         finalGame = stateAfterUndo;
         saveGame(finalGame);
 
-        // اضافه کردن حرکت برگشت به لیست برادکست (طبق سناریو ownerId همان بازیکن است)
+        // اضافه کردن حرکت برگشت به لیست برادکست
         broadcastMoves.push({
           playerId,
           from,
@@ -216,14 +235,14 @@ export async function handleMove(
     const stateToSend = {
       ...finalGame,
       subStatus,
-      legalMoves: flatLegalMoves, // طبق سناریو، legalMoves داخل game.state قرار می‌گیرد
+      legalMoves: flatLegalMoves,
     };
     rooms.broadcast(gameId, {
       type: "game.state",
       payload: onOkSocketResponse(stateToSend),
     });
 
-    // ارسال لیست حرکات انجام‌شده (player.move) طبق سناریو (آرایه بدون wrapper اضافی)
+    // ارسال لیست حرکات انجام‌شده (player.move) طبق سناریو
     if (broadcastMoves.length) {
       const payloadToSend =
         broadcastMoves.length === 1 ? broadcastMoves[0] : broadcastMoves;
