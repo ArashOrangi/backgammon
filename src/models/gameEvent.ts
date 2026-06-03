@@ -56,9 +56,7 @@ export async function prismaGameEventGetLastSequence(gameId: number) {
       orderBy: { sequence: "desc" },
       select: prismaSelectGameEvent,
     });
-    // اگه ایونتی نبود، از -1 شروع می‌کنیم تا اولین ایونت بشه 0
     return event ? event.sequence : -1;
-    // return event;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
   }
@@ -79,9 +77,7 @@ export async function prismaGameEventAppend({
       orderBy: { sequence: "desc" },
       select: { sequence: true },
     });
-
     const sequence = (last?.sequence ?? -1) + 1;
-
     const event = await prisma.gameEvents.create({
       data: {
         gameId,
@@ -91,7 +87,6 @@ export async function prismaGameEventAppend({
       },
       select: prismaSelectGameEvent,
     });
-
     return event;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
@@ -105,7 +100,6 @@ export async function prismaGameEventGetAll(gameId: number) {
       orderBy: { sequence: "asc" },
       select: prismaSelectGameEvent,
     });
-
     return events;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
@@ -129,7 +123,6 @@ export async function prismaGameEventGetFromSequence({
       orderBy: { sequence: "asc" },
       select: prismaSelectGameEvent,
     });
-
     return events;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
@@ -165,10 +158,9 @@ export async function prismaGameEventGetAfterSequence({
 export async function prismaGameEventsFind(gameId: number) {
   try {
     const events = await prisma.gameEvents.findMany({
-      where: { gameId },
+      where: { gameId, isUndo: false }, // اصلاح: فقط ایونت‌های معتبر
       orderBy: { sequence: "asc" },
     });
-
     return events;
   } catch (error) {
     return OrmState.Error;
@@ -177,25 +169,24 @@ export async function prismaGameEventsFind(gameId: number) {
 
 export async function getGameEvents(gameId: number) {
   return prisma.gameEvents.findMany({
-    where: { gameId },
+    where: { gameId, isUndo: false }, // اصلاح: فقط ایونت‌های معتبر
     orderBy: { sequence: "asc" },
   });
 }
 
+// تابع زیر فقط برای سازگاری با کدهای قدیمی نگهداری شده است، استفاده از آن توصیه نمی‌شود.
 export async function prismaGameEventDeleteLastMove(
   gameId: number,
   playerId: number,
 ) {
-  // پیدا کردن آخرین حرکت این بازیکن
   const lastMove = await prisma.gameEvents.findFirst({
     where: {
       gameId,
       type: "MOVE_APPLIED",
-      payload: { path: ["playerId"], equals: playerId }, // جستجو در JSON payload
+      payload: { path: ["playerId"], equals: playerId },
     },
     orderBy: { sequence: "desc" },
   });
-
   if (lastMove) {
     return await prisma.gameEvents.delete({
       where: { id: lastMove.id },
@@ -209,7 +200,6 @@ export async function prismaGameEventMarkAsUndo(
   playerId: number,
 ) {
   try {
-    // پیدا کردن آخرین حرکتی که هنوز Undo نشده
     const lastMove = await prisma.gameEvents.findFirst({
       where: {
         gameId,
@@ -219,9 +209,7 @@ export async function prismaGameEventMarkAsUndo(
       },
       orderBy: { sequence: "desc" },
     });
-
     if (!lastMove) return null;
-
     return await prisma.gameEvents.update({
       where: { id: lastMove.id },
       data: { isUndo: true },
