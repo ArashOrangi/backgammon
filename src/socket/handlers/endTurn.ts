@@ -34,7 +34,6 @@ export async function handleEndTurn(
   }
 
   await gameQueue.enqueue(gameId, async () => {
-    // استفاده از loadGameState به جای getGame
     const game = await loadGameState(gameId);
     if (!game) {
       return ctx.send({
@@ -52,6 +51,7 @@ export async function handleEndTurn(
 
     const currentSubStatus = calculateSubStatus(game);
 
+    // فقط زمانی که حرکت قانونی وجود دارد (playDice) نباید اجازه endTurn بدهیم
     if (currentSubStatus === "playDice") {
       return ctx.send({
         type: "game.error",
@@ -59,12 +59,8 @@ export async function handleEndTurn(
       });
     }
 
-    if (currentSubStatus === "turnRoll") {
-      return ctx.send({
-        type: "game.error",
-        payload: onErrorSocketResponse("You must roll the dice first"),
-      });
-    }
+    // حذف شرط turnRoll - حالا هر وضعیت دیگری (از جمله turnRoll و mustEndTurn) مجاز است
+    // if (currentSubStatus === "turnRoll") { ... }  // این خط حذف شد
 
     try {
       await appendGameEvent(gameId, {
