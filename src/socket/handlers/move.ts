@@ -100,7 +100,7 @@ export async function handleMove(
           });
         }
 
-        // ⭐ ثبت Undo در دیتابیس (علامت زدن آخرین حرکت به عنوان isUndo=true)
+        //  ثبت Undo در دیتابیس (علامت زدن آخرین حرکت به عنوان isUndo=true)
         const undonePayload = await undoLastMove(gameId, playerId);
         if (!undonePayload) {
           console.log(`[MOVE] Undo failed: no move to undo`);
@@ -222,6 +222,27 @@ export async function handleMove(
           });
           return;
         }
+      }
+    }
+
+    //  پس از پردازش همه حرکات، اگر تاس‌ها تمام شده‌اند، نوبت را خودکار عوض کن
+    if (
+      finalGame.status === "in-progress" &&
+      finalGame.dice &&
+      finalGame.dice.length === 0
+    ) {
+      console.log(
+        `[MOVE] Dice exhausted, auto-passing turn for player ${playerId}`,
+      );
+      await appendGameEvent(gameId, {
+        type: "TURN_PASSED",
+        payload: { playerId, reason: "NO_LEGAL_MOVES" },
+      });
+      // بارگذاری وضعیت جدید پس از تغییر نوبت
+      const newState = await loadGameState(gameId);
+      if (newState) {
+        finalGame = newState;
+        saveGame(finalGame);
       }
     }
 
