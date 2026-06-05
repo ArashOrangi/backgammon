@@ -277,19 +277,18 @@ async function createGameWithBot(
 }
 
 async function addBotToGame(gameId: number, botId: number, rooms: RoomManager) {
-  // یک SocketContext ساختگی برای بات بسازید (فقط برای عضویت در اتاق و فراخوانی هندلرها)
   const fakeCtx = {
     id: `bot-${botId}`,
     userId: botId,
     send: () => {},
     ws: { readyState: 1, send: () => {} },
   } as any;
-  // بات را به اتاق اضافه کنید
   rooms.join(gameId, fakeCtx, "player");
-  // ارسال player.ready توسط بات
   const { handleReady } = await import("./ready");
   await handleReady(fakeCtx, { gameId }, rooms);
-  // شروع حلقه بات
-  const bot = new BotPlayer(botId, gameId, rooms);
-  bot.start();
+  // قبل از شروع بات، یک تأخیر کوتاه بدهید تا state به‌روز شود
+  setTimeout(() => {
+    const bot = new BotPlayer(botId, gameId, rooms);
+    bot.start();
+  }, 500);
 }
