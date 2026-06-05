@@ -52,10 +52,19 @@ export async function handleReady(
     });
   }
 
-  if (game.status !== "ready") {
+  // اگر بازی قبلاً شروع شده باشد، اجازه آماده شدن مجدد ندهید
+  if (game.status === "in-progress") {
     return ctx.send({
       type: "game.error",
-      payload: onErrorSocketResponse("Game is not in ready state"),
+      payload: onErrorSocketResponse("Game already started"),
+    });
+  }
+
+  // مطمئن شوید هر دو بازیکن حضور دارند (حداقل ۲ نفر)
+  if (game.players.length < 2) {
+    return ctx.send({
+      type: "game.error",
+      payload: onErrorSocketResponse("Not enough players to start"),
     });
   }
 
