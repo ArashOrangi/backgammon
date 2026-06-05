@@ -191,6 +191,9 @@ export async function handleRoll(
 
       const subStatus = calculateSubStatus(game);
       const stateToSend = { ...game, subStatus, legalMoves: flatLegalMoves };
+      if (game.status === "in-progress") {
+        await runBotIfNeeded(gameId, game.turn!, rooms);
+      }
       rooms.broadcast(gameId, {
         type: "game.state",
         payload: onOkSocketResponse(stateToSend),

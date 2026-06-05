@@ -6,6 +6,8 @@ export const portApp = Number(process.env.PORT) || 3000;
 export const portSocket = Number(process.env.PORT) || 3001;
 export const sitURL = process.env.API_URL;
 
+export const BOT_USER_ID = 1;
+
 export const keyPublic = "backgammonGuest";
 export const keyUser = "backgammonUser";
 
