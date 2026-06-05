@@ -14,6 +14,7 @@ import { prismaUserGetOrCreate } from "./models/user";
 import { OrmState } from "./models/enums";
 import { chatRoutes } from "./routes/miniChat";
 import { locationRoutes } from "./routes/location";
+import { getWsLogs, clearWsLogs } from "./utils/wsLogger";
 
 dotenv.config();
 
@@ -117,7 +118,21 @@ async function readBodyString(
       console.error("Critical Game Loop Error:", err);
     }
   }, TICK_RATE);
+  // because i don't have per to see logs in server :)
+  app.get("/api/debug/ws-logs", (c) => {
+    const limit = Number(c.req.query("limit")) || 100;
+    const gameId = c.req.query("gameId")
+      ? Number(c.req.query("gameId"))
+      : undefined;
+    const logs = getWsLogs(limit, gameId);
+    return c.json({ logs, count: logs.length });
+  });
 
+  app.delete("/api/debug/ws-logs", (c) => {
+    clearWsLogs();
+    return c.json({ message: "Logs cleared" });
+  });
+  //=====================
   // ۵. شروع listening
   server.listen(PORT, () => {
     console.log(`🚀 REST API running on http://localhost:${PORT}/api`);
