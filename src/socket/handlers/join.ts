@@ -18,7 +18,6 @@ import {
 import { prismaGameCreate } from "@/models/game";
 import { prisma } from "@/components/prisma";
 import { OrmState } from "@/models/enums";
-import { BotPlayer } from "@/bot/botPlayer";
 import { getDefaultTimerPreset } from "@/models/timerPreset";
 import { GameState } from "@/game/types";
 
@@ -93,46 +92,40 @@ export async function handleJoin(
 
         // تنظیم تایمر ۱۰ ثانیه برای ساخت بات
         const timer = setTimeout(async () => {
-          // اگر کاربر هنوز در صف است (حریف انسانی نیامده)
           if (waitingSockets.has(userId)) {
             waitingSockets.delete(userId);
             waitingTimers.delete(userId);
 
-            // ساخت بازی با بات
             const gameIdForBot = await createGameWithBot(userId, getBotId());
             if (!gameIdForBot) {
               console.error(`Failed to create bot game for user ${userId}`);
               return;
             }
 
-            // بارگذاری وضعیت بازی
             const game = await loadGameState(gameIdForBot);
             if (!game) return;
 
-            // اعمال تنظیمات تایمر و ذخیره snapshot جدید
             await applyTimerSettingsToGame(game);
 
-            // اضافه کردن کاربر انسانی به اتاق
             rooms.join(gameIdForBot, ctx, "player");
             game.status = "ready";
             game.subStatus = "gameReady";
             saveGame(game);
 
-            // ارسال وضعیت به کاربر انسانی
             ctx.send({
               type: "game.state",
               payload: onOkSocketResponse(game, "Bot joined as opponent"),
             });
 
-            // اضافه کردن بات به اتاق و شروع آن
+            // اضافه کردن بات به اتاق (بدون استارت جداگانه، چون handleReady بعداً بات را اجرا می‌کند)
             await addBotToGame(gameIdForBot, getBotId(), rooms);
           }
-        }, 10000); // ۱۰ ثانیه
+        }, 10000);
 
         waitingTimers.set(userId, timer);
         return;
       } else {
-        // ---------- جفت شدن با یک بازیکن انسانی دیگر ----------
+        // جفت شدن با بازیکن انسانی دیگر
         const game = await loadGameState(matchedGameId);
         if (!game) {
           return ctx.send({
@@ -141,10 +134,8 @@ export async function handleJoin(
           });
         }
 
-        // اعمال تنظیمات تایمر و ذخیره snapshot جدید
         await applyTimerSettingsToGame(game);
 
-        // لغو تایمر کاربر اول (اگر وجود داشته باشد)
         const players = game.players;
         for (const p of players) {
           const timer = waitingTimers.get(p.id);
@@ -158,7 +149,6 @@ export async function handleJoin(
             waitingSockets.delete(p.id);
           }
         }
-        // کاربر فعلی (دومین بازیکن) را نیز اضافه کنید
         rooms.join(matchedGameId, ctx, "player");
 
         game.status = "ready";
@@ -178,10 +168,8 @@ export async function handleJoin(
     if (!game) {
       game = await createInitialGameState(gameId);
       saveGame(game);
-      // بازی تازه ساخته شده، تنظیمات تایمر را از دیتابیس اعمال کن
       await applyTimerSettingsToGame(game);
     } else {
-      // حتی اگر بازی وجود دارد، مطمئن شو تایمرها تنظیم شده‌اند
       await applyTimerSettingsToGame(game);
     }
 
@@ -199,7 +187,6 @@ export async function handleJoin(
       saveGame(game);
 
       if (game.players.length === 1) {
-        // اولین بازیکن: وضعیت waiting با subStatus playerJoin
         game.subStatus = "playerJoin";
         saveGame(game);
         return ctx.send({
@@ -207,7 +194,6 @@ export async function handleJoin(
           payload: onOkSocketResponse(game, "Waiting for opponent"),
         });
       } else if (game.players.length === 2) {
-        // دومین بازیکن: بازی آماده است
         rooms.join(gameId, ctx, "player");
         game.status = "ready";
         game.subStatus = "gameReady";
@@ -267,7 +253,6 @@ async function createGameWithBot(
     payload: { playerId: botId, color: "black" },
   });
 
-  // بعد از ثبت ایونت‌ها، تایمرها را از دیتابیس اعمال کن و snapshot را به‌روز کن
   const state = await loadGameState(game.id);
   if (state) {
     await applyTimerSettingsToGame(state);
@@ -286,9 +271,5 @@ async function addBotToGame(gameId: number, botId: number, rooms: RoomManager) {
   rooms.join(gameId, fakeCtx, "player");
   const { handleReady } = await import("./ready");
   await handleReady(fakeCtx, { gameId }, rooms);
-  // تاخیر ۱ ثانیه برای اطمینان از ثبت رویداد GAME_STARTED
-  setTimeout(() => {
-    const bot = new BotPlayer(botId, gameId, rooms);
-    bot.start();
-  }, 1000);
+  // دیگر نیازی به ساخت BotPlayer نیست
 }

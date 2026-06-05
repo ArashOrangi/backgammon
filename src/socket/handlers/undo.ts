@@ -7,6 +7,7 @@ import {
   onOkSocketResponse,
   onErrorSocketResponse,
 } from "../../responses/response-builder";
+import { runBotIfNeeded } from "@/game/botRunner"; // اضافه شده
 
 const gameQueue = new GameQueue();
 
@@ -17,6 +18,13 @@ export async function handleUndo(
 ) {
   const { gameId } = payload;
   const playerId = ctx.userId;
+
+  if (!playerId) {
+    return ctx.send({
+      type: "game.error",
+      payload: onErrorSocketResponse("Not authenticated"),
+    });
+  }
 
   await gameQueue.enqueue(gameId, async () => {
     // ۱. لود کردن استیت فعلی برای چک کردن نوبت
@@ -39,7 +47,6 @@ export async function handleUndo(
     }
 
     // ۳. بازسازی کامل استیت (Re-build state from events)
-    // چون ایونت حذف شده، loadGameState خودکار استیتِ قبل از اون حرکت رو می‌سازه
     const updatedGame = await loadGameState(gameId);
     if (!updatedGame) return;
 
@@ -57,5 +64,13 @@ export async function handleUndo(
       type: "game.legalMoves",
       payload: onOkSocketResponse(legalMoves),
     });
+
+    // ۶. اگر بعد از Undo نوبت بات است، اجرا کن
+    if (updatedGame.status === "in-progress") {
+      const botId = updatedGame.players.find((p) => p.id !== playerId)?.id;
+      if (botId && updatedGame.turn === botId) {
+        await runBotIfNeeded(gameId, botId);
+      }
+    }
   });
 }

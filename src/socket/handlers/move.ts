@@ -19,6 +19,7 @@ import { GameQueue } from "@/game/gameQueue";
 import { isGameOver, calculateWinType } from "../../game/engine";
 import { saveGame } from "../../game/gameStore";
 import { SPECIAL_POSITIONS } from "@/game/types";
+import { runBotIfNeeded } from "@/game/botRunner"; // اضافه شده
 
 // نوع حرکت ورودی مطابق سناریو (آرایه‌ای از اشیاء)
 type MoveItem = {
@@ -273,5 +274,17 @@ export async function handleMove(
         payload: onOkSocketResponse(payloadToSend),
       });
     }
+
+    // ========== اضافه شده: اجرای بات در صورت نیاز ==========
+    const afterMoveState = await loadGameState(gameId);
+    if (afterMoveState && afterMoveState.status === "in-progress") {
+      const opponentId = afterMoveState.players.find(
+        (p) => p.id !== playerId,
+      )?.id;
+      if (opponentId && afterMoveState.turn === opponentId) {
+        await runBotIfNeeded(gameId, opponentId);
+      }
+    }
+    // ====================================================
   });
 }

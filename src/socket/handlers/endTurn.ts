@@ -15,6 +15,7 @@ import {
   calculateSubStatus,
 } from "@/game/eventStore";
 import { GameQueue } from "@/game/gameQueue";
+import { runBotIfNeeded } from "@/game/botRunner";
 
 const gameQueue = new GameQueue();
 
@@ -59,9 +60,6 @@ export async function handleEndTurn(
       });
     }
 
-    // حذف شرط turnRoll - حالا هر وضعیت دیگری (از جمله turnRoll و mustEndTurn) مجاز است
-    // if (currentSubStatus === "turnRoll") { ... }  // این خط حذف شد
-
     try {
       await appendGameEvent(gameId, {
         type: "TURN_PASSED",
@@ -89,6 +87,16 @@ export async function handleEndTurn(
         type: "game.state",
         payload: onOkSocketResponse(stateToSend, "Turn passed successfully"),
       });
+
+      // اگر نوبت بات است، بلافاصله اجرا کن
+      if (updatedGame.status === "in-progress") {
+        const opponentId = updatedGame.players.find(
+          (p) => p.id !== playerId,
+        )?.id;
+        if (opponentId && updatedGame.turn === opponentId) {
+          await runBotIfNeeded(gameId, opponentId);
+        }
+      }
     } catch (err) {
       console.error("EndTurn Error:", err);
       ctx.send({

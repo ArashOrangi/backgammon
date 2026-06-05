@@ -16,6 +16,7 @@ import {
   generateMoveSequences,
   flattenMoveSequences,
 } from "@/game/moveGenerator";
+import { runBotIfNeeded } from "@/game/botRunner"; // اضافه شده
 
 // ذخیره وضعیت آمادگی هر بازی (در حافظه، نه در state بازی)
 const readyStates = new Map<number, Set<number>>();
@@ -156,6 +157,13 @@ export async function handleReady(
         color: freshGame.players.find((p) => p.id === freshGame.turn)!.color,
       }),
     });
+
+    // ========== اضافه شده: اجرای بات در صورت نیاز ==========
+    if (freshGame.status === "in-progress") {
+      // همواره نوبت فعلی را به بات رانر بده (خودش بررسی می‌کند که آیا آن بازیکن بات است)
+      await runBotIfNeeded(gameId, freshGame.turn!);
+    }
+    // ====================================================
   } else {
     // هنوز هر دو آماده نشده‌اند: فقط به همین کلاینت وضعیت فعلی را بفرست
     const stateToSend = {

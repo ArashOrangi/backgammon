@@ -21,6 +21,7 @@ import {
   calculateSubStatus,
 } from "@/game/eventStore";
 import { getTimerPresetByLeagueAndType } from "@/models/timerPreset";
+import { runBotIfNeeded } from "@/game/botRunner"; // اضافه شده
 
 const gameQueue = new GameQueue();
 
@@ -99,11 +100,6 @@ export async function handleRoll(
             undefined,
             "casual",
           );
-          console.log(
-            "======================\n",
-            preset,
-            "=======================\n",
-          );
 
           const primarySeconds = preset?.primarySeconds ?? 12;
           const secondarySeconds = preset?.secondarySeconds ?? 120;
@@ -152,6 +148,15 @@ export async function handleRoll(
           type: "game.state",
           payload: onOkSocketResponse(stateToSend),
         });
+
+        // ========== اضافه شده: اجرای بات در صورت نیاز ==========
+        if (game.status === "in-progress") {
+          const botId = game.players.find((p) => p.id !== playerId)?.id;
+          if (botId && game.turn === botId) {
+            await runBotIfNeeded(gameId, botId);
+          }
+        }
+        // ====================================================
         return;
       }
 
@@ -201,6 +206,15 @@ export async function handleRoll(
         type: "game.state",
         payload: onOkSocketResponse(stateToSend),
       });
+
+      // ========== اضافه شده: اجرای بات در صورت نیاز ==========
+      if (game.status === "in-progress") {
+        const opponentId = game.players.find((p) => p.id !== playerId)?.id;
+        if (opponentId && game.turn === opponentId) {
+          await runBotIfNeeded(gameId, opponentId);
+        }
+      }
+      // ====================================================
     } catch (err) {
       console.error("Roll Error:", err);
       ctx.send({
