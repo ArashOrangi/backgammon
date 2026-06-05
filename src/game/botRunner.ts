@@ -4,7 +4,7 @@ import { rollDice as rollDiceUtil } from "@/utils/dice";
 import { validateMove } from "./ruleValidator";
 import { PlayerId } from "./types";
 
-const BOT_USER_ID = Number(process.env.BOT_USER_ID) || 3; // همان مقدار دیتابیس
+const BOT_USER_ID = 1; // همان مقدار دیتابیس
 
 export async function runBotIfNeeded(gameId: number, playerId: PlayerId) {
   // فقط اگر بازیکن مورد نظر بات باشد، اجرا کن

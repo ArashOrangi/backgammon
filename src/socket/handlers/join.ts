@@ -54,8 +54,8 @@ async function applyTimerSettingsToGame(game: GameState) {
 
 // شناسه بات (حتماً باید در دیتابیس وجود داشته باشد)
 function getBotId(): number {
-  const id = Number(process.env.BOT_USER_ID);
-  return isNaN(id) || id === 0 ? 999999 : id;
+  const id = 1;
+  return isNaN(id) ? 999999 : id;
 }
 
 export async function handleJoin(

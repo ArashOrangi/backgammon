@@ -51,14 +51,14 @@ async function readBodyString(
     const bot = await prismaUserGetOrCreate("SystemBot");
     if (bot === OrmState.Error) {
       console.error("Failed to create/get bot user: OrmState.Error");
-      process.env.BOT_USER_ID = "999999"; // fallback
+      process.env.BOT_USER_ID = "1"; // fallback
     } else {
       console.log(`🤖 Bot user ready with id: ${bot.id}`);
-      process.env.BOT_USER_ID = bot.id.toString();
+      process.env.BOT_USER_ID = "1";
     }
   } catch (error) {
     console.error("Failed to create bot user:", error);
-    process.env.BOT_USER_ID = "999999";
+    process.env.BOT_USER_ID = "1";
   }
 
   // ۲. ایجاد HTTP server
