@@ -28,12 +28,10 @@ export async function runBotIfNeeded(
     });
     const newState = await loadGameState(gameId);
     if (newState) {
-      // ارسال پیام جداگانه dice.result برای نمایش تاس در کلاینت
       rooms.broadcast(gameId, {
         type: "dice.result",
         payload: onOkSocketResponse({ dice, playerId }),
       });
-      // ارسال state جدید برای به‌روزرسانی صفحه
       rooms.broadcast(gameId, {
         type: "game.state",
         payload: onOkSocketResponse(newState),
@@ -83,7 +81,6 @@ export async function runBotIfNeeded(
 
   const afterMove = await loadGameState(gameId);
   if (afterMove) {
-    // ارسال player.move برای به‌روزرسانی برد
     rooms.broadcast(gameId, {
       type: "player.move",
       payload: onOkSocketResponse({
@@ -95,11 +92,15 @@ export async function runBotIfNeeded(
         isUndo: false,
       }),
     });
-    // ارسال state جدید
     rooms.broadcast(gameId, {
       type: "game.state",
       payload: onOkSocketResponse(afterMove),
     });
+
+    // ===== اگر هنوز تاس باقی است، دوباره خود را فراخوانی کن =====
+    if (afterMove.dice && afterMove.dice.length > 0) {
+      setTimeout(() => runBotIfNeeded(gameId, playerId, rooms), 200);
+    }
   }
 
   // ===== 4. اگر تاس تمام شد، نوبت را تمام کن =====
