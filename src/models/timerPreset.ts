@@ -89,7 +89,6 @@ export async function getDefaultTimerPreset(): Promise<{
     console.warn(
       "No default timer preset found, using fallback values (12s / 120s)",
     );
-    console.log("fuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuck");
 
     return { primarySeconds: 12, secondarySeconds: 120 };
   } catch (error) {

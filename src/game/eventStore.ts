@@ -303,7 +303,6 @@ export async function appendGameEvent(gameId: number, event: GameEvent) {
   if (nextSequence % SNAPSHOT_INTERVAL === 0) {
     const state = await loadGameState(gameId);
     if (state) {
-      console.log("bbbbbbbbbbbbbbbbbbbb", state);
       await prismaGameSnapshotCreate({
         gameId,
         sequence: nextSequence,

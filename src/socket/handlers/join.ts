@@ -286,9 +286,9 @@ async function addBotToGame(gameId: number, botId: number, rooms: RoomManager) {
   rooms.join(gameId, fakeCtx, "player");
   const { handleReady } = await import("./ready");
   await handleReady(fakeCtx, { gameId }, rooms);
-  // قبل از شروع بات، یک تأخیر کوتاه بدهید تا state به‌روز شود
+  // تاخیر ۱ ثانیه برای اطمینان از ثبت رویداد GAME_STARTED
   setTimeout(() => {
     const bot = new BotPlayer(botId, gameId, rooms);
     bot.start();
-  }, 500);
+  }, 1000);
 }

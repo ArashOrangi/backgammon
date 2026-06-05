@@ -3,16 +3,11 @@ import {
   generateMoveSequences,
   flattenMoveSequences,
 } from "@/game/moveGenerator";
-import {
-  appendGameEvent,
-  loadGameState,
-  calculateSubStatus,
-} from "@/game/eventStore";
+import { appendGameEvent, loadGameState } from "@/game/eventStore";
 import { RoomManager } from "@/socket/room-manager";
-import { saveGame } from "@/game/gameStore";
-import { onOkSocketResponse } from "@/responses/response-builder";
 import { rollDice as rollDiceUtil } from "@/utils/dice";
 import { validateMove } from "@/game/ruleValidator";
+import { onOkSocketResponse } from "@/responses/response-builder";
 
 export class BotPlayer {
   private botId: PlayerId;
@@ -20,6 +15,7 @@ export class BotPlayer {
   private rooms: RoomManager;
   private interval: NodeJS.Timeout | null = null;
   private isProcessing: boolean = false;
+  private isStarted: boolean = false;
 
   constructor(botId: PlayerId, gameId: number, rooms: RoomManager) {
     this.botId = botId;
@@ -28,8 +24,9 @@ export class BotPlayer {
   }
 
   async start() {
+    if (this.isStarted) return;
+    this.isStarted = true;
     console.log(`[Bot ${this.botId}] Started for game ${this.gameId}`);
-    // هر ۱ ثانیه یکبار چک کن (نه ۸۰۰ میلی‌ثانیه)
     this.interval = setInterval(async () => {
       if (this.isProcessing) return;
       this.isProcessing = true;
@@ -40,51 +37,53 @@ export class BotPlayer {
       } finally {
         this.isProcessing = false;
       }
-    }, 1000);
+    }, 500);
+  }
+
+  private async broadcastState() {
+    const state = await loadGameState(this.gameId);
+    if (state) {
+      this.rooms.broadcast(this.gameId, {
+        type: "game.state",
+        payload: onOkSocketResponse(state),
+      });
+    }
   }
 
   private async tick() {
-    // ۱. بارگذاری آخرین وضعیت از دیتابیس (event sourcing)
     const state = await loadGameState(this.gameId);
     if (!state) {
       console.log(`[Bot ${this.botId}] Game state not found`);
       return;
     }
 
-    // ۲. اگر بازی تمام شده یا در حالت waiting/ready، کاری نکن
     if (state.status !== "in-progress") {
       if (state.status === "finished") this.stop();
       return;
     }
 
-    // ۳. اگر نوبت بات نیست، صبر کن
-    if (state.turn !== this.botId) {
-      // لاگ برای دیباگ
-      // console.log(`[Bot ${this.botId}] Not my turn. Turn = ${state.turn}`);
-      return;
-    }
+    if (state.turn !== this.botId) return;
 
     console.log(
       `[Bot ${this.botId}] It's my turn. Dice: ${state.dice?.join(",") || "empty"}`,
     );
 
-    // ۴. اگر تاس وجود ندارد → تاس بریز
     if (!state.dice || state.dice.length === 0) {
       await this.rollDice();
+      await this.broadcastState();
       return;
     }
 
-    // ۵. حرکات قانونی را پیدا کن
     const moveSequences = generateMoveSequences(state, this.botId);
     const flatMoves = flattenMoveSequences(moveSequences);
 
     if (flatMoves.length === 0) {
       console.log(`[Bot ${this.botId}] No legal moves, ending turn`);
       await this.endTurn();
+      await this.broadcastState();
       return;
     }
 
-    // ۶. انتخاب بهترین حرکت (با استفاده از تابع موجود)
     let bestMove = flatMoves[0];
     let bestScore = this.evaluateMove(state, bestMove);
     for (let i = 1; i < flatMoves.length; i++) {
@@ -95,7 +94,6 @@ export class BotPlayer {
       }
     }
 
-    // ۷. اعتبارسنجی نهایی و ثبت حرکت
     const validation = validateMove(
       state,
       this.botId,
@@ -108,6 +106,7 @@ export class BotPlayer {
         `[Bot ${this.botId}] Move invalid: ${validation.message}. Ending turn.`,
       );
       await this.endTurn();
+      await this.broadcastState();
       return;
     }
 
@@ -123,10 +122,7 @@ export class BotPlayer {
         die: bestMove.die,
       },
     });
-
-    // ۸. بعد از حرکت، دوباره وضعیت را reload می‌کنیم (خود tick بعدی می‌خواند)
-    // نیازی به broadcast نیست چون سرور بعد از appendGameEvent خودش broadcast می‌کند.
-    // یک تأخیر کوتاه برای اطمینان از ثبت رویداد
+    await this.broadcastState();
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
 
@@ -137,8 +133,6 @@ export class BotPlayer {
       type: "DICE_ROLLED",
       payload: { playerId: this.botId, dice },
     });
-    // صبر می‌کنیم تا رویداد ثبت شود و در tick بعدی پردازش شود
-    await new Promise((resolve) => setTimeout(resolve, 200));
   }
 
   private async endTurn() {
@@ -147,11 +141,9 @@ export class BotPlayer {
       type: "TURN_PASSED",
       payload: { playerId: this.botId, reason: "MANUAL_END" },
     });
-    await new Promise((resolve) => setTimeout(resolve, 200));
   }
 
   private evaluateMove(state: GameState, move: any): number {
-    // همان تابعی که قبلاً داشتید (می‌توانید آن را دقیقاً کپی کنید)
     let score = 0;
     const { from, to } = move;
     const targetPoint = state.board.points[to];
@@ -219,6 +211,7 @@ export class BotPlayer {
     if (this.interval) {
       clearInterval(this.interval);
       this.interval = null;
+      this.isStarted = false;
       console.log(`[Bot ${this.botId}] Stopped`);
     }
   }

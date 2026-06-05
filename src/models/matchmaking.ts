@@ -50,7 +50,6 @@ export async function addToMatchmaking(userId: number): Promise<number> {
         [whiteId]: preset.secondarySeconds,
         [blackId]: preset.secondarySeconds,
       };
-      console.log({ state });
 
       // ذخیره در حافظه سرور
       saveGame(state);
