@@ -12,7 +12,6 @@ export async function runBotIfNeeded(
   playerId: PlayerId,
   rooms: RoomManager,
 ) {
-  // فقط بات اجرا شود
   if (playerId !== BOT_USER_ID) return;
 
   const state = await loadGameState(gameId);
@@ -29,13 +28,18 @@ export async function runBotIfNeeded(
     });
     const newState = await loadGameState(gameId);
     if (newState) {
+      // ارسال پیام جداگانه dice.result برای نمایش تاس در کلاینت
+      rooms.broadcast(gameId, {
+        type: "dice.result",
+        payload: onOkSocketResponse({ dice, playerId }),
+      });
+      // ارسال state جدید برای به‌روزرسانی صفحه
       rooms.broadcast(gameId, {
         type: "game.state",
         payload: onOkSocketResponse(newState),
       });
     }
-    // دوباره چک کن (با تأخیر)
-    setTimeout(() => runBotIfNeeded(gameId, playerId, rooms), 100);
+    setTimeout(() => runBotIfNeeded(gameId, playerId, rooms), 200);
     return;
   }
 
@@ -57,7 +61,7 @@ export async function runBotIfNeeded(
     return;
   }
 
-  // ===== 3. انتخاب و اجرای بهترین حرکت =====
+  // ===== 3. انتخاب و اجرای حرکت =====
   const bestMove = moves[0];
   const validation = validateMove(state, playerId, bestMove.from, bestMove.to, [
     bestMove.die,
@@ -79,6 +83,19 @@ export async function runBotIfNeeded(
 
   const afterMove = await loadGameState(gameId);
   if (afterMove) {
+    // ارسال player.move برای به‌روزرسانی برد
+    rooms.broadcast(gameId, {
+      type: "player.move",
+      payload: onOkSocketResponse({
+        playerId,
+        from: bestMove.from,
+        to: bestMove.to,
+        die: bestMove.die,
+        ownerId: playerId,
+        isUndo: false,
+      }),
+    });
+    // ارسال state جدید
     rooms.broadcast(gameId, {
       type: "game.state",
       payload: onOkSocketResponse(afterMove),
