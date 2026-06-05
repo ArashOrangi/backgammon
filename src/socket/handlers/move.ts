@@ -197,38 +197,9 @@ export async function handleMove(
       }
     }
 
-    if (
-      finalGame.status === "in-progress" &&
-      finalGame.dice &&
-      finalGame.dice.length === 0
-    ) {
-      console.log(
-        `[MOVE] Dice exhausted, auto-passing turn for player ${playerId}`,
-      );
-      await appendGameEvent(gameId, {
-        type: "TURN_PASSED",
-        payload: { playerId, reason: "NO_LEGAL_MOVES" },
-      });
-      const newState = await loadGameState(gameId);
-      if (newState) {
-        finalGame = newState;
-        saveGame(finalGame);
-      }
-      // خودکار تاس برای بازیکن بعدی (اگر بات نبود)
-      const nextPlayer = finalGame.turn;
-      if (nextPlayer && nextPlayer !== 3) {
-        const dice = rollDiceUtil();
-        await appendGameEvent(gameId, {
-          type: "DICE_ROLLED",
-          payload: { playerId: nextPlayer, dice },
-        });
-        const afterRoll = await loadGameState(gameId);
-        if (afterRoll) {
-          finalGame = afterRoll;
-          saveGame(finalGame);
-        }
-      }
-    }
+    // Auto-pass and auto-dice block has been removed
+    // (Previously there was code here that automatically ended turn and rolled dice for next player)
+    // Now the player must explicitly call game.endTurn to pass the turn.
 
     const subStatus = calculateSubStatus(finalGame);
     const legalMoves = generateMoveSequences(
