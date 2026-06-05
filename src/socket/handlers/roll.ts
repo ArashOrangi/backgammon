@@ -14,9 +14,12 @@ import {
   rollStartingDie,
   tryResolveStartingRoll,
 } from "@/game/engine";
-import { createInitialBoard } from "@/game/board";
 import { GameQueue } from "@/game/gameQueue";
-import { appendGameEvent, calculateSubStatus } from "@/game/eventStore";
+import {
+  appendGameEvent,
+  loadGameState,
+  calculateSubStatus,
+} from "@/game/eventStore";
 import { getTimerPresetByLeagueAndType } from "@/models/timerPreset";
 
 const gameQueue = new GameQueue();
@@ -39,7 +42,8 @@ export async function handleRoll(
   }
 
   await gameQueue.enqueue(gameId, async () => {
-    const game = getGame(gameId);
+    // ۱. بارگذاری وضعیت واقعی از دیتابیس (event sourcing)
+    let game = await loadGameState(gameId);
     if (!game) {
       return ctx.send({
         type: "game.error",
@@ -72,32 +76,34 @@ export async function handleRoll(
           payload: { playerId, value },
         });
 
+        // بارگذاری مجدد وضعیت پس از STARTING_ROLLED
+        const afterFirstRoll = await loadGameState(gameId);
+        if (!afterFirstRoll)
+          throw new Error("Failed to reload after starting roll");
+        game = afterFirstRoll;
+        saveGame(game);
+
         rooms.broadcast(gameId, {
           type: "dice.result",
           payload: onOkSocketResponse({
             dice: [value],
             playerId,
             type: "starting",
-          }), // طبق سناریو، type: "starting"
+          }),
         });
 
         const didStart = tryResolveStartingRoll(game);
 
         if (didStart) {
-          const whitePlayer = game.players.find((p) => p.color === "white")!;
-          const blackPlayer = game.players.find((p) => p.color === "black")!;
-
-          // دریافت مقادیر تایمر از دیتابیس (Remote Config)
-          let leagueLevel: number | undefined = undefined; // در آینده از پروفایل بازیکن خوانده شود
-          const gameType = "casual";
           const preset = await getTimerPresetByLeagueAndType(
-            leagueLevel,
-            gameType,
+            undefined,
+            "casual",
           );
           const primarySeconds = preset?.primarySeconds ?? 12;
           const secondarySeconds = preset?.secondarySeconds ?? 120;
 
-          game.board = createInitialBoard(whitePlayer.id, blackPlayer.id);
+          const whitePlayer = game.players.find((p) => p.color === "white")!;
+          const blackPlayer = game.players.find((p) => p.color === "black")!;
 
           await appendGameEvent(game.id, {
             type: "GAME_STARTED",
@@ -111,24 +117,31 @@ export async function handleRoll(
             },
           });
 
-          // ارسال پیام game.turn طبق سناریو
+          // بارگذاری مجدد وضعیت نهایی
+          const freshGame = await loadGameState(gameId);
+          if (!freshGame)
+            throw new Error("Failed to reload after GAME_STARTED");
+          game = freshGame;
+          saveGame(game);
+
+          // ارسال نوبت (با استفاده از freshGame برای رفع خطای TypeScript)
           rooms.broadcast(gameId, {
             type: "game.turn",
             payload: onOkSocketResponse({
-              playerId: game.turn!,
-              color: game.players.find((p) => p.id === game.turn)!.color,
+              playerId: freshGame.turn!,
+              color: freshGame.players.find((p) => p.id === freshGame.turn)!
+                .color,
             }),
           });
         }
 
-        saveGame(game);
+        // پس از هر تغییر، وضعیت را برادکست می‌کنیم
         const subStatus = calculateSubStatus(game);
-        let legalMoves: any[] = [];
-        if (game.turn !== null) {
-          const moves = generateMoveSequences(game, game.turn);
-          legalMoves = flattenMoveSequences(moves);
-        }
-        const stateToSend = { ...game, subStatus, legalMoves };
+        const legalMoves = game.turn
+          ? generateMoveSequences(game, game.turn)
+          : [];
+        const flatLegalMoves = flattenMoveSequences(legalMoves);
+        const stateToSend = { ...game, subStatus, legalMoves: flatLegalMoves };
         rooms.broadcast(gameId, {
           type: "game.state",
           payload: onOkSocketResponse(stateToSend),
@@ -151,6 +164,12 @@ export async function handleRoll(
         payload: { playerId, dice },
       });
 
+      // بارگذاری مجدد وضعیت پس از DICE_ROLLED
+      const afterRoll = await loadGameState(gameId);
+      if (!afterRoll) throw new Error("Failed to reload after dice roll");
+      game = afterRoll;
+      saveGame(game);
+
       rooms.broadcast(gameId, {
         type: "dice.result",
         payload: onOkSocketResponse({ dice, playerId }),
@@ -163,9 +182,13 @@ export async function handleRoll(
           type: "TURN_PASSED",
           payload: { playerId, reason: "NO_LEGAL_MOVES" },
         });
+        const afterTurnPass = await loadGameState(gameId);
+        if (afterTurnPass) {
+          game = afterTurnPass;
+          saveGame(game);
+        }
       }
 
-      saveGame(game);
       const subStatus = calculateSubStatus(game);
       const stateToSend = { ...game, subStatus, legalMoves: flatLegalMoves };
       rooms.broadcast(gameId, {

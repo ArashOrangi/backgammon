@@ -10,7 +10,6 @@ import {
   loadGameState,
   calculateSubStatus,
 } from "@/game/eventStore";
-import { createInitialBoard } from "@/game/board";
 import { rollDie } from "@/utils/dice";
 import { getDefaultTimerPreset } from "@/models/timerPreset";
 import {
@@ -33,7 +32,8 @@ export async function handleReady(
     });
   }
 
-  const game = getGame(gameId);
+  // ۱. بارگذاری وضعیت واقعی از دیتابیس (event sourcing)
+  let game = await loadGameState(gameId);
   if (!game) {
     return ctx.send({
       type: "game.error",
@@ -56,27 +56,31 @@ export async function handleReady(
     });
   }
 
-  if (!game.readyPlayers) game.readyPlayers = [];
-  if (!game.readyPlayers.includes(userId)) {
-    game.readyPlayers.push(userId);
-    saveGame(game);
+  // ۲. مدیریت آمادگی بازیکنان (با استفاده از حافظه موقت، چون این وضعیت در ایونت‌ها ذخیره نمی‌شود)
+  let memoryGame = getGame(gameId);
+  if (!memoryGame) {
+    memoryGame = game;
+    saveGame(memoryGame);
+  }
+  if (!memoryGame.readyPlayers) memoryGame.readyPlayers = [];
+  if (!memoryGame.readyPlayers.includes(userId)) {
+    memoryGame.readyPlayers.push(userId);
+    saveGame(memoryGame);
   }
 
-  // اگر هر دو بازیکن آماده شدند → شروع خودکار بازی
-  if (game.readyPlayers.length === 2) {
+  // ۳. اگر هر دو بازیکن آماده شدند
+  if (memoryGame.readyPlayers.length === 2) {
     const whitePlayer = game.players.find((p) => p.color === "white")!;
     const blackPlayer = game.players.find((p) => p.color === "black")!;
 
     let whiteDie: number, blackDie: number;
     let attempts = 0;
-
-    // حلقه تا زمانی که تاس‌ها مساوی نباشند
     do {
       whiteDie = rollDie();
       blackDie = rollDie();
       attempts++;
 
-      // ثبت ایونت‌های STARTING_ROLLED (برای هر بار تلاش)
+      // ثبت تلاش‌های تاس شروع
       await appendGameEvent(gameId, {
         type: "STARTING_ROLLED",
         payload: { playerId: whitePlayer.id, value: whiteDie },
@@ -85,9 +89,9 @@ export async function handleReady(
         type: "STARTING_ROLLED",
         payload: { playerId: blackPlayer.id, value: blackDie },
       });
-    } while (whiteDie === blackDie && attempts < 10); // حداکثر 10 بار برای اطمینان
+    } while (whiteDie === blackDie && attempts < 10);
 
-    // ارسال تاس شروع به هر دو کلاینت
+    // ارسال تاس‌های شروع به کلاینت‌ها (جهت نمایش)
     rooms.broadcast(gameId, {
       type: "dice.result",
       payload: onOkSocketResponse({
@@ -97,17 +101,11 @@ export async function handleReady(
       }),
     });
 
-    // تعیین شروع‌کننده (کسی که تاس بزرگتری دارد)
     const startingPlayerId =
       whiteDie > blackDie ? whitePlayer.id : blackPlayer.id;
-    const dice = [whiteDie, blackDie]; // تاس‌هایی که بازی با آنها شروع می‌شود
-
-    // ساخت تخته اولیه
-    game.board = createInitialBoard(whitePlayer.id, blackPlayer.id);
-
-    // دریافت تنظیمات تایمر
     const timerSettings = await getDefaultTimerPreset();
 
+    // ۴. ثبت رویداد شروع بازی
     await appendGameEvent(gameId, {
       type: "GAME_STARTED",
       payload: {
@@ -120,45 +118,51 @@ export async function handleReady(
       },
     });
 
-    // به‌روزرسانی وضعیت بازی در حافظه
-    game.status = "in-progress";
-    game.turn = startingPlayerId;
-    game.dice = dice; // ⭐ تاس‌های شروع را نگه می‌داریم
-    game.turnStartedAt = Date.now();
-    game.lastActionAt = Date.now();
-    delete game.readyPlayers;
-    saveGame(game);
+    // ۵. بازسازی وضعیت نهایی از روی ایونت‌ها (حتماً بعد از ثبت GAME_STARTED)
+    const freshGame = await loadGameState(gameId);
+    if (!freshGame) {
+      throw new Error("Failed to reload game after start");
+    }
 
-    // محاسبه زیروضعیت و حرکات قانونی برای وضعیت فعلی
-    const subStatus = calculateSubStatus(game);
-    const legalMoves = generateMoveSequences(game, game.turn);
+    // ۶. جایگزینی حافظه موقت با وضعیت جدید
+    saveGame(freshGame);
+    // پاک کردن readyPlayers (دیگر نیازی نیست)
+    delete freshGame.readyPlayers;
+
+    // ۷. محاسبه وضعیت فرعی و حرکات قانونی
+    const subStatus = calculateSubStatus(freshGame);
+    const legalMoves = freshGame.turn
+      ? generateMoveSequences(freshGame, freshGame.turn)
+      : [];
     const flatLegalMoves = flattenMoveSequences(legalMoves);
     const stateToSend = {
-      ...game,
+      ...freshGame,
       subStatus,
       legalMoves: flatLegalMoves,
     };
 
-    // برودکست وضعیت کامل بازی (شامل dice و legalMoves)
+    // ۸. ارسال وضعیت کامل و نوبت به همه
     rooms.broadcast(gameId, {
       type: "game.state",
       payload: onOkSocketResponse(stateToSend, "Game started automatically"),
     });
 
-    // ارسال پیام نوبت
     rooms.broadcast(gameId, {
       type: "game.turn",
       payload: onOkSocketResponse({
-        playerId: startingPlayerId,
-        color: startingPlayerId === whitePlayer.id ? "white" : "black",
+        playerId: freshGame.turn!,
+        color: freshGame.players.find((p) => p.id === freshGame.turn)!.color,
       }),
     });
   } else {
-    saveGame(game);
-    const gameCopy = { ...game, subStatus: "playerJoin" as const };
+    // هنوز هر دو آماده نشده‌اند
+    const stateToSend = {
+      ...memoryGame,
+      subStatus: "playerJoin" as const,
+    };
     ctx.send({
       type: "game.state",
-      payload: onOkSocketResponse(gameCopy, "Waiting for opponent to ready"),
+      payload: onOkSocketResponse(stateToSend, "Waiting for opponent to ready"),
     });
   }
 }

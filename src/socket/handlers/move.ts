@@ -17,7 +17,7 @@ import {
 } from "@/game/eventStore";
 import { GameQueue } from "@/game/gameQueue";
 import { isGameOver, calculateWinType } from "../../game/engine";
-import { saveGame, getGame } from "../../game/gameStore";
+import { saveGame } from "../../game/gameStore";
 import { SPECIAL_POSITIONS } from "@/game/types";
 
 // نوع حرکت ورودی مطابق سناریو (آرایه‌ای از اشیاء)
@@ -65,7 +65,8 @@ export async function handleMove(
   }
 
   await gameQueue.enqueue(gameId, async () => {
-    let finalGame = getGame(gameId);
+    // بارگذاری وضعیت واقعی از دیتابیس (event sourcing)
+    let finalGame = await loadGameState(gameId);
     if (!finalGame) {
       return ctx.send({
         type: "game.error",
@@ -100,7 +101,7 @@ export async function handleMove(
           });
         }
 
-        //  ثبت Undo در دیتابیس (علامت زدن آخرین حرکت به عنوان isUndo=true)
+        // ثبت Undo در دیتابیس (علامت زدن آخرین حرکت به عنوان isUndo=true)
         const undonePayload = await undoLastMove(gameId, playerId);
         if (!undonePayload) {
           console.log(`[MOVE] Undo failed: no move to undo`);
@@ -173,13 +174,12 @@ export async function handleMove(
 
         // اگر حرکت باعث ضربه (hit) شده، یک حرکت مجازی برای انتقال مهره حریف به BAR اضافه می‌کنیم
         if (validation.isHit) {
-          // تشخیص ownerId حریف (از نقطه مقصد قبل از حرکت)
           const opponentId = finalGame.players.find(
             (p) => p.id !== playerId,
           )?.id;
           if (opponentId) {
             broadcastMoves.push({
-              playerId: opponentId, // صاحب مهره‌ای که زده می‌شود
+              playerId: opponentId,
               from: to,
               to: SPECIAL_POSITIONS.BAR,
               die: 0,
@@ -196,10 +196,12 @@ export async function handleMove(
             type: "GAME_FINISHED",
             payload: { winner: playerId, winType, reason: "REGULAR" },
           });
-          finalGame = (await loadGameState(gameId)) || finalGame;
-          saveGame(finalGame);
+          const finishedGame = await loadGameState(gameId);
+          if (finishedGame) {
+            finalGame = finishedGame;
+            saveGame(finalGame);
+          }
 
-          // برادکست نتیجه و وضعیت نهایی
           rooms.broadcast(gameId, {
             type: "game.result",
             payload: onOkSocketResponse({
@@ -211,7 +213,7 @@ export async function handleMove(
           const finalStateWithMeta = {
             ...finalGame,
             subStatus: calculateSubStatus(finalGame),
-            legalMoves: [], // بعد از اتمام بازی حرکتی وجود ندارد
+            legalMoves: [],
           };
           rooms.broadcast(gameId, {
             type: "game.state",
@@ -225,7 +227,7 @@ export async function handleMove(
       }
     }
 
-    //  پس از پردازش همه حرکات، اگر تاس‌ها تمام شده‌اند، نوبت را خودکار عوض کن
+    // پس از پردازش همه حرکات، اگر تاس‌ها تمام شده‌اند، نوبت را خودکار عوض کن
     if (
       finalGame.status === "in-progress" &&
       finalGame.dice &&
@@ -238,7 +240,6 @@ export async function handleMove(
         type: "TURN_PASSED",
         payload: { playerId, reason: "NO_LEGAL_MOVES" },
       });
-      // بارگذاری وضعیت جدید پس از تغییر نوبت
       const newState = await loadGameState(gameId);
       if (newState) {
         finalGame = newState;
@@ -263,7 +264,7 @@ export async function handleMove(
       payload: onOkSocketResponse(stateToSend),
     });
 
-    // ارسال لیست حرکات انجام‌شده (player.move) طبق سناریو
+    // ارسال لیست حرکات انجام‌شده (player.move)
     if (broadcastMoves.length) {
       const payloadToSend =
         broadcastMoves.length === 1 ? broadcastMoves[0] : broadcastMoves;
