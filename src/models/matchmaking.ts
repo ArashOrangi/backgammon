@@ -1,6 +1,10 @@
 import { prismaGameCreate } from "./game";
 import { OrmState } from "./enums";
-import { appendGameEvent, loadGameState } from "@/game/eventStore";
+import {
+  appendGameEvent,
+  loadGameState,
+  forceSnapshot,
+} from "@/game/eventStore";
 import { saveGame } from "@/game/gameStore";
 import { getDefaultTimerPreset } from "./timerPreset";
 import { prisma } from "@/components/prisma";
@@ -46,7 +50,12 @@ export async function addToMatchmaking(userId: number): Promise<number> {
         [whiteId]: preset.secondarySeconds,
         [blackId]: preset.secondarySeconds,
       };
+      console.log({ state });
+
+      // ذخیره در حافظه سرور
       saveGame(state);
+      // ثبت snapshot جدید با مقادیر صحیح تایمر در دیتابیس
+      await forceSnapshot(game.id, state);
     }
 
     return game.id;

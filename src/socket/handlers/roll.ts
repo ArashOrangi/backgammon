@@ -99,6 +99,12 @@ export async function handleRoll(
             undefined,
             "casual",
           );
+          console.log(
+            "======================\n",
+            preset,
+            "=======================\n",
+          );
+
           const primarySeconds = preset?.primarySeconds ?? 12;
           const secondarySeconds = preset?.secondarySeconds ?? 120;
 

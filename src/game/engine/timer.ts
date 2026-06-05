@@ -18,7 +18,7 @@ export async function checkGameTimeouts(rooms: RoomManager) {
     // محاسبه زمان سپری شده از شروع نوبت (به ثانیه)
     const turnStarted = game.turnStartedAt ?? now;
     const elapsed = (now - turnStarted) / 1000;
-    const primary = game.primaryTimePerTurn ?? 30;
+    const primary = game.primaryTimePerTurn;
 
     if (elapsed > primary) {
       const extra = elapsed - primary;

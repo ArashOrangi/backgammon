@@ -10,13 +10,17 @@ import {
   onOkSocketResponse,
 } from "@/responses/response-builder";
 import { addToMatchmaking } from "@/models/matchmaking";
-import { loadGameState, appendGameEvent } from "@/game/eventStore";
+import {
+  loadGameState,
+  appendGameEvent,
+  forceSnapshot,
+} from "@/game/eventStore";
 import { prismaGameCreate } from "@/models/game";
 import { prisma } from "@/components/prisma";
 import { OrmState } from "@/models/enums";
 import { BotPlayer } from "@/bot/botPlayer";
-import { getDefaultTimerPreset } from "@/models/timerPreset"; // new
-import { GameState } from "@/game/types"; // new
+import { getDefaultTimerPreset } from "@/models/timerPreset";
+import { GameState } from "@/game/types";
 
 type JoinPayload = { gameId: number; userId: number };
 
@@ -25,17 +29,28 @@ const waitingSockets = new Map<number, SocketContext>();
 // تایمرهای مربوط به هر کاربر در صف (برای ساخت بات)
 const waitingTimers = new Map<number, NodeJS.Timeout>();
 
-// new: تابع کمکی برای اعمال تنظیمات تایمر از دیتابیس
+// تابع کمکی برای اعمال تنظیمات تایمر از دیتابیس و ذخیره snapshot جدید
 async function applyTimerSettingsToGame(game: GameState) {
   const preset = await getDefaultTimerPreset();
-  game.primaryTimePerTurn = preset.primarySeconds;
+  let needUpdate = false;
+
+  if (game.primaryTimePerTurn === 12 || game.primaryTimePerTurn === 0) {
+    game.primaryTimePerTurn = preset.primarySeconds;
+    needUpdate = true;
+  }
+
   if (!game.secondaryTimeBank) game.secondaryTimeBank = {};
   for (const p of game.players) {
     if (game.secondaryTimeBank[p.id] === undefined) {
       game.secondaryTimeBank[p.id] = preset.secondarySeconds;
+      needUpdate = true;
     }
   }
-  saveGame(game);
+
+  if (needUpdate) {
+    saveGame(game);
+    await forceSnapshot(game.id, game);
+  }
 }
 
 // شناسه بات (حتماً باید در دیتابیس وجود داشته باشد)
@@ -67,7 +82,7 @@ export async function handleJoin(
       if (matchedGameId === 0) {
         // ---------- وارد صف شد ----------
         waitingSockets.set(userId, ctx);
-        const waitingGame = createInitialGameState(-1);
+        const waitingGame = await createInitialGameState(-1);
         waitingGame.status = "waiting";
         waitingGame.subStatus = "playerJoin";
         waitingGame.players = [{ id: userId, color: "white" }];
@@ -94,7 +109,7 @@ export async function handleJoin(
             const game = await loadGameState(gameIdForBot);
             if (!game) return;
 
-            // new: اعمال تنظیمات تایمر قبل از ذخیره و ارسال
+            // اعمال تنظیمات تایمر و ذخیره snapshot جدید
             await applyTimerSettingsToGame(game);
 
             // اضافه کردن کاربر انسانی به اتاق
@@ -126,7 +141,7 @@ export async function handleJoin(
           });
         }
 
-        // new: اعمال تنظیمات تایمر قبل از ادامه
+        // اعمال تنظیمات تایمر و ذخیره snapshot جدید
         await applyTimerSettingsToGame(game);
 
         // لغو تایمر کاربر اول (اگر وجود داشته باشد)
@@ -161,12 +176,12 @@ export async function handleJoin(
     // ---------- حالت عادی (با gameId مشخص) ----------
     let game = getGame(gameId);
     if (!game) {
-      game = createInitialGameState(gameId);
+      game = await createInitialGameState(gameId);
       saveGame(game);
-      // new: بازی تازه ساخته شده، تنظیمات تایمر را از دیتابیس اعمال کن
+      // بازی تازه ساخته شده، تنظیمات تایمر را از دیتابیس اعمال کن
       await applyTimerSettingsToGame(game);
     } else {
-      // new: حتی اگر بازی وجود دارد، مطمئن شو تایمرها تنظیم شده‌اند
+      // حتی اگر بازی وجود دارد، مطمئن شو تایمرها تنظیم شده‌اند
       await applyTimerSettingsToGame(game);
     }
 
@@ -252,7 +267,7 @@ async function createGameWithBot(
     payload: { playerId: botId, color: "black" },
   });
 
-  // new: بعد از ثبت ایونت‌ها، تایمرها را از دیتابیس اعمال کن
+  // بعد از ثبت ایونت‌ها، تایمرها را از دیتابیس اعمال کن و snapshot را به‌روز کن
   const state = await loadGameState(game.id);
   if (state) {
     await applyTimerSettingsToGame(state);

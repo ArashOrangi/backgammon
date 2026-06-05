@@ -1,3 +1,4 @@
+import { getDefaultTimerPreset } from "@/models/timerPreset";
 import { GameState, PlayerId, PlayerInfo } from "./types";
 
 const games = new Map<number, GameState>();
@@ -50,7 +51,10 @@ export function createInitialBoard(whiteId: PlayerId, blackId: PlayerId) {
 /* Initial state factory                                              */
 /* ------------------------------------------------------------------ */
 
-export function createInitialGameState(gameId: number): GameState {
+export async function createInitialGameState(
+  gameId: number,
+): Promise<GameState> {
+  const preset = await getDefaultTimerPreset();
   return {
     id: gameId,
     players: [],
@@ -69,11 +73,11 @@ export function createInitialGameState(gameId: number): GameState {
     pipCount: {},
     cubeValue: 1,
     createdAt: Date.now(),
-    lastActionAt: Date.now(), // برای Network Timeout ضروریه
+    lastActionAt: Date.now(),
     turnStartedAt: undefined,
-    turnTimeLimit: 30, // پیش‌فرض ۳۰ ثانیه
-    primaryTimePerTurn: 12,
-    secondaryTimeBank: {},
+    turnTimeLimit: 30, // ممکن است بعداً حذف شود
+    primaryTimePerTurn: preset.primarySeconds,
+    secondaryTimeBank: {}, // خالی بماند تا بعداً پر شود? اما بهتر است برای بازیکنان آینده مقداردهی نشود چون هنوز بازیکنی نیست
   };
 }
 
@@ -81,8 +85,8 @@ export function createInitialGameState(gameId: number): GameState {
 /* Store Ops                                                          */
 /* ------------------------------------------------------------------ */
 
-export function createGame(id: number): GameState {
-  const game = createInitialGameState(id);
+export async function createGame(id: number): Promise<GameState> {
+  const game = await createInitialGameState(id);
   games.set(id, game);
   return game;
 }

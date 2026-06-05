@@ -1,4 +1,4 @@
-import { getGame, saveGame } from "../../game/gameStore";
+import { saveGame } from "../../game/gameStore";
 import { SocketContext } from "../socket-context";
 import { RoomManager } from "../room-manager";
 import {
@@ -17,6 +17,9 @@ import {
   flattenMoveSequences,
 } from "@/game/moveGenerator";
 
+// ذخیره وضعیت آمادگی هر بازی (در حافظه، نه در state بازی)
+const readyStates = new Map<number, Set<number>>();
+
 export async function handleReady(
   ctx: SocketContext,
   payload: { gameId: number },
@@ -32,7 +35,7 @@ export async function handleReady(
     });
   }
 
-  // ۱. بارگذاری وضعیت واقعی از دیتابیس (event sourcing)
+  // ۱. بارگذاری آخرین وضعیت از دیتابیس (event sourcing)
   let game = await loadGameState(gameId);
   if (!game) {
     return ctx.send({
@@ -56,20 +59,17 @@ export async function handleReady(
     });
   }
 
-  // ۲. مدیریت آمادگی بازیکنان (با استفاده از حافظه موقت، چون این وضعیت در ایونت‌ها ذخیره نمی‌شود)
-  let memoryGame = getGame(gameId);
-  if (!memoryGame) {
-    memoryGame = game;
-    saveGame(memoryGame);
+  // ۲. ثبت آمادگی در حافظه موقت
+  if (!readyStates.has(gameId)) {
+    readyStates.set(gameId, new Set());
   }
-  if (!memoryGame.readyPlayers) memoryGame.readyPlayers = [];
-  if (!memoryGame.readyPlayers.includes(userId)) {
-    memoryGame.readyPlayers.push(userId);
-    saveGame(memoryGame);
+  const readySet = readyStates.get(gameId)!;
+  if (!readySet.has(userId)) {
+    readySet.add(userId);
   }
 
-  // ۳. اگر هر دو بازیکن آماده شدند
-  if (memoryGame.readyPlayers.length === 2) {
+  // ۳. اگر هر دو آماده شدند → شروع بازی
+  if (readySet.size === 2) {
     const whitePlayer = game.players.find((p) => p.color === "white")!;
     const blackPlayer = game.players.find((p) => p.color === "black")!;
 
@@ -79,8 +79,6 @@ export async function handleReady(
       whiteDie = rollDie();
       blackDie = rollDie();
       attempts++;
-
-      // ثبت تلاش‌های تاس شروع
       await appendGameEvent(gameId, {
         type: "STARTING_ROLLED",
         payload: { playerId: whitePlayer.id, value: whiteDie },
@@ -91,7 +89,6 @@ export async function handleReady(
       });
     } while (whiteDie === blackDie && attempts < 10);
 
-    // ارسال تاس‌های شروع به کلاینت‌ها (جهت نمایش)
     rooms.broadcast(gameId, {
       type: "dice.result",
       payload: onOkSocketResponse({
@@ -105,7 +102,6 @@ export async function handleReady(
       whiteDie > blackDie ? whitePlayer.id : blackPlayer.id;
     const timerSettings = await getDefaultTimerPreset();
 
-    // ۴. ثبت رویداد شروع بازی
     await appendGameEvent(gameId, {
       type: "GAME_STARTED",
       payload: {
@@ -118,18 +114,16 @@ export async function handleReady(
       },
     });
 
-    // ۵. بازسازی وضعیت نهایی از روی ایونت‌ها (حتماً بعد از ثبت GAME_STARTED)
+    // بارگذاری مجدد وضعیت جدید
     const freshGame = await loadGameState(gameId);
-    if (!freshGame) {
-      throw new Error("Failed to reload game after start");
-    }
+    if (!freshGame) throw new Error("Failed to reload game after start");
 
-    // ۶. جایگزینی حافظه موقت با وضعیت جدید
+    // پاک کردن وضعیت آمادگی این بازی از حافظه موقت
+    readyStates.delete(gameId);
+
+    // ذخیره در حافظه سرور
     saveGame(freshGame);
-    // پاک کردن readyPlayers (دیگر نیازی نیست)
-    delete freshGame.readyPlayers;
 
-    // ۷. محاسبه وضعیت فرعی و حرکات قانونی
     const subStatus = calculateSubStatus(freshGame);
     const legalMoves = freshGame.turn
       ? generateMoveSequences(freshGame, freshGame.turn)
@@ -141,7 +135,6 @@ export async function handleReady(
       legalMoves: flatLegalMoves,
     };
 
-    // ۸. ارسال وضعیت کامل و نوبت به همه
     rooms.broadcast(gameId, {
       type: "game.state",
       payload: onOkSocketResponse(stateToSend, "Game started automatically"),
@@ -155,9 +148,9 @@ export async function handleReady(
       }),
     });
   } else {
-    // هنوز هر دو آماده نشده‌اند
+    // هنوز هر دو آماده نشده‌اند: فقط به همین کلاینت وضعیت فعلی را بفرست
     const stateToSend = {
-      ...memoryGame,
+      ...game,
       subStatus: "playerJoin" as const,
     };
     ctx.send({

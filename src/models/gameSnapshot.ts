@@ -44,6 +44,8 @@ export async function prismaGameSnapshotCreate({
   state: Prisma.InputJsonValue;
 }) {
   try {
+    console.log({ gameId, state });
+
     const snapshot = await prisma.gameSnapshots.create({
       data: {
         gameId,

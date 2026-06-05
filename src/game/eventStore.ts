@@ -18,6 +18,7 @@ import { createInitialBoard } from "./board";
 import { applyMove, switchTurn } from "./engine";
 import { generateMoveSequences } from "./moveGenerator";
 import { OrmState } from "@/models/enums";
+import { prisma } from "@/components/prisma";
 
 /**
  * این تابع تضمین می‌کنه که اگه ایونت جدیدی اضافه کردی و فراموش کردی
@@ -269,7 +270,7 @@ export async function loadGameState(gameId: number): Promise<GameState | null> {
     state = snapshot.state as unknown as GameState;
     sequence = snapshot.sequence;
   } else {
-    state = createInitialGameState(gameId);
+    state = await createInitialGameState(gameId);
   }
 
   const events = await prismaGameEventGetAfterSequence({ gameId, sequence });
@@ -302,6 +303,7 @@ export async function appendGameEvent(gameId: number, event: GameEvent) {
   if (nextSequence % SNAPSHOT_INTERVAL === 0) {
     const state = await loadGameState(gameId);
     if (state) {
+      console.log("bbbbbbbbbbbbbbbbbbbb", state);
       await prismaGameSnapshotCreate({
         gameId,
         sequence: nextSequence,
@@ -324,7 +326,7 @@ export async function loadGameStateUntil(
     state = snapshot.state as unknown as GameState;
     sequence = snapshot.sequence;
   } else {
-    state = createInitialGameState(gameId);
+    state = await createInitialGameState(gameId);
   }
 
   const events = await prismaGameEventGetAfterSequence({
@@ -358,4 +360,29 @@ export async function undoLastMove(gameId: number, playerId: PlayerId) {
 
   const undoneEvent = result as GameEvent;
   return undoneEvent.payload;
+}
+
+export async function forceSnapshot(gameId: number, state: GameState) {
+  const lastSequence = await prismaGameEventGetLastSequence(gameId);
+  if (typeof lastSequence !== "number") return;
+
+  // بررسی وجود snapshot برای همین (gameId, sequence)
+  const existing = await prisma.gameSnapshots.findFirst({
+    where: { gameId, sequence: lastSequence },
+  });
+
+  if (existing) {
+    // آپدیت snapshot موجود
+    await prisma.gameSnapshots.update({
+      where: { id: existing.id },
+      data: { state: state as unknown as Prisma.InputJsonValue },
+    });
+  } else {
+    // ایجاد snapshot جدید
+    await prismaGameSnapshotCreate({
+      gameId,
+      sequence: lastSequence,
+      state: state as unknown as Prisma.InputJsonValue,
+    });
+  }
 }
