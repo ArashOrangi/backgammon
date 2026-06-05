@@ -31,8 +31,7 @@ deploy:
     - xcopy /Y /E /I C:\Users\Public\forprisma node_modules
     - npm install --registry="https://mirror-npm.runflare.com"
     # - npx prisma migrate reset -f
-
-    # - npx prisma migrate dev --name user_profile
+    - npx prisma migrate dev --name user_profile
     - npx prisma generate
     # - npx tsx scripts/seed-chat.ts
     # - npx tsx scripts/seed-timer.ts
