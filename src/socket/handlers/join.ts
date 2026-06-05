@@ -15,6 +15,8 @@ import { prismaGameCreate } from "@/models/game";
 import { prisma } from "@/components/prisma";
 import { OrmState } from "@/models/enums";
 import { BotPlayer } from "@/bot/botPlayer";
+import { getDefaultTimerPreset } from "@/models/timerPreset"; // new
+import { GameState } from "@/game/types"; // new
 
 type JoinPayload = { gameId: number; userId: number };
 
@@ -22,6 +24,20 @@ type JoinPayload = { gameId: number; userId: number };
 const waitingSockets = new Map<number, SocketContext>();
 // تایمرهای مربوط به هر کاربر در صف (برای ساخت بات)
 const waitingTimers = new Map<number, NodeJS.Timeout>();
+
+// new: تابع کمکی برای اعمال تنظیمات تایمر از دیتابیس
+async function applyTimerSettingsToGame(game: GameState) {
+  const preset = await getDefaultTimerPreset();
+  game.primaryTimePerTurn = preset.primarySeconds;
+  if (!game.secondaryTimeBank) game.secondaryTimeBank = {};
+  for (const p of game.players) {
+    if (game.secondaryTimeBank[p.id] === undefined) {
+      game.secondaryTimeBank[p.id] = preset.secondarySeconds;
+    }
+  }
+  saveGame(game);
+}
+
 // شناسه بات (حتماً باید در دیتابیس وجود داشته باشد)
 function getBotId(): number {
   const id = Number(process.env.BOT_USER_ID);
@@ -78,6 +94,9 @@ export async function handleJoin(
             const game = await loadGameState(gameIdForBot);
             if (!game) return;
 
+            // new: اعمال تنظیمات تایمر قبل از ذخیره و ارسال
+            await applyTimerSettingsToGame(game);
+
             // اضافه کردن کاربر انسانی به اتاق
             rooms.join(gameIdForBot, ctx, "player");
             game.status = "ready";
@@ -106,6 +125,9 @@ export async function handleJoin(
             payload: onErrorSocketResponse("Game not found"),
           });
         }
+
+        // new: اعمال تنظیمات تایمر قبل از ادامه
+        await applyTimerSettingsToGame(game);
 
         // لغو تایمر کاربر اول (اگر وجود داشته باشد)
         const players = game.players;
@@ -141,6 +163,11 @@ export async function handleJoin(
     if (!game) {
       game = createInitialGameState(gameId);
       saveGame(game);
+      // new: بازی تازه ساخته شده، تنظیمات تایمر را از دیتابیس اعمال کن
+      await applyTimerSettingsToGame(game);
+    } else {
+      // new: حتی اگر بازی وجود دارد، مطمئن شو تایمرها تنظیم شده‌اند
+      await applyTimerSettingsToGame(game);
     }
 
     const alreadyInGame = game.players.find((p) => p.id === userId);
@@ -224,6 +251,13 @@ async function createGameWithBot(
     type: "PLAYER_JOINED",
     payload: { playerId: botId, color: "black" },
   });
+
+  // new: بعد از ثبت ایونت‌ها، تایمرها را از دیتابیس اعمال کن
+  const state = await loadGameState(game.id);
+  if (state) {
+    await applyTimerSettingsToGame(state);
+  }
+
   return game.id;
 }
 
