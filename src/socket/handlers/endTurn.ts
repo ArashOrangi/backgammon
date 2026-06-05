@@ -94,7 +94,7 @@ export async function handleEndTurn(
           (p) => p.id !== playerId,
         )?.id;
         if (opponentId && updatedGame.turn === opponentId) {
-          await runBotIfNeeded(gameId, opponentId);
+          await runBotIfNeeded(gameId, opponentId, rooms);
         }
       }
     } catch (err) {

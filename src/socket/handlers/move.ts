@@ -282,7 +282,7 @@ export async function handleMove(
         (p) => p.id !== playerId,
       )?.id;
       if (opponentId && afterMoveState.turn === opponentId) {
-        await runBotIfNeeded(gameId, opponentId);
+        await runBotIfNeeded(gameId, opponentId, rooms);
       }
     }
     // ====================================================

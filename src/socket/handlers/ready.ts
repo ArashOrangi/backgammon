@@ -158,16 +158,16 @@ export async function handleReady(
       }),
     });
     if (freshGame.status === "in-progress") {
-      await runBotIfNeeded(gameId, freshGame.turn!);
+      await runBotIfNeeded(gameId, freshGame.turn!, rooms);
     }
     // ========== اضافه شده: اجرای بات در صورت نیاز ==========
     if (freshGame.status === "in-progress") {
       // همواره نوبت فعلی را به بات رانر بده (خودش بررسی می‌کند که آیا آن بازیکن بات است)
-      await runBotIfNeeded(gameId, freshGame.turn!);
+      await runBotIfNeeded(gameId, freshGame.turn!, rooms);
     }
     // ====================================================
     if (freshGame.status === "in-progress") {
-      await runBotIfNeeded(gameId, freshGame.turn!);
+      await runBotIfNeeded(gameId, freshGame.turn!, rooms);
     }
   } else {
     // هنوز هر دو آماده نشده‌اند: فقط به همین کلاینت وضعیت فعلی را بفرست

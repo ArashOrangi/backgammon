@@ -21,7 +21,7 @@ import {
   calculateSubStatus,
 } from "@/game/eventStore";
 import { getTimerPresetByLeagueAndType } from "@/models/timerPreset";
-import { runBotIfNeeded } from "@/game/botRunner"; // اضافه شده
+import { runBotIfNeeded } from "@/game/botRunner";
 
 const gameQueue = new GameQueue();
 
@@ -43,7 +43,6 @@ export async function handleRoll(
   }
 
   await gameQueue.enqueue(gameId, async () => {
-    // ۱. بارگذاری وضعیت واقعی از دیتابیس (event sourcing)
     let game = await loadGameState(gameId);
     if (!game) {
       return ctx.send({
@@ -77,7 +76,6 @@ export async function handleRoll(
           payload: { playerId, value },
         });
 
-        // بارگذاری مجدد وضعیت پس از STARTING_ROLLED
         const afterFirstRoll = await loadGameState(gameId);
         if (!afterFirstRoll)
           throw new Error("Failed to reload after starting roll");
@@ -100,7 +98,6 @@ export async function handleRoll(
             undefined,
             "casual",
           );
-
           const primarySeconds = preset?.primarySeconds ?? 12;
           const secondarySeconds = preset?.secondarySeconds ?? 120;
 
@@ -119,14 +116,12 @@ export async function handleRoll(
             },
           });
 
-          // بارگذاری مجدد وضعیت نهایی
           const freshGame = await loadGameState(gameId);
           if (!freshGame)
             throw new Error("Failed to reload after GAME_STARTED");
           game = freshGame;
           saveGame(game);
 
-          // ارسال نوبت (با استفاده از freshGame برای رفع خطای TypeScript)
           rooms.broadcast(gameId, {
             type: "game.turn",
             payload: onOkSocketResponse({
@@ -137,7 +132,6 @@ export async function handleRoll(
           });
         }
 
-        // پس از هر تغییر، وضعیت را برادکست می‌کنیم
         const subStatus = calculateSubStatus(game);
         const legalMoves = game.turn
           ? generateMoveSequences(game, game.turn)
@@ -148,17 +142,11 @@ export async function handleRoll(
           type: "game.state",
           payload: onOkSocketResponse(stateToSend),
         });
+
+        // اجرای بات در صورت نیاز (فقط یک بار)
         if (game.status === "in-progress") {
-          await runBotIfNeeded(gameId, game.turn!);
+          await runBotIfNeeded(gameId, game.turn!, rooms);
         }
-        // ========== اضافه شده: اجرای بات در صورت نیاز ==========
-        if (game.status === "in-progress") {
-          const botId = game.players.find((p) => p.id !== playerId)?.id;
-          if (botId && game.turn === botId) {
-            await runBotIfNeeded(gameId, botId);
-          }
-        }
-        // ====================================================
         return;
       }
 
@@ -177,7 +165,6 @@ export async function handleRoll(
         payload: { playerId, dice },
       });
 
-      // بارگذاری مجدد وضعیت پس از DICE_ROLLED
       const afterRoll = await loadGameState(gameId);
       if (!afterRoll) throw new Error("Failed to reload after dice roll");
       game = afterRoll;
@@ -208,17 +195,11 @@ export async function handleRoll(
         type: "game.state",
         payload: onOkSocketResponse(stateToSend),
       });
+
+      // اجرای بات در صورت نیاز (فقط یک بار)
       if (game.status === "in-progress") {
-        await runBotIfNeeded(gameId, game.turn!);
+        await runBotIfNeeded(gameId, game.turn!, rooms);
       }
-      // ========== اضافه شده: اجرای بات در صورت نیاز ==========
-      if (game.status === "in-progress") {
-        const opponentId = game.players.find((p) => p.id !== playerId)?.id;
-        if (opponentId && game.turn === opponentId) {
-          await runBotIfNeeded(gameId, opponentId);
-        }
-      }
-      // ====================================================
     } catch (err) {
       console.error("Roll Error:", err);
       ctx.send({

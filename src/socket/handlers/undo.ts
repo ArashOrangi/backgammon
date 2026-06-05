@@ -69,7 +69,7 @@ export async function handleUndo(
     if (updatedGame.status === "in-progress") {
       const botId = updatedGame.players.find((p) => p.id !== playerId)?.id;
       if (botId && updatedGame.turn === botId) {
-        await runBotIfNeeded(gameId, botId);
+        await runBotIfNeeded(gameId, botId, rooms);
       }
     }
   });
