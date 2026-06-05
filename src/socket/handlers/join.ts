@@ -10,6 +10,7 @@ import {
   onOkSocketResponse,
 } from "@/responses/response-builder";
 import { addToMatchmaking } from "@/models/matchmaking";
+
 import {
   loadGameState,
   appendGameEvent,
@@ -23,21 +24,17 @@ import { GameState } from "@/game/types";
 
 type JoinPayload = { gameId: number; userId: number };
 
-// صف سوکت‌های منتظر
+// صف سوکت‌های منتظر (برای حالت انسانی - اگر نیاز دارید نگه دارید)
 const waitingSockets = new Map<number, SocketContext>();
-// تایمرهای مربوط به هر کاربر در صف (برای ساخت بات)
 const waitingTimers = new Map<number, NodeJS.Timeout>();
 
-// تابع کمکی برای اعمال تنظیمات تایمر از دیتابیس و ذخیره snapshot جدید
 async function applyTimerSettingsToGame(game: GameState) {
   const preset = await getDefaultTimerPreset();
   let needUpdate = false;
-
   if (game.primaryTimePerTurn === 12 || game.primaryTimePerTurn === 0) {
     game.primaryTimePerTurn = preset.primarySeconds;
     needUpdate = true;
   }
-
   if (!game.secondaryTimeBank) game.secondaryTimeBank = {};
   for (const p of game.players) {
     if (game.secondaryTimeBank[p.id] === undefined) {
@@ -45,17 +42,10 @@ async function applyTimerSettingsToGame(game: GameState) {
       needUpdate = true;
     }
   }
-
   if (needUpdate) {
     saveGame(game);
     await forceSnapshot(game.id, game);
   }
-}
-
-// شناسه بات (حتماً باید در دیتابیس وجود داشته باشد)
-function getBotId(): number {
-  const id = 1;
-  return isNaN(id) ? 999999 : id;
 }
 
 export async function handleJoin(
@@ -69,98 +59,30 @@ export async function handleJoin(
   try {
     // ---------- حالت مچ‌میکینگ (خودکار) ----------
     if (gameId === -1) {
-      // جلوگیری از درخواست تکراری
-      if (waitingSockets.has(userId)) {
+      // ساخت مستقیم بازی با بات (بدون صف و تایمر)
+      const gameIdForBot = await createGameWithBot(userId, 1);
+      if (!gameIdForBot) {
         return ctx.send({
           type: "game.error",
-          payload: onErrorSocketResponse("Already in queue"),
+          payload: onErrorSocketResponse("Failed to create bot game"),
         });
       }
+      const game = await loadGameState(gameIdForBot);
+      if (!game) return;
 
-      const matchedGameId = await addToMatchmaking(userId);
-      if (matchedGameId === 0) {
-        // ---------- وارد صف شد ----------
-        waitingSockets.set(userId, ctx);
-        const waitingGame = await createInitialGameState(-1);
-        waitingGame.status = "waiting";
-        waitingGame.subStatus = "playerJoin";
-        waitingGame.players = [{ id: userId, color: "white" }];
-        ctx.send({
-          type: "game.state",
-          payload: onOkSocketResponse(waitingGame, "Waiting for opponent"),
-        });
+      await applyTimerSettingsToGame(game);
+      rooms.join(gameIdForBot, ctx, "player");
+      game.status = "ready";
+      game.subStatus = "gameReady";
+      saveGame(game);
 
-        // تنظیم تایمر ۱۰ ثانیه برای ساخت بات
-        const timer = setTimeout(async () => {
-          if (waitingSockets.has(userId)) {
-            waitingSockets.delete(userId);
-            waitingTimers.delete(userId);
+      ctx.send({
+        type: "game.state",
+        payload: onOkSocketResponse(game, "Bot joined as opponent"),
+      });
 
-            const gameIdForBot = await createGameWithBot(userId, getBotId());
-            if (!gameIdForBot) {
-              console.error(`Failed to create bot game for user ${userId}`);
-              return;
-            }
-
-            const game = await loadGameState(gameIdForBot);
-            if (!game) return;
-
-            await applyTimerSettingsToGame(game);
-
-            rooms.join(gameIdForBot, ctx, "player");
-            game.status = "ready";
-            game.subStatus = "gameReady";
-            saveGame(game);
-
-            ctx.send({
-              type: "game.state",
-              payload: onOkSocketResponse(game, "Bot joined as opponent"),
-            });
-
-            // اضافه کردن بات به اتاق (بدون استارت جداگانه، چون handleReady بعداً بات را اجرا می‌کند)
-            await addBotToGame(gameIdForBot, getBotId(), rooms);
-          }
-        }, 10000);
-
-        waitingTimers.set(userId, timer);
-        return;
-      } else {
-        // جفت شدن با بازیکن انسانی دیگر
-        const game = await loadGameState(matchedGameId);
-        if (!game) {
-          return ctx.send({
-            type: "game.error",
-            payload: onErrorSocketResponse("Game not found"),
-          });
-        }
-
-        await applyTimerSettingsToGame(game);
-
-        const players = game.players;
-        for (const p of players) {
-          const timer = waitingTimers.get(p.id);
-          if (timer) {
-            clearTimeout(timer);
-            waitingTimers.delete(p.id);
-          }
-          const socket = waitingSockets.get(p.id);
-          if (socket) {
-            rooms.join(matchedGameId, socket, "player");
-            waitingSockets.delete(p.id);
-          }
-        }
-        rooms.join(matchedGameId, ctx, "player");
-
-        game.status = "ready";
-        game.subStatus = "gameReady";
-        saveGame(game);
-
-        rooms.broadcast(matchedGameId, {
-          type: "game.state",
-          payload: onOkSocketResponse(game, "Both players joined, ready"),
-        });
-        return;
-      }
+      await addBotToGame(gameIdForBot, 1, rooms);
+      return;
     }
 
     // ---------- حالت عادی (با gameId مشخص) ----------
@@ -181,7 +103,6 @@ export async function handleJoin(
           payload: onErrorSocketResponse("Game is full"),
         });
       }
-
       const color = game.players.length === 0 ? "white" : "black";
       game.players.push({ id: userId, color });
       saveGame(game);
@@ -210,7 +131,6 @@ export async function handleJoin(
         payload: onOkSocketResponse(game, "Rejoined"),
       });
     }
-
     rooms.join(gameId, ctx, "player");
   } catch (err) {
     console.error("Join Error:", err);
@@ -231,19 +151,13 @@ async function createGameWithBot(
 ): Promise<number | null> {
   const game = await prismaGameCreate(whiteId);
   if (!game || game === OrmState.Error) {
-    console.error(
-      `[createGameWithBot] prismaGameCreate failed for whiteId=${whiteId}`,
-    );
+    console.error(`[createGameWithBot] failed for whiteId=${whiteId}`);
     return null;
   }
-  console.log(`[createGameWithBot] game created with id=${game.id}`);
-
   await prisma.games.update({
     where: { id: game.id },
     data: { blackPlayerId: botId },
   });
-  console.log(`[createGameWithBot] updated game with blackPlayerId=${botId}`);
-
   await appendGameEvent(game.id, {
     type: "PLAYER_JOINED",
     payload: { playerId: whiteId, color: "white" },
@@ -252,12 +166,8 @@ async function createGameWithBot(
     type: "PLAYER_JOINED",
     payload: { playerId: botId, color: "black" },
   });
-
   const state = await loadGameState(game.id);
-  if (state) {
-    await applyTimerSettingsToGame(state);
-  }
-
+  if (state) await applyTimerSettingsToGame(state);
   return game.id;
 }
 
@@ -271,5 +181,5 @@ async function addBotToGame(gameId: number, botId: number, rooms: RoomManager) {
   rooms.join(gameId, fakeCtx, "player");
   const { handleReady } = await import("./ready");
   await handleReady(fakeCtx, { gameId }, rooms);
-  // دیگر نیازی به ساخت BotPlayer نیست
+  // دیگر نیازی به start جداگانه نیست، چون runBotIfNeeded در handleReady و سایر هندلرها کار می‌کند
 }

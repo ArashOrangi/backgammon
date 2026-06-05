@@ -8,8 +8,13 @@ const BOT_USER_ID = 1; // همان مقدار دیتابیس
 
 export async function runBotIfNeeded(gameId: number, playerId: PlayerId) {
   // فقط اگر بازیکن مورد نظر بات باشد، اجرا کن
-  if (playerId !== BOT_USER_ID) return;
-
+  console.log(
+    `[BotRunner] Called for game ${gameId}, player=${playerId}, BOT=${BOT_USER_ID}`,
+  );
+  if (playerId !== BOT_USER_ID) {
+    console.log(`[BotRunner] Not a bot, skipping`);
+    return;
+  }
   const state = await loadGameState(gameId);
   if (!state) return;
   if (state.status !== "in-progress") return;

@@ -148,7 +148,9 @@ export async function handleRoll(
           type: "game.state",
           payload: onOkSocketResponse(stateToSend),
         });
-
+        if (game.status === "in-progress") {
+          await runBotIfNeeded(gameId, game.turn!);
+        }
         // ========== اضافه شده: اجرای بات در صورت نیاز ==========
         if (game.status === "in-progress") {
           const botId = game.players.find((p) => p.id !== playerId)?.id;
@@ -206,7 +208,9 @@ export async function handleRoll(
         type: "game.state",
         payload: onOkSocketResponse(stateToSend),
       });
-
+      if (game.status === "in-progress") {
+        await runBotIfNeeded(gameId, game.turn!);
+      }
       // ========== اضافه شده: اجرای بات در صورت نیاز ==========
       if (game.status === "in-progress") {
         const opponentId = game.players.find((p) => p.id !== playerId)?.id;
