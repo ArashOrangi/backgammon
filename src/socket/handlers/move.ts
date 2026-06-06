@@ -227,7 +227,7 @@ export async function handleMove(
         broadcastMoves.length === 1 ? broadcastMoves[0] : broadcastMoves;
       rooms.broadcast(gameId, {
         type: "player.move",
-        payload: onOkSocketResponse(payloadToSend),
+        payload: onOkSocketResponse(broadcastMoves),
       });
     }
 

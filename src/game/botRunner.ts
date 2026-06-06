@@ -83,14 +83,16 @@ export async function runBotIfNeeded(
   if (afterMove) {
     rooms.broadcast(gameId, {
       type: "player.move",
-      payload: onOkSocketResponse({
-        playerId,
-        from: bestMove.from,
-        to: bestMove.to,
-        die: bestMove.die,
-        ownerId: playerId,
-        isUndo: false,
-      }),
+      payload: onOkSocketResponse([
+        {
+          playerId,
+          from: bestMove.from,
+          to: bestMove.to,
+          die: bestMove.die,
+          ownerId: playerId,
+          isUndo: false,
+        },
+      ]),
     });
     rooms.broadcast(gameId, {
       type: "game.state",
