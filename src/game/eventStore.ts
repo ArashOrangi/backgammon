@@ -348,12 +348,8 @@ export async function loadGameStateUntil(
 }
 
 export function calculateSubStatus(state: GameState): SubStatus {
-  if (state.status !== "in-progress" || !state.turn) return "turnRoll";
-  if (!state.dice || state.dice.length === 0) {
-    // اگر در این نوبت تاس ریخته شده باشد → باید نوبت تمام شود
-    // در غیر این صورت → باید تاس ریخته شود
-    return state.rolledThisTurn ? "mustEndTurn" : "turnRoll";
-  }
+  if (state.status !== "in-progress" || !state.turn) return "mustEndTurn";
+  if (!state.dice || state.dice.length === 0) return "mustEndTurn";
   const legalMoves = generateMoveSequences(state, state.turn);
   return legalMoves && legalMoves.length > 0 ? "playDice" : "mustEndTurn";
 }

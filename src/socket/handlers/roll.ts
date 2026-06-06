@@ -172,7 +172,7 @@ export async function handleRoll(
 
       rooms.broadcast(gameId, {
         type: "dice.result",
-        payload: onOkSocketResponse({ dice, playerId }),
+        payload: onOkSocketResponse({ dice, playerId, type: "inGame" }),
       });
 
       const legalMovesSequences = generateMoveSequences(game, playerId);

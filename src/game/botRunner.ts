@@ -30,7 +30,7 @@ export async function runBotIfNeeded(
     if (newState) {
       rooms.broadcast(gameId, {
         type: "dice.result",
-        payload: onOkSocketResponse({ dice, playerId }),
+        payload: onOkSocketResponse({ dice, playerId, type: "inGame" }),
       });
       rooms.broadcast(gameId, {
         type: "game.state",

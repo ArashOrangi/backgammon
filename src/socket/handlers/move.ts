@@ -198,7 +198,6 @@ export async function handleMove(
     }
 
     // Auto-pass and auto-dice block has been removed
-    // (Previously there was code here that automatically ended turn and rolled dice for next player)
     // Now the player must explicitly call game.endTurn to pass the turn.
 
     const subStatus = calculateSubStatus(finalGame);
@@ -207,7 +206,23 @@ export async function handleMove(
       finalGame.turn ?? playerId,
     );
     const flatLegalMoves = flattenMoveSequences(legalMoves);
-    const stateToSend = { ...finalGame, subStatus, legalMoves: flatLegalMoves };
+
+    // ========== ساخت stateToSend با حذف کامل turnRoll ==========
+    const stateToSend: any = { ...finalGame, legalMoves: flatLegalMoves };
+
+    if (finalGame.dice && finalGame.dice.length > 0) {
+      // تاس وجود دارد → وضعیت playDice (یا در موارد نادر mustEndTurn) را ارسال کن
+      stateToSend.subStatus = subStatus;
+    } else {
+      // dice خالی است
+      if (finalGame.rolledThisTurn) {
+        // تاس قبلاً ریخته شده و اکنون تمام شده → باید endTurn بزند
+        stateToSend.subStatus = "mustEndTurn";
+      }
+      // در غیر این صورت (اول نوبت و هنوز تاس ریخته نشده) → هیچ subStatus ارسال نمی‌کنیم
+    }
+    // ==========================================================
+
     rooms.broadcast(gameId, {
       type: "game.state",
       payload: onOkSocketResponse(stateToSend),
