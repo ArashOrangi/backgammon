@@ -208,12 +208,14 @@ export async function handleMove(
     const flatLegalMoves = flattenMoveSequences(legalMoves);
 
     // ========== ساخت stateToSend با حذف کامل turnRoll ==========
-    const stateToSend: any = { ...finalGame, legalMoves: flatLegalMoves };
+    const stateToSend = { ...finalGame, legalMoves: flatLegalMoves };
+    // فقط در صورتی که تاس وجود دارد، subStatus را ارسال کن
 
     if (finalGame.dice && finalGame.dice.length > 0) {
-      // تاس وجود دارد → وضعیت playDice (یا در موارد نادر mustEndTurn) را ارسال کن
       stateToSend.subStatus = subStatus;
     }
+    // در غیر این صورت (dice خالی) هیچ subStatusی اضافه نمی‌شود
+
     // ==========================================================
 
     rooms.broadcast(gameId, {
