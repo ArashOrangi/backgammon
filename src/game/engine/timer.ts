@@ -39,13 +39,13 @@ export async function checkGameTimeouts(rooms: RoomManager) {
       }
     }
 
-    // تایم‌اوت شبکه (۶۰ ثانیه عدم فعالیت) - مستقل از تایمر نوبت
-    if (game.lastActionAt && now - game.lastActionAt > 60000) {
-      const loserId = game.turn ?? game.players[0]?.id;
-      if (loserId) {
-        await handleTimeout(gameId, "NETWORK_TIMEOUT", loserId, rooms);
-      }
-    }
+    // // تایم‌اوت شبکه (۶۰ ثانیه عدم فعالیت) - مستقل از تایمر نوبت
+    // if (game.lastActionAt && now - game.lastActionAt > 60000) {
+    //   const loserId = game.turn ?? game.players[0]?.id;
+    //   if (loserId) {
+    //     await handleTimeout(gameId, "NETWORK_TIMEOUT", loserId, rooms);
+    //   }
+    // }
   }
 }
 
