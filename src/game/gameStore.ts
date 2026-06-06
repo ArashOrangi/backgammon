@@ -71,12 +71,14 @@ export async function createInitialGameState(
       borneOff: {},
     },
     pipCount: {},
+
     cubeValue: 1,
     createdAt: Date.now(),
     lastActionAt: Date.now(),
     turnStartedAt: undefined,
     turnTimeLimit: 30, // ممکن است بعداً حذف شود
     primaryTimePerTurn: preset.primarySeconds,
+    rolledThisTurn: false,
     secondaryTimeBank: {}, // خالی بماند تا بعداً پر شود? اما بهتر است برای بازیکنان آینده مقداردهی نشود چون هنوز بازیکنی نیست
   };
 }

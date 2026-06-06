@@ -71,6 +71,7 @@ export interface GameState {
   lastActionAt?: number;
   //---
   readyPlayers?: number[];
+  rolledThisTurn?: boolean; // true اگر در این نوبت تاس ریخته شده باشد
 }
 
 export type GameStatus =

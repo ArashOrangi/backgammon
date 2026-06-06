@@ -211,12 +211,15 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
         [blackPlayerId]: secondarySeconds,
       };
       state.dice = dice; // تنظیم تاس‌های شروع
+
+      state.rolledThisTurn = true;
       return state;
     }
 
     case "DICE_ROLLED": {
       state.dice = event.payload.dice;
       state.turnStartedAt = Date.now();
+      state.rolledThisTurn = true; // اضافه شود
       return state;
     }
 
@@ -235,6 +238,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       switchTurn(state);
       state.dice = [];
       state.turnStartedAt = Date.now();
+      state.rolledThisTurn = false; // اضافه شود
       return state;
     }
 
@@ -345,7 +349,11 @@ export async function loadGameStateUntil(
 
 export function calculateSubStatus(state: GameState): SubStatus {
   if (state.status !== "in-progress" || !state.turn) return "turnRoll";
-  if (!state.dice || state.dice.length === 0) return "mustEndTurn"; // تغییر کلیدی
+  if (!state.dice || state.dice.length === 0) {
+    // اگر در این نوبت تاس ریخته شده باشد → باید نوبت تمام شود
+    // در غیر این صورت → باید تاس ریخته شود
+    return state.rolledThisTurn ? "mustEndTurn" : "turnRoll";
+  }
   const legalMoves = generateMoveSequences(state, state.turn);
   return legalMoves && legalMoves.length > 0 ? "playDice" : "mustEndTurn";
 }
