@@ -213,13 +213,6 @@ export async function handleMove(
     if (finalGame.dice && finalGame.dice.length > 0) {
       // تاس وجود دارد → وضعیت playDice (یا در موارد نادر mustEndTurn) را ارسال کن
       stateToSend.subStatus = subStatus;
-    } else {
-      // dice خالی است
-      if (finalGame.rolledThisTurn) {
-        // تاس قبلاً ریخته شده و اکنون تمام شده → باید endTurn بزند
-        stateToSend.subStatus = "mustEndTurn";
-      }
-      // در غیر این صورت (اول نوبت و هنوز تاس ریخته نشده) → هیچ subStatus ارسال نمی‌کنیم
     }
     // ==========================================================
 
