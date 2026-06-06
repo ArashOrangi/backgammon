@@ -345,7 +345,7 @@ export async function loadGameStateUntil(
 
 export function calculateSubStatus(state: GameState): SubStatus {
   if (state.status !== "in-progress" || !state.turn) return "turnRoll";
-  if (!state.dice || state.dice.length === 0) return "turnRoll";
+  if (!state.dice || state.dice.length === 0) return "mustEndTurn"; // تغییر کلیدی
   const legalMoves = generateMoveSequences(state, state.turn);
   return legalMoves && legalMoves.length > 0 ? "playDice" : "mustEndTurn";
 }
