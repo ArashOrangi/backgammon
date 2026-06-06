@@ -11,6 +11,6 @@ pm2 flush $SiteName
 pm2 delete $SiteName
 Start-Sleep -Seconds 1
 npm run build
-pm2 start dist/index.js --name "$SiteName" --no-autorestart
+pm2 start dist/index.js --name "$SiteName" --no-autorestart -o ./out.log -e ./err.log
 
 Write-Host "Deployment completed successfully!" -ForegroundColor Green
