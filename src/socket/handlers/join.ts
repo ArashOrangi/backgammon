@@ -107,7 +107,7 @@ export async function handleJoin(
 
             await addBotToGame(gameIdForBot, 1, rooms);
           }
-        }, 30000); // 30 seconds
+        }, 10000); // 10 seconds
 
         waitingTimers.set(userId, timer);
         return;
