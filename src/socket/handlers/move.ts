@@ -85,12 +85,11 @@ export async function handleMove(
         console.log(
           `[MOVE] Undo requested for game ${gameId}, player ${playerId}`,
         );
-        const currentSubStatus = calculateSubStatus(finalGame);
-        if (finalGame.turn !== playerId || currentSubStatus === "mustEndTurn") {
-          console.log(`[MOVE] Undo rejected: turn mismatch or mustEndTurn`);
+        if (finalGame.turn !== playerId) {
+          console.log(`[MOVE] Undo rejected: not your turn`);
           return ctx.send({
             type: "game.error",
-            payload: onErrorSocketResponse("Cannot undo after ending turn"),
+            payload: onErrorSocketResponse("It's not your turn to undo"),
           });
         }
         const undonePayload = await undoLastMove(gameId, playerId);
