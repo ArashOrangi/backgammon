@@ -6,6 +6,7 @@ export interface WsLogEntry {
   type?: string;
 }
 
+const MAX_LOG_LENGTH = 10000; // افزایش به ۱۰۰۰۰ کاراکتر
 const wsLogs: WsLogEntry[] = [];
 const MAX_LOGS = 500;
 
@@ -15,8 +16,8 @@ export function logWSMessage(
   gameId?: number,
   type?: string,
 ) {
-  // محدود کردن حجم داده برای جلوگیری از پر شدن حافظه
-  const truncatedData = data.length > 1000 ? data.slice(0, 1000) + "..." : data;
+  const truncatedData =
+    data.length > MAX_LOG_LENGTH ? data.slice(0, MAX_LOG_LENGTH) + "..." : data;
   wsLogs.push({
     time: new Date(),
     direction: dir,
@@ -28,7 +29,7 @@ export function logWSMessage(
 }
 
 export function getWsLogs(limit?: number, filterGameId?: number) {
-  let logs = [...wsLogs].reverse(); // آخرین ها اول
+  let logs = [...wsLogs].reverse();
   if (filterGameId) {
     logs = logs.filter((log) => log.gameId === filterGameId);
   }
