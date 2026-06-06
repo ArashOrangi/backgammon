@@ -10,7 +10,6 @@ import {
   onOkSocketResponse,
 } from "@/responses/response-builder";
 import { addToMatchmaking } from "@/models/matchmaking";
-
 import {
   loadGameState,
   appendGameEvent,
@@ -24,7 +23,7 @@ import { GameState } from "@/game/types";
 
 type JoinPayload = { gameId: number; userId: number };
 
-// صف سوکت‌های منتظر (برای حالت انسانی - اگر نیاز دارید نگه دارید)
+// صف سوکت‌های منتظر (برای حالت انسانی)
 const waitingSockets = new Map<number, SocketContext>();
 const waitingTimers = new Map<number, NodeJS.Timeout>();
 
@@ -59,30 +58,97 @@ export async function handleJoin(
   try {
     // ---------- حالت مچ‌میکینگ (خودکار) ----------
     if (gameId === -1) {
-      // ساخت مستقیم بازی با بات (بدون صف و تایمر)
-      const gameIdForBot = await createGameWithBot(userId, 1);
-      if (!gameIdForBot) {
+      // جلوگیری از درخواست تکراری
+      if (waitingSockets.has(userId)) {
         return ctx.send({
           type: "game.error",
-          payload: onErrorSocketResponse("Failed to create bot game"),
+          payload: onErrorSocketResponse("Already in queue"),
         });
       }
-      const game = await loadGameState(gameIdForBot);
-      if (!game) return;
 
-      await applyTimerSettingsToGame(game);
-      rooms.join(gameIdForBot, ctx, "player");
-      game.status = "ready";
-      game.subStatus = "gameReady";
-      saveGame(game);
+      const matchedGameId = await addToMatchmaking(userId);
+      if (matchedGameId === 0) {
+        // ---------- وارد صف شد ----------
+        waitingSockets.set(userId, ctx);
+        const waitingGame = await createInitialGameState(-1);
+        waitingGame.status = "waiting";
+        waitingGame.subStatus = "playerJoin";
+        waitingGame.players = [{ id: userId, color: "white" }];
+        ctx.send({
+          type: "game.state",
+          payload: onOkSocketResponse(waitingGame, "Waiting for opponent"),
+        });
 
-      ctx.send({
-        type: "game.state",
-        payload: onOkSocketResponse(game, "Bot joined as opponent"),
-      });
+        // تنظیم تایمر ۳۰ ثانیه برای ساخت بات
+        const timer = setTimeout(async () => {
+          if (waitingSockets.has(userId)) {
+            waitingSockets.delete(userId);
+            waitingTimers.delete(userId);
 
-      await addBotToGame(gameIdForBot, 1, rooms);
-      return;
+            const gameIdForBot = await createGameWithBot(userId, 1);
+            if (!gameIdForBot) {
+              console.error(`Failed to create bot game for user ${userId}`);
+              return;
+            }
+
+            const game = await loadGameState(gameIdForBot);
+            if (!game) return;
+
+            await applyTimerSettingsToGame(game);
+            rooms.join(gameIdForBot, ctx, "player");
+            game.status = "ready";
+            game.subStatus = "gameReady";
+            saveGame(game);
+
+            ctx.send({
+              type: "game.state",
+              payload: onOkSocketResponse(game, "Bot joined as opponent"),
+            });
+
+            await addBotToGame(gameIdForBot, 1, rooms);
+          }
+        }, 30000); // 30 seconds
+
+        waitingTimers.set(userId, timer);
+        return;
+      } else {
+        // ---------- جفت شدن با یک بازیکن انسانی دیگر ----------
+        const game = await loadGameState(matchedGameId);
+        if (!game) {
+          return ctx.send({
+            type: "game.error",
+            payload: onErrorSocketResponse("Game not found"),
+          });
+        }
+
+        await applyTimerSettingsToGame(game);
+
+        // لغو تایمر کاربر اول (اگر وجود داشته باشد)
+        const players = game.players;
+        for (const p of players) {
+          const timer = waitingTimers.get(p.id);
+          if (timer) {
+            clearTimeout(timer);
+            waitingTimers.delete(p.id);
+          }
+          const socket = waitingSockets.get(p.id);
+          if (socket) {
+            rooms.join(matchedGameId, socket, "player");
+            waitingSockets.delete(p.id);
+          }
+        }
+        rooms.join(matchedGameId, ctx, "player");
+
+        game.status = "ready";
+        game.subStatus = "gameReady";
+        saveGame(game);
+
+        rooms.broadcast(matchedGameId, {
+          type: "game.state",
+          payload: onOkSocketResponse(game, "Both players joined, ready"),
+        });
+        return;
+      }
     }
 
     // ---------- حالت عادی (با gameId مشخص) ----------
@@ -181,5 +247,4 @@ async function addBotToGame(gameId: number, botId: number, rooms: RoomManager) {
   rooms.join(gameId, fakeCtx, "player");
   const { handleReady } = await import("./ready");
   await handleReady(fakeCtx, { gameId }, rooms);
-  // دیگر نیازی به start جداگانه نیست، چون runBotIfNeeded در handleReady و سایر هندلرها کار می‌کند
 }
