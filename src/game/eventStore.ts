@@ -20,10 +20,6 @@ import { generateMoveSequences } from "./moveGenerator";
 import { OrmState } from "@/models/enums";
 import { prisma } from "@/components/prisma";
 
-/**
- * این تابع تضمین می‌کنه که اگه ایونت جدیدی اضافه کردی و فراموش کردی
- * توی switch-case مدیریتش کنی، تایپ‌اسکریپت بهت ارور بده (Exhaustive Check).
- */
 function assertNever(x: never): never {
   throw new Error(`Unhandled event type: ${(x as any).type}`);
 }
@@ -109,11 +105,16 @@ export type GameFinishedEvent = {
   };
 };
 
-// رویداد جدید برای تمرین خروج مهره (Bear Off Practice)
 export type PracticeBearOffSetupEvent = {
   type: "PRACTICE_BEAROFF_SETUP";
+  payload: { playerId: PlayerId };
+};
+
+export type PracticeRearrangeEvent = {
+  type: "PRACTICE_REARRANGE";
   payload: {
     playerId: PlayerId;
+    points: Array<{ index: number; count: number }>;
   };
 };
 
@@ -129,7 +130,8 @@ export type GameEvent =
   | TurnTimeoutEvent
   | NetworkTimeoutEvent
   | GameFinishedEvent
-  | PracticeBearOffSetupEvent; // اضافه شد
+  | PracticeBearOffSetupEvent
+  | PracticeRearrangeEvent;
 
 /* -------------------------------------------------------------------------- */
 /* Type Guards                                                                */
@@ -164,13 +166,7 @@ function isEventRow(value: unknown): value is {
 /* Apply Event (The Reducer Logic)                                            */
 /* -------------------------------------------------------------------------- */
 
-/**
- * این تابع "حقیقت" بازی رو از روی ایونت‌ها می‌سازه.
- * هر تغییری در منطق بازی باید اینجا منعکس بشه.
- * توجه: این تابع باید همزمان (synchronous) باشد تا در replay رویدادها بدون مشکل اجرا شود.
- */
 function applyEvent(state: GameState, event: GameEvent): GameState {
-  // ثبت زمان آخرین تعامل برای مدیریت تایم‌اوت شبکه
   state.lastActionAt = Date.now();
 
   switch (event.type) {
@@ -252,7 +248,6 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
 
     case "TURN_TIMEOUT":
     case "NETWORK_TIMEOUT": {
-      // فقط ثبت در لاگ، تغییری در استیت ایجاد نمی‌شود
       return state;
     }
 
@@ -264,41 +259,63 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       return state;
     }
 
-    // اضافه شدن مدیریت رویداد تمرین خروج مهره
     case "PRACTICE_BEAROFF_SETUP": {
       const { playerId } = event.payload;
       const player = state.players.find((p) => p.id === playerId);
       if (!player) return state;
 
-      // تعیین خانه‌های خودی بر اساس رنگ بازیکن
       const homeIndices =
         player.color === "white"
           ? [0, 1, 2, 3, 4, 5]
           : [18, 19, 20, 21, 22, 23];
       const firstHome = homeIndices[0];
 
-      // حذف تمام مهره‌های این بازیکن از تخته
       for (let i = 0; i < 24; i++) {
         if (state.board.points[i].owner === playerId) {
           state.board.points[i].owner = null;
           state.board.points[i].count = 0;
         }
       }
-      // حذف مهره‌های روی بار
       state.board.bar[playerId] = 0;
-      // reset borneOff (می‌خواهیم از ابتدا bear off را تمرین کند)
       state.board.borneOff[playerId] = 0;
 
-      // قرار دادن ۱۵ مهره در اولین خانه خودی
       state.board.points[firstHome].owner = playerId;
       state.board.points[firstHome].count = 15;
 
-      // پاک کردن تاس‌های فعلی و بازنشانی وضعیت نوبت
       state.dice = [];
       state.rolledThisTurn = false;
       state.turn = playerId;
       state.turnStartedAt = Date.now();
+      return state;
+    }
 
+    case "PRACTICE_REARRANGE": {
+      const { playerId, points } = event.payload;
+      const player = state.players.find((p) => p.id === playerId);
+      if (!player) return state;
+
+      // حذف تمام مهره‌های این بازیکن
+      for (let i = 0; i < 24; i++) {
+        if (state.board.points[i].owner === playerId) {
+          state.board.points[i].owner = null;
+          state.board.points[i].count = 0;
+        }
+      }
+      state.board.bar[playerId] = 0;
+      state.board.borneOff[playerId] = 0;
+
+      // قرار دادن مهره‌ها بر اساس درخواست
+      for (const { index, count } of points) {
+        if (index >= 0 && index < 24 && count > 0) {
+          state.board.points[index].owner = playerId;
+          state.board.points[index].count = count;
+        }
+      }
+
+      state.dice = [];
+      state.rolledThisTurn = false;
+      state.turn = playerId;
+      state.turnStartedAt = Date.now();
       return state;
     }
 
@@ -349,7 +366,6 @@ export async function appendGameEvent(gameId: number, event: GameEvent) {
     throw new Error(`Failed to append event: ${JSON.stringify(created)}`);
   }
 
-  // Snapshotting هر ۲۰ ایونت
   if (nextSequence % SNAPSHOT_INTERVAL === 0) {
     const state = await loadGameState(gameId);
     if (state) {
@@ -417,19 +433,16 @@ export async function forceSnapshot(gameId: number, state: GameState) {
   const lastSequence = await prismaGameEventGetLastSequence(gameId);
   if (typeof lastSequence !== "number") return;
 
-  // بررسی وجود snapshot برای همین (gameId, sequence)
   const existing = await prisma.gameSnapshots.findFirst({
     where: { gameId, sequence: lastSequence },
   });
 
   if (existing) {
-    // آپدیت snapshot موجود
     await prisma.gameSnapshots.update({
       where: { id: existing.id },
       data: { state: state as unknown as Prisma.InputJsonValue },
     });
   } else {
-    // ایجاد snapshot جدید
     await prismaGameSnapshotCreate({
       gameId,
       sequence: lastSequence,

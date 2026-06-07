@@ -18,7 +18,14 @@ export type ClientMessage =
   | { type: "player.leave"; payload: { gameId: number } }
   | { type: "player.ready"; payload: { gameId: number } }
   | { type: "game.endTurn"; payload: { gameId: number } }
-  | { type: "game.practice.bearoff"; payload: { gameId: number } };
+  | { type: "game.practice.bearoff"; payload: { gameId: number } }
+  | {
+      type: "game.practice.rearrange";
+      payload: {
+        gameId: number;
+        points: Array<{ index: number; count: number }>;
+      };
+    };
 
 // ---------- Server Messages ----------
 export type ServerMessage =
