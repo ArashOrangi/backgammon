@@ -6,24 +6,48 @@ export interface MoveSequence {
   moves: Move[];
 }
 
+// برای فعال‌سازی لاگ‌های دیباگ، این متغیر را به true تنظیم کنید
+const DEBUG_DOUBLE = true;
+
 export function generateMoveSequences(
   game: GameState,
   playerId: PlayerId,
 ): MoveSequence[] {
   if (!game.dice || game.dice.length === 0) return [];
   const dice = normalizeDice(game.dice);
+  if (DEBUG_DOUBLE) {
+    console.log(
+      `[DEBUG] generateMoveSequences: player=${playerId}, originalDice=${game.dice}, normalized=${dice}`,
+    );
+  }
   const results: MoveSequence[] = [];
   recurse(game, playerId, dice, [], results);
+  if (DEBUG_DOUBLE) {
+    console.log(
+      `[DEBUG] generateMoveSequences: total sequences=${results.length}`,
+    );
+  }
   if (results.length === 0) return [];
   const maxLen = Math.max(...results.map((r) => r.moves.length));
   let filtered = results.filter((r) => r.moves.length === maxLen);
+  if (DEBUG_DOUBLE) {
+    console.log(
+      `[DEBUG] generateMoveSequences: maxLen=${maxLen}, filtered=${filtered.length}`,
+    );
+  }
   if (maxLen === 1 && dice.length === 2 && dice[0] !== dice[1]) {
     const higher = Math.max(...dice);
     const hasHigher = filtered.some((seq) => seq.moves[0].die === higher);
     if (hasHigher)
       filtered = filtered.filter((seq) => seq.moves[0].die === higher);
   }
-  return deduplicateSequences(filtered);
+  const unique = deduplicateSequences(filtered);
+  if (DEBUG_DOUBLE) {
+    console.log(
+      `[DEBUG] generateMoveSequences: returning ${unique.length} unique sequences`,
+    );
+  }
+  return unique;
 }
 
 function recurse(
@@ -33,23 +57,47 @@ function recurse(
   path: Move[],
   results: MoveSequence[],
 ) {
+  if (DEBUG_DOUBLE) {
+    console.log(
+      `[DEBUG] recurse: dice left=${dice}, path length=${path.length}`,
+    );
+  }
   if (dice.length === 0) {
+    if (DEBUG_DOUBLE)
+      console.log(`[DEBUG] recurse: no dice left, pushing path`);
     results.push({ moves: [...path] });
     return;
   }
   const legal = generateSingleMoves(game, playerId, dice);
+  if (DEBUG_DOUBLE) {
+    console.log(`[DEBUG] recurse: legal moves count=${legal.length}`);
+  }
   if (legal.length === 0) {
+    if (DEBUG_DOUBLE)
+      console.log(`[DEBUG] recurse: no legal moves, pushing current path`);
     results.push({ moves: [...path] });
     return;
   }
   for (const move of legal) {
+    if (DEBUG_DOUBLE) {
+      console.log(
+        `[DEBUG] recurse: trying move from=${move.from} to=${move.to} die=${move.die}`,
+      );
+    }
     const snapshot = takeSnapshot(game);
     try {
       applyMove(game, playerId, move.from, move.to);
       const remaining = removeDie(dice, move.die);
+      if (DEBUG_DOUBLE) {
+        console.log(
+          `[DEBUG] recurse: after apply, remaining dice=${remaining}`,
+        );
+      }
       recurse(game, playerId, remaining, [...path, move], results);
     } catch (err) {
-      // ignore
+      if (DEBUG_DOUBLE) {
+        console.log(`[DEBUG] recurse: applyMove error: ${err}`);
+      }
     } finally {
       undoSnapshot(game, snapshot);
     }
@@ -63,12 +111,23 @@ function generateSingleMoves(
 ): Move[] {
   const moves: Move[] = [];
   const board = game.board;
-  const sortedDice = [...dice].sort((a, b) => b - a);
+  // استفاده از ترتیب اصلی تاس‌ها (مرتب‌سازی ضروری نیست)
+  const diceToTry = [...dice];
+  if (DEBUG_DOUBLE) {
+    console.log(
+      `[DEBUG] generateSingleMoves: dice=${diceToTry}, barCount=${board.bar[playerId] ?? 0}`,
+    );
+  }
 
-  for (const die of sortedDice) {
+  for (const die of diceToTry) {
     const barCount = board.bar[playerId] ?? 0;
     if (barCount > 0) {
       const to = computeTargetFromBar(game, playerId, die);
+      if (DEBUG_DOUBLE) {
+        console.log(
+          `[DEBUG] generateSingleMoves: bar move die=${die} -> to=${to}`,
+        );
+      }
       const res = validateMove(game, playerId, SPECIAL_POSITIONS.BAR, to, dice);
       if (res.isValid && res.dieUsed !== undefined) {
         moves.push({
@@ -77,6 +136,14 @@ function generateSingleMoves(
           die: res.dieUsed,
           ownerId: playerId,
         });
+        if (DEBUG_DOUBLE)
+          console.log(
+            `[DEBUG] generateSingleMoves: bar move valid, dieUsed=${res.dieUsed}`,
+          );
+      } else if (DEBUG_DOUBLE) {
+        console.log(
+          `[DEBUG] generateSingleMoves: bar move invalid: ${res.message}`,
+        );
       }
       continue;
     }
@@ -85,6 +152,11 @@ function generateSingleMoves(
       const p = board.points[i];
       if (!p || p.count === 0 || p.owner !== playerId) continue;
       const to = computeTarget(game, playerId, i, die);
+      if (DEBUG_DOUBLE) {
+        console.log(
+          `[DEBUG] generateSingleMoves: from=${i}, die=${die}, to=${to}`,
+        );
+      }
       const res = validateMove(game, playerId, i, to, dice);
       if (res.isValid && res.dieUsed !== undefined) {
         moves.push({
@@ -93,14 +165,32 @@ function generateSingleMoves(
           die: res.dieUsed,
           ownerId: playerId,
         });
+        if (DEBUG_DOUBLE)
+          console.log(
+            `[DEBUG] generateSingleMoves: move valid, dieUsed=${res.dieUsed}`,
+          );
+      } else if (DEBUG_DOUBLE) {
+        console.log(
+          `[DEBUG] generateSingleMoves: move invalid: ${res.message}`,
+        );
       }
     }
   }
-  return moves;
+  const uniqueMoves = deduplicateMoves(moves);
+  if (DEBUG_DOUBLE) {
+    console.log(
+      `[DEBUG] generateSingleMoves: total moves generated=${moves.length}, unique=${uniqueMoves.length}`,
+    );
+  }
+  return uniqueMoves;
 }
 
 function normalizeDice(dice: number[]): number[] {
   if (dice.length === 2 && dice[0] === dice[1]) {
+    if (DEBUG_DOUBLE)
+      console.log(
+        `[DEBUG] normalizeDice: double detected, converting to 4 dice`,
+      );
     return [dice[0], dice[0], dice[0], dice[0]];
   }
   return [...dice];
@@ -110,6 +200,11 @@ function removeDie(dice: number[], die: number): number[] {
   const copy = [...dice];
   const idx = copy.indexOf(die);
   if (idx !== -1) copy.splice(idx, 1);
+  if (DEBUG_DOUBLE) {
+    console.log(
+      `[DEBUG] removeDie: original=${dice}, remove=${die}, result=${copy}`,
+    );
+  }
   return copy;
 }
 
@@ -121,6 +216,19 @@ function deduplicateSequences(sequences: MoveSequence[]): MoveSequence[] {
     seen.add(key);
     return true;
   });
+}
+
+function deduplicateMoves(moves: Move[]): Move[] {
+  const seen = new Set<string>();
+  const unique: Move[] = [];
+  for (const m of moves) {
+    const key = `${m.from}-${m.to}-${m.die}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(m);
+    }
+  }
+  return unique;
 }
 
 function computeTarget(
@@ -147,8 +255,8 @@ function computeTargetFromBar(
   die: number,
 ): number {
   const dir = getDirection(game, playerId);
-  if (dir === -1) return 24 - die; // white
-  return die - 1; // black
+  if (dir === -1) return 24 - die; // سفید
+  return die - 1; // سیاه
 }
 
 function getDirection(game: GameState, playerId: PlayerId): number {
@@ -187,7 +295,6 @@ export function flattenMoveSequences(sequences: MoveSequence[]): Move[] {
   for (const seq of sequences) {
     allMoves.push(...seq.moves);
   }
-  // حذف حرکات تکراری (از نظر from, to, die, ownerId)
   const unique = new Map<string, Move>();
   for (const move of allMoves) {
     const key = `${move.from}-${move.to}-${move.die}-${move.ownerId}`;

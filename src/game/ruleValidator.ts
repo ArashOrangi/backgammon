@@ -85,17 +85,30 @@ function findHigherDieForBearOff(
   const dir = getDirection(game, playerId);
   const [start, end] = getHomeRange(game, playerId);
 
+  // بررسی اینکه آیا مهره‌ای عقب‌تر (نسبت به خروج) وجود دارد
+  let hasCheckerBehind = false;
   if (dir === -1) {
-    // برای سفید (حرکت به سمت 0)، چک می‌کنیم مهره‌ای عقب‌تر از خانه فعلی نباشد
+    // سفید: عقب‌تر یعنی ایندکس بزرگتر (نزدیک به 23)
     for (let i = from + 1; i <= end; i++) {
-      if (points[i].owner === playerId && points[i].count > 0) return null;
+      if (points[i].owner === playerId && points[i].count > 0) {
+        hasCheckerBehind = true;
+        break;
+      }
     }
   } else {
-    // برای سیاه (حرکت به سمت 23)، چک می‌کنیم مهره‌ای عقب‌تر از خانه فعلی نباشد
+    // سیاه: عقب‌تر یعنی ایندکس کوچکتر (نزدیک به 0)
     for (let i = from - 1; i >= start; i--) {
-      if (points[i].owner === playerId && points[i].count > 0) return null;
+      if (points[i].owner === playerId && points[i].count > 0) {
+        hasCheckerBehind = true;
+        break;
+      }
     }
   }
+
+  // اگر مهره‌ای عقب‌تر وجود دارد، نمی‌توان از تاس بزرگتر استفاده کرد
+  if (hasCheckerBehind) return null;
+
+  // پیدا کردن کوچکترین تاس بزرگتر از distance
   const bigger = dice.filter((d) => d > distance).sort((a, b) => a - b)[0];
   return bigger ?? null;
 }
