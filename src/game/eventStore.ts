@@ -1,4 +1,4 @@
-import { GameState, PlayerId, SubStatus } from "./types";
+import { GameState, PlayerId, SubStatus, SPECIAL_POSITIONS } from "./types";
 import { $Enums, Prisma } from "@prisma/client";
 
 import {
@@ -109,6 +109,14 @@ export type GameFinishedEvent = {
   };
 };
 
+// رویداد جدید برای تمرین خروج مهره (Bear Off Practice)
+export type PracticeBearOffSetupEvent = {
+  type: "PRACTICE_BEAROFF_SETUP";
+  payload: {
+    playerId: PlayerId;
+  };
+};
+
 export type GameEvent =
   | PlayerJoinedEvent
   | PlayerLeftEvent
@@ -120,7 +128,8 @@ export type GameEvent =
   | TurnPassedEvent
   | TurnTimeoutEvent
   | NetworkTimeoutEvent
-  | GameFinishedEvent;
+  | GameFinishedEvent
+  | PracticeBearOffSetupEvent; // اضافه شد
 
 /* -------------------------------------------------------------------------- */
 /* Type Guards                                                                */
@@ -199,7 +208,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
         startingPlayerId,
         primarySeconds,
         secondarySeconds,
-        dice, // اضافه شد
+        dice,
       } = event.payload;
       state.status = "in-progress";
       state.turn = startingPlayerId;
@@ -210,8 +219,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
         [whitePlayerId]: secondarySeconds,
         [blackPlayerId]: secondarySeconds,
       };
-      state.dice = dice; // تنظیم تاس‌های شروع
-
+      state.dice = dice;
       state.rolledThisTurn = true;
       return state;
     }
@@ -219,7 +227,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
     case "DICE_ROLLED": {
       state.dice = event.payload.dice;
       state.turnStartedAt = Date.now();
-      state.rolledThisTurn = true; // اضافه شود
+      state.rolledThisTurn = true;
       return state;
     }
 
@@ -238,7 +246,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       switchTurn(state);
       state.dice = [];
       state.turnStartedAt = Date.now();
-      state.rolledThisTurn = false; // اضافه شود
+      state.rolledThisTurn = false;
       return state;
     }
 
@@ -253,6 +261,44 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       state.winner = event.payload.winner;
       state.winType = event.payload.winType;
       state.turn = null;
+      return state;
+    }
+
+    // اضافه شدن مدیریت رویداد تمرین خروج مهره
+    case "PRACTICE_BEAROFF_SETUP": {
+      const { playerId } = event.payload;
+      const player = state.players.find((p) => p.id === playerId);
+      if (!player) return state;
+
+      // تعیین خانه‌های خودی بر اساس رنگ بازیکن
+      const homeIndices =
+        player.color === "white"
+          ? [0, 1, 2, 3, 4, 5]
+          : [18, 19, 20, 21, 22, 23];
+      const firstHome = homeIndices[0];
+
+      // حذف تمام مهره‌های این بازیکن از تخته
+      for (let i = 0; i < 24; i++) {
+        if (state.board.points[i].owner === playerId) {
+          state.board.points[i].owner = null;
+          state.board.points[i].count = 0;
+        }
+      }
+      // حذف مهره‌های روی بار
+      state.board.bar[playerId] = 0;
+      // reset borneOff (می‌خواهیم از ابتدا bear off را تمرین کند)
+      state.board.borneOff[playerId] = 0;
+
+      // قرار دادن ۱۵ مهره در اولین خانه خودی
+      state.board.points[firstHome].owner = playerId;
+      state.board.points[firstHome].count = 15;
+
+      // پاک کردن تاس‌های فعلی و بازنشانی وضعیت نوبت
+      state.dice = [];
+      state.rolledThisTurn = false;
+      state.turn = playerId;
+      state.turnStartedAt = Date.now();
+
       return state;
     }
 
@@ -346,6 +392,7 @@ export async function loadGameStateUntil(
 
   return state;
 }
+
 export function calculateSubStatus(state: GameState): SubStatus {
   if (state.status !== "in-progress" || !state.turn) return "mustEndTurn";
   if (!state.dice || state.dice.length === 0) {

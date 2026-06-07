@@ -109,6 +109,9 @@ export function validateMove(
 ): { isValid: boolean; isHit?: boolean; dieUsed?: number; message?: string } {
   const { board } = game;
   const dice = diceOverride ?? game.dice;
+  console.log(
+    `[DEBUG] validateMove: player=${playerId}, from=${from}, to=${to}, dice=${dice}`,
+  );
 
   if (!dice || dice.length === 0)
     return { isValid: false, message: "No dice available" };

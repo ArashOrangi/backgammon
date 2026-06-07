@@ -17,7 +17,8 @@ export type ClientMessage =
     }
   | { type: "player.leave"; payload: { gameId: number } }
   | { type: "player.ready"; payload: { gameId: number } }
-  | { type: "game.endTurn"; payload: { gameId: number } };
+  | { type: "game.endTurn"; payload: { gameId: number } }
+  | { type: "game.practice.bearoff"; payload: { gameId: number } };
 
 // ---------- Server Messages ----------
 export type ServerMessage =
