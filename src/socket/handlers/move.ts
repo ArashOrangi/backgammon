@@ -211,7 +211,8 @@ export async function handleMove(
     // فقط در صورتی که تاس وجود دارد، subStatus را ارسال کن
 
     if (finalGame.dice && finalGame.dice.length > 0) {
-      stateToSend.subStatus = subStatus;
+      stateToSend.subStatus =
+        flatLegalMoves.length > 0 ? "playDice" : "mustEndTurn";
     }
     // در غیر این صورت (dice خالی) هیچ subStatusی اضافه نمی‌شود
 
