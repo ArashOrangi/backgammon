@@ -82,6 +82,11 @@ export async function handleMove(
     for (const moveItem of payload) {
       const { from, to, die, isUndo } = moveItem;
       if (isUndo) {
+        // نادیده گرفتن حرکات مجازی ضربه (مقصد BAR)
+        if (to === SPECIAL_POSITIONS.BAR) {
+          console.log(`[MOVE] Ignoring undo for hit move (to BAR)`);
+          continue;
+        }
         console.log(
           `[MOVE] Undo requested for game ${gameId}, player ${playerId}`,
         );
