@@ -248,12 +248,13 @@ function computeTargetFromBar(
   playerId: PlayerId,
   die: number,
 ): number {
-  const player = game.players.find((p) => p.id === playerId);
-  if (!player) throw new Error("Player not found");
-  if (player.color === "white") {
-    return die - 1; // ورود به خانه‌ی سیاه (نقاط 0 تا 5)
+  const dir = getDirection(game, playerId);
+  if (dir === -1) {
+    // سفید: وارد خانه سیاه (نقاط 18 تا 23)
+    return 24 - die;
   } else {
-    return 24 - die; // ورود به خانه‌ی سفید (نقاط 18 تا 23)
+    // سیاه: وارد خانه سفید (نقاط 0 تا 5)
+    return die - 1;
   }
 }
 
