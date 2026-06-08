@@ -128,7 +128,7 @@ export async function handleMove(
           isUndo: true,
         });
 
-        break; // فقط یک undo انجام شود
+        // break; // فقط یک undo انجام شود
       } else {
         if (finalGame.turn !== playerId) {
           return ctx.send({
@@ -245,6 +245,8 @@ export async function handleMove(
     if (finalGame.dice && finalGame.dice.length > 0) {
       stateToSend.subStatus =
         flatLegalMoves.length > 0 ? "playDice" : "mustEndTurn";
+    } else {
+      stateToSend.subStatus = "mustEndTurn"; // اضافه شد
     }
 
     rooms.broadcast(gameId, {
