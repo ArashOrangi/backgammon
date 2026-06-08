@@ -434,19 +434,17 @@ export async function loadGameStateUntil(
   return state;
 }
 
-// export function calculateSubStatus(state: GameState): SubStatus | undefined {
-//   if (state.status !== "in-progress" || !state.turn) return undefined;
-//   if (!state.dice || state.dice.length === 0) return undefined;
-//   const legalMoves = generateMoveSequences(state, state.turn);
-//   return legalMoves && legalMoves.length > 0 ? "playDice" : undefined;
-// }
-export function calculateSubStatus(state: GameState): SubStatus {
-  if (state.status !== "in-progress" || !state.turn) return "mustEndTurn";
-  if (!state.dice || state.dice.length === 0) {
-    return "mustEndTurn";
-  }
+// eventStore.ts - تغییرات مورد نیاز
+
+export function calculateSubStatus(state: GameState): SubStatus | undefined {
+  // اگر بازی در جریان نیست یا نوبت مشخص نیست → undefined (نه mustEndTurn)
+  if (state.status !== "in-progress" || !state.turn) return undefined;
+  // اگر تاسی وجود ندارد → undefined (بازیکن باید تاس بریزد یا نوبت تمام شود، اما subStatus نمی‌فرستیم)
+  if (!state.dice || state.dice.length === 0) return undefined;
+  // بررسی حرکت قانونی
   const legalMoves = generateMoveSequences(state, state.turn);
-  return legalMoves && legalMoves.length > 0 ? "playDice" : "mustEndTurn";
+  // فقط در صورتی که حرکت قانونی موجود باشد، playDice برگردان
+  return legalMoves && legalMoves.length > 0 ? "playDice" : undefined;
 }
 
 export async function undoLastMove(gameId: number, playerId: PlayerId) {
