@@ -242,10 +242,16 @@ export async function handleMove(
     );
     const flatLegalMoves = flattenMoveSequences(legalMoves);
     const stateToSend = { ...finalGame, legalMoves: flatLegalMoves };
-    if (finalGame.dice && finalGame.dice.length > 0) {
-      stateToSend.subStatus =
-        flatLegalMoves.length > 0 ? "playDice" : "mustEndTurn";
+
+    if (
+      finalGame.dice &&
+      finalGame.dice.length > 0 &&
+      flatLegalMoves.length > 0
+    ) {
+      stateToSend.subStatus = "playDice";
     } else {
+      console.log("aaaaa", { subStatus });
+
       stateToSend.subStatus = "mustEndTurn"; // اضافه شد
     }
 
