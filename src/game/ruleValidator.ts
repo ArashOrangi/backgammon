@@ -43,14 +43,11 @@ function computeDistance(
   const player = game.players.find((p) => p.id === playerId);
   if (!player) return null;
 
-  // from bar
   if (from === SPECIAL_POSITIONS.BAR) {
     if (player.color === "white") {
-      // سفید: نقاط 0 تا 5
-      return to + 1;
+      return to + 1; // فاصله از Bar تا نقطه ورودی سفید
     } else {
-      // سیاه: نقاط 18 تا 23
-      return 24 - to;
+      return 24 - to; // فاصله از Bar تا نقطه ورودی سیاه
     }
   }
 
