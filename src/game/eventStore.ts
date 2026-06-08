@@ -75,6 +75,8 @@ export type MoveAppliedEvent = {
     to: number;
     die: number;
     isUndo?: boolean;
+    hitOpponentId?: PlayerId;
+    hitFromPoint?: number; // نقطه‌ای که مهره حریف از آن به بار رفته
   };
 };
 

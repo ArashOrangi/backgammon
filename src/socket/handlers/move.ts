@@ -14,7 +14,6 @@ import {
   loadGameState,
   calculateSubStatus,
   undoLastMove,
-  forceSnapshot, // اضافه شد
 } from "@/game/eventStore";
 import { GameQueue } from "@/game/gameQueue";
 import { isGameOver, calculateWinType } from "../../game/engine";
@@ -32,12 +31,6 @@ type MoveItem = {
 type MovePayloadArray = MoveItem[];
 
 const gameQueue = new GameQueue();
-
-// ذخیره اطلاعات hit اخیر برای هر بازی (موقتی در حافظه)
-const lastHitInfo = new Map<
-  number,
-  { opponentId: number; fromPoint: number }
->();
 
 export async function handleMove(
   ctx: SocketContext,
@@ -85,12 +78,12 @@ export async function handleMove(
       isUndo?: boolean;
     }> = [];
 
-    let undoProcessed = false; // جلوگیری از پردازش چندباره undo
+    let undoProcessed = false;
 
     for (const moveItem of payload) {
       const { from, to, die, isUndo } = moveItem;
       if (isUndo) {
-        // نادیده گرفتن حرکات مجازی ضربه (مقصد BAR)
+        // حرکات مجازی ضربه (مقصد BAR) را نادیده بگیر
         if (to === SPECIAL_POSITIONS.BAR) {
           console.log(`[MOVE] Ignoring undo for hit move (to BAR)`);
           continue;
@@ -112,9 +105,6 @@ export async function handleMove(
           });
         }
 
-        // دریافت اطلاعات hit مربوط به آخرین حرکت این بازیکن (اگر وجود داشته باشد)
-        const hitInfo = lastHitInfo.get(gameId);
-
         const undonePayload = await undoLastMove(gameId, playerId);
         if (!undonePayload) {
           console.log(`[MOVE] Undo failed: no move to undo`);
@@ -124,35 +114,9 @@ export async function handleMove(
           });
         }
 
-        let stateAfterUndo = await loadGameState(gameId);
+        const stateAfterUndo = await loadGameState(gameId);
         if (!stateAfterUndo)
           throw new Error("Failed to rebuild state after undo");
-
-        // اگر hit وجود داشت، اثر آن را به صورت دستی برگردانیم
-        if (hitInfo) {
-          const { opponentId, fromPoint } = hitInfo;
-          // مهره حریف را از بار خارج کن
-          if (stateAfterUndo.board.bar[opponentId] > 0) {
-            stateAfterUndo.board.bar[opponentId]--;
-            // برگرداندن مهره به نقطه قبلی
-            const targetPoint = stateAfterUndo.board.points[fromPoint];
-            if (targetPoint.owner === null) {
-              targetPoint.owner = opponentId;
-              targetPoint.count = 1;
-            } else if (targetPoint.owner === opponentId) {
-              targetPoint.count++;
-            } else {
-              console.warn(
-                `Point ${fromPoint} is blocked, cannot restore hit checker`,
-              );
-            }
-            // ذخیره تغییرات دستی در snapshot
-            await forceSnapshot(gameId, stateAfterUndo);
-          }
-          // پاک کردن اطلاعات hit برای این بازی (فقط یک بار استفاده شود)
-          lastHitInfo.delete(gameId);
-        }
-
         finalGame = stateAfterUndo;
         saveGame(finalGame);
 
@@ -165,7 +129,7 @@ export async function handleMove(
           isUndo: true,
         });
 
-        // بعد از undo، حلقه را می‌شکنیم تا حرکت دیگری پردازش نشود
+        // فقط یک undo انجام بده و حلقه را بشکن
         break;
       } else {
         // حرکت عادی (غیر undo)
@@ -184,14 +148,35 @@ export async function handleMove(
             ),
           });
         }
-        await appendGameEvent(gameId, {
-          type: "MOVE_APPLIED",
-          payload: { playerId, from, to, die },
-        });
+
+        // ثبت حرکت با اطلاعات کامل (شامل hit در صورت وجود)
+        if (validation.isHit) {
+          const opponentId = finalGame.players.find(
+            (p) => p.id !== playerId,
+          )?.id;
+          await appendGameEvent(gameId, {
+            type: "MOVE_APPLIED",
+            payload: {
+              playerId,
+              from,
+              to,
+              die,
+              hitOpponentId: opponentId,
+              hitFromPoint: to,
+            },
+          });
+        } else {
+          await appendGameEvent(gameId, {
+            type: "MOVE_APPLIED",
+            payload: { playerId, from, to, die },
+          });
+        }
+
         const updatedGame = await loadGameState(gameId);
         if (!updatedGame) throw new Error("Failed to rebuild state after move");
         finalGame = updatedGame;
         saveGame(finalGame);
+
         broadcastMoves.push({
           playerId,
           from,
@@ -200,13 +185,13 @@ export async function handleMove(
           ownerId: playerId,
           isUndo: false,
         });
+
+        // اگر حرکت همراه با hit بود، یک حرکت مجازی برای نمایش UI به کلاینت اضافه کن
         if (validation.isHit) {
           const opponentId = finalGame.players.find(
             (p) => p.id !== playerId,
           )?.id;
           if (opponentId) {
-            // ذخیره اطلاعات hit در حافظه برای استفاده در undo بعدی
-            lastHitInfo.set(gameId, { opponentId, fromPoint: to });
             broadcastMoves.push({
               playerId: opponentId,
               from: to,
@@ -217,6 +202,7 @@ export async function handleMove(
             });
           }
         }
+
         if (isGameOver(finalGame)) {
           const winType = calculateWinType(finalGame, playerId);
           await appendGameEvent(gameId, {
@@ -253,13 +239,13 @@ export async function handleMove(
       }
     }
 
+    // محاسبه subStatus و legalMoves برای ارسال به کلاینت
     const subStatus = calculateSubStatus(finalGame);
     const legalMoves = generateMoveSequences(
       finalGame,
       finalGame.turn ?? playerId,
     );
     const flatLegalMoves = flattenMoveSequences(legalMoves);
-
     const stateToSend = { ...finalGame, legalMoves: flatLegalMoves };
     if (finalGame.dice && finalGame.dice.length > 0) {
       stateToSend.subStatus =
