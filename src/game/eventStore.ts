@@ -75,8 +75,8 @@ export type MoveAppliedEvent = {
     to: number;
     die: number;
     isUndo?: boolean;
-    hitOpponentId?: PlayerId;
-    hitFromPoint?: number; // نقطه‌ای که مهره حریف از آن به بار رفته
+    hitOpponentId?: PlayerId; // اضافه شده برای ذخیره ضربه
+    hitFromPoint?: number; // نقطه‌ای که مهره حریف از آن خارج شده
   };
 };
 
@@ -123,7 +123,7 @@ export type PracticeRearrangeEvent = {
 export type PracticeSetupBoardEvent = {
   type: "PRACTICE_SETUP_BOARD";
   payload: {
-    playerId: PlayerId; // بازیکنی که درخواست داده (فقط برای امنیت)
+    playerId: PlayerId;
     board: {
       points: Array<{ owner: PlayerId | null; count: number }>;
       bar: Record<PlayerId, number>;
@@ -309,7 +309,6 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       const player = state.players.find((p) => p.id === playerId);
       if (!player) return state;
 
-      // حذف تمام مهره‌های این بازیکن
       for (let i = 0; i < 24; i++) {
         if (state.board.points[i].owner === playerId) {
           state.board.points[i].owner = null;
@@ -319,7 +318,6 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       state.board.bar[playerId] = 0;
       state.board.borneOff[playerId] = 0;
 
-      // قرار دادن مهره‌ها بر اساس درخواست
       for (const { index, count } of points) {
         if (index >= 0 && index < 24 && count > 0) {
           state.board.points[index].owner = playerId;
@@ -336,11 +334,9 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
 
     case "PRACTICE_SETUP_BOARD": {
       const { board } = event.payload;
-      // بازنویسی کامل تخته
       state.board.points = board.points.map((p) => ({ ...p }));
       state.board.bar = { ...board.bar };
       state.board.borneOff = { ...board.borneOff };
-      // بازنشانی نوبت و تاس (اختیاری)
       state.dice = [];
       state.rolledThisTurn = false;
       state.turn = event.payload.playerId;

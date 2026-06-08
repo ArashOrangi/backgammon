@@ -143,7 +143,6 @@ export async function handleRoll(
           payload: onOkSocketResponse(stateToSend),
         });
 
-        // اجرای بات در صورت نیاز (فقط یک بار)
         if (game.status === "in-progress") {
           await runBotIfNeeded(gameId, game.turn!, rooms);
         }
@@ -177,6 +176,9 @@ export async function handleRoll(
 
       const legalMovesSequences = generateMoveSequences(game, playerId);
       const flatLegalMoves = flattenMoveSequences(legalMovesSequences);
+      console.log(`[ROLL] legalMoves count = ${legalMovesSequences.length}`);
+
+      // اگر هیچ حرکت قانونی وجود نداشت، خودکار نوبت را تمام کن
       if (legalMovesSequences.length === 0) {
         await appendGameEvent(game.id, {
           type: "TURN_PASSED",
@@ -191,15 +193,11 @@ export async function handleRoll(
 
       const subStatus = calculateSubStatus(game);
       const stateToSend = { ...game, subStatus, legalMoves: flatLegalMoves };
-      if (game.status === "in-progress") {
-        await runBotIfNeeded(gameId, game.turn!, rooms);
-      }
       rooms.broadcast(gameId, {
         type: "game.state",
         payload: onOkSocketResponse(stateToSend),
       });
 
-      // اجرای بات در صورت نیاز (فقط یک بار)
       if (game.status === "in-progress") {
         await runBotIfNeeded(gameId, game.turn!, rooms);
       }

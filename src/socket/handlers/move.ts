@@ -83,7 +83,6 @@ export async function handleMove(
     for (const moveItem of payload) {
       const { from, to, die, isUndo } = moveItem;
       if (isUndo) {
-        // حرکات مجازی ضربه (مقصد BAR) را نادیده بگیر
         if (to === SPECIAL_POSITIONS.BAR) {
           console.log(`[MOVE] Ignoring undo for hit move (to BAR)`);
           continue;
@@ -129,10 +128,8 @@ export async function handleMove(
           isUndo: true,
         });
 
-        // فقط یک undo انجام بده و حلقه را بشکن
-        break;
+        break; // فقط یک undo انجام شود
       } else {
-        // حرکت عادی (غیر undo)
         if (finalGame.turn !== playerId) {
           return ctx.send({
             type: "game.error",
@@ -149,7 +146,7 @@ export async function handleMove(
           });
         }
 
-        // ثبت حرکت با اطلاعات کامل (شامل hit در صورت وجود)
+        // ثبت حرکت با ذخیره اطلاعات ضربه در صورت وجود
         if (validation.isHit) {
           const opponentId = finalGame.players.find(
             (p) => p.id !== playerId,
@@ -186,7 +183,6 @@ export async function handleMove(
           isUndo: false,
         });
 
-        // اگر حرکت همراه با hit بود، یک حرکت مجازی برای نمایش UI به کلاینت اضافه کن
         if (validation.isHit) {
           const opponentId = finalGame.players.find(
             (p) => p.id !== playerId,
@@ -239,7 +235,6 @@ export async function handleMove(
       }
     }
 
-    // محاسبه subStatus و legalMoves برای ارسال به کلاینت
     const subStatus = calculateSubStatus(finalGame);
     const legalMoves = generateMoveSequences(
       finalGame,
