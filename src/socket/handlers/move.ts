@@ -78,7 +78,7 @@ export async function handleMove(
       isUndo?: boolean;
     }> = [];
 
-    let undoProcessed = false;
+    // let undoProcessed = false;
 
     for (const moveItem of payload) {
       const { from, to, die, isUndo } = moveItem;
@@ -87,17 +87,11 @@ export async function handleMove(
           console.log(`[MOVE] Ignoring undo for hit move (to BAR)`);
           continue;
         }
-        if (undoProcessed) {
-          console.log(`[MOVE] Duplicate undo request ignored`);
-          continue;
-        }
-        undoProcessed = true;
 
         console.log(
           `[MOVE] Undo requested for game ${gameId}, player ${playerId}`,
         );
         if (finalGame.turn !== playerId) {
-          console.log(`[MOVE] Undo rejected: not your turn`);
           return ctx.send({
             type: "game.error",
             payload: onErrorSocketResponse("It's not your turn to undo"),
