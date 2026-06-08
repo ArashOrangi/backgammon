@@ -77,12 +77,11 @@ export async function handleEndTurn(
         legalMoves = generateMoveSequences(updatedGame, updatedGame.turn);
       }
       const flatLegalMoves = flattenMoveSequences(legalMoves);
-      const stateToSend = { ...updatedGame, legalMoves: flatLegalMoves };
-      // const stateToSend = {
-      //   ...updatedGame,
-      //   subStatus,
-      //   legalMoves: flatLegalMoves,
-      // };
+      const stateToSend = {
+        ...updatedGame,
+        subStatus,
+        legalMoves: flatLegalMoves,
+      };
 
       rooms.broadcast(gameId, {
         type: "game.state",
