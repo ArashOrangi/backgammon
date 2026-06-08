@@ -113,6 +113,22 @@ export async function handleMove(
         finalGame = stateAfterUndo;
         saveGame(finalGame);
 
+        // Immediately broadcast the new state after undo
+        const subStatus = calculateSubStatus(finalGame);
+        const legalMoves = generateMoveSequences(
+          finalGame,
+          finalGame.turn ?? playerId,
+        );
+        const flatLegalMoves = flattenMoveSequences(legalMoves);
+        const stateToSend: any = { ...finalGame, legalMoves: flatLegalMoves };
+        if (subStatus === "playDice") {
+          stateToSend.subStatus = "playDice";
+        }
+        rooms.broadcast(gameId, {
+          type: "game.state",
+          payload: onOkSocketResponse(stateToSend, "Undo applied"),
+        });
+
         broadcastMoves.push({
           playerId,
           from,
@@ -122,7 +138,7 @@ export async function handleMove(
           isUndo: true,
         });
 
-        // break; // فقط یک undo انجام شود
+        // break; // فقط یک undo انجام شود (کامنت شده)
       } else {
         if (finalGame.turn !== playerId) {
           return ctx.send({
