@@ -434,20 +434,14 @@ export async function loadGameStateUntil(
   return state;
 }
 
-export function calculateSubStatus(state: GameState): SubStatus | undefined {
-  if (state.status !== "in-progress" || !state.turn) return undefined;
-  if (!state.dice || state.dice.length === 0) return undefined;
+export function calculateSubStatus(state: GameState): SubStatus {
+  if (state.status !== "in-progress" || !state.turn) return "mustEndTurn";
+  if (!state.dice || state.dice.length === 0) {
+    return "mustEndTurn";
+  }
   const legalMoves = generateMoveSequences(state, state.turn);
-  return legalMoves && legalMoves.length > 0 ? "playDice" : undefined;
+  return legalMoves && legalMoves.length > 0 ? "playDice" : "mustEndTurn";
 }
-// export function calculateSubStatus(state: GameState): SubStatus {
-//   if (state.status !== "in-progress" || !state.turn) return "mustEndTurn";
-//   if (!state.dice || state.dice.length === 0) {
-//     return "mustEndTurn";
-//   }
-//   const legalMoves = generateMoveSequences(state, state.turn);
-//   return legalMoves && legalMoves.length > 0 ? "playDice" : "mustEndTurn";
-// }
 
 export async function undoLastMove(gameId: number, playerId: PlayerId) {
   const result = await prismaGameEventMarkAsUndo(gameId, playerId);
