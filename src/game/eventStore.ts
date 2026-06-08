@@ -118,6 +118,18 @@ export type PracticeRearrangeEvent = {
   };
 };
 
+export type PracticeSetupBoardEvent = {
+  type: "PRACTICE_SETUP_BOARD";
+  payload: {
+    playerId: PlayerId; // بازیکنی که درخواست داده (فقط برای امنیت)
+    board: {
+      points: Array<{ owner: PlayerId | null; count: number }>;
+      bar: Record<PlayerId, number>;
+      borneOff: Record<PlayerId, number>;
+    };
+  };
+};
+
 export type GameEvent =
   | PlayerJoinedEvent
   | PlayerLeftEvent
@@ -131,7 +143,8 @@ export type GameEvent =
   | NetworkTimeoutEvent
   | GameFinishedEvent
   | PracticeBearOffSetupEvent
-  | PracticeRearrangeEvent;
+  | PracticeRearrangeEvent
+  | PracticeSetupBoardEvent;
 
 /* -------------------------------------------------------------------------- */
 /* Type Guards                                                                */
@@ -315,6 +328,20 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       state.dice = [];
       state.rolledThisTurn = false;
       state.turn = playerId;
+      state.turnStartedAt = Date.now();
+      return state;
+    }
+
+    case "PRACTICE_SETUP_BOARD": {
+      const { board } = event.payload;
+      // بازنویسی کامل تخته
+      state.board.points = board.points.map((p) => ({ ...p }));
+      state.board.bar = { ...board.bar };
+      state.board.borneOff = { ...board.borneOff };
+      // بازنشانی نوبت و تاس (اختیاری)
+      state.dice = [];
+      state.rolledThisTurn = false;
+      state.turn = event.payload.playerId;
       state.turnStartedAt = Date.now();
       return state;
     }

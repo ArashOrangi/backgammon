@@ -25,6 +25,17 @@ export type ClientMessage =
         gameId: number;
         points: Array<{ index: number; count: number }>;
       };
+    }
+  | {
+      type: "game.practice.setup_board";
+      payload: {
+        gameId: number;
+        board: {
+          points: Array<{ owner: number | null; count: number }>;
+          bar: Record<number, number>;
+          borneOff: Record<number, number>;
+        };
+      };
     };
 
 // ---------- Server Messages ----------

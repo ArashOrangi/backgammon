@@ -18,6 +18,7 @@ import { logWSMessage } from "@/utils/wsLogger"; // <-- اضافه شده
 import {
   handlePracticeBearOff,
   handlePracticeRearrange,
+  handlePracticeSetupBoard,
 } from "./handlers/practice";
 
 export function registerSocketHandlers(
@@ -34,7 +35,7 @@ export function registerSocketHandlers(
   router.register("game.endTurn", handleEndTurn);
   router.register("game.practice.bearoff", handlePracticeBearOff);
   router.register("game.practice.rearrange", handlePracticeRearrange);
-
+  router.register("game.practice.setup_board", handlePracticeSetupBoard);
   wss.on("connection", (ws) => {
     const ctx = new SocketContext(ws);
     console.log(`[Socket] Player connected: ${ctx.id}`);
