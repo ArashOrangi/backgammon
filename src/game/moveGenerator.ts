@@ -123,12 +123,13 @@ function generateSingleMoves(
     const barCount = board.bar[playerId] ?? 0;
     if (barCount > 0) {
       const to = computeTargetFromBar(game, playerId, die);
-      if (DEBUG_DOUBLE) {
-        console.log(
-          `[DEBUG] generateSingleMoves: bar move die=${die} -> to=${to}`,
-        );
-      }
+      console.log(
+        `[DEBUG] Bar move: die=${die}, to=${to}, barCount=${barCount}`,
+      );
       const res = validateMove(game, playerId, SPECIAL_POSITIONS.BAR, to, dice);
+      console.log(
+        `[DEBUG] validateMove result: isValid=${res.isValid}, dieUsed=${res.dieUsed}, message=${res.message}`,
+      );
       if (res.isValid && res.dieUsed !== undefined) {
         moves.push({
           from: SPECIAL_POSITIONS.BAR,
@@ -136,14 +137,6 @@ function generateSingleMoves(
           die: res.dieUsed,
           ownerId: playerId,
         });
-        if (DEBUG_DOUBLE)
-          console.log(
-            `[DEBUG] generateSingleMoves: bar move valid, dieUsed=${res.dieUsed}`,
-          );
-      } else if (DEBUG_DOUBLE) {
-        console.log(
-          `[DEBUG] generateSingleMoves: bar move invalid: ${res.message}`,
-        );
       }
       continue;
     }
@@ -254,9 +247,15 @@ function computeTargetFromBar(
   playerId: PlayerId,
   die: number,
 ): number {
-  const dir = getDirection(game, playerId);
-  if (dir === -1) return 24 - die; // سفید
-  return die - 1; // سیاه
+  const player = game.players.find((p) => p.id === playerId);
+  if (!player) throw new Error("Player not found");
+  // سفید: وارد خانه سیاه (نقاط 0 تا 5) می‌شود
+  // سیاه: وارد خانه سفید (نقاط 18 تا 23) می‌شود
+  if (player.color === "white") {
+    return die - 1;
+  } else {
+    return 24 - die;
+  }
 }
 
 function getDirection(game: GameState, playerId: PlayerId): number {
