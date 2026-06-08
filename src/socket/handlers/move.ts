@@ -236,12 +236,27 @@ export async function handleMove(
     );
     const flatLegalMoves = flattenMoveSequences(legalMoves);
     const stateToSend = { ...finalGame, legalMoves: flatLegalMoves };
-    if (finalGame.dice && finalGame.dice.length > 0) {
-      stateToSend.subStatus =
-        flatLegalMoves.length > 0 ? "playDice" : "mustEndTurn";
-    } else {
-      stateToSend.subStatus = "mustEndTurn"; // اضافه شد
+    if (
+      finalGame.dice &&
+      finalGame.dice.length > 0 &&
+      flatLegalMoves.length > 0
+    ) {
+      stateToSend.subStatus = "playDice";
     }
+    // در غیر این صورت، subStatus را ارسال نکنید (حتی اگر mustEndTurn باشد)
+    // const subStatus = calculateSubStatus(finalGame);
+    // const legalMoves = generateMoveSequences(
+    //   finalGame,
+    //   finalGame.turn ?? playerId,
+    // );
+    // const flatLegalMoves = flattenMoveSequences(legalMoves);
+    // const stateToSend = { ...finalGame, legalMoves: flatLegalMoves };
+    // if (finalGame.dice && finalGame.dice.length > 0) {
+    //   stateToSend.subStatus =
+    //     flatLegalMoves.length > 0 ? "playDice" : "mustEndTurn";
+    // } else {
+    //   stateToSend.subStatus = "mustEndTurn"; // اضافه شد
+    // }
 
     rooms.broadcast(gameId, {
       type: "game.state",

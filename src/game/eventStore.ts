@@ -444,13 +444,12 @@ export function calculateSubStatus(state: GameState): SubStatus {
 }
 
 export async function undoLastMove(gameId: number, playerId: PlayerId) {
+  console.log(`[undoLastMove] game=${gameId}, player=${playerId}`);
   const result = await prismaGameEventMarkAsUndo(gameId, playerId);
-
-  if (result === OrmState.Error || !result) {
-    return null;
-  }
-
+  console.log(`[undoLastMove] result=`, result);
+  if (result === OrmState.Error || !result) return null;
   const undoneEvent = result as GameEvent;
+  console.log(`[undoLastMove] undoneEvent payload:`, undoneEvent.payload);
   return undoneEvent.payload;
 }
 
