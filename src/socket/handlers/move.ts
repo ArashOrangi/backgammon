@@ -14,13 +14,13 @@ import {
   loadGameState,
   calculateSubStatus,
   undoLastMove,
+  forceSnapshot, // اضافه شد
 } from "@/game/eventStore";
 import { GameQueue } from "@/game/gameQueue";
 import { isGameOver, calculateWinType } from "../../game/engine";
 import { saveGame } from "../../game/gameStore";
 import { SPECIAL_POSITIONS } from "@/game/types";
 import { runBotIfNeeded } from "@/game/botRunner";
-import { rollDice as rollDiceUtil } from "@/utils/dice";
 
 type MoveItem = {
   gameId: number;
@@ -32,6 +32,12 @@ type MoveItem = {
 type MovePayloadArray = MoveItem[];
 
 const gameQueue = new GameQueue();
+
+// ذخیره اطلاعات hit اخیر برای هر بازی (موقتی در حافظه)
+const lastHitInfo = new Map<
+  number,
+  { opponentId: number; fromPoint: number }
+>();
 
 export async function handleMove(
   ctx: SocketContext,
@@ -79,6 +85,8 @@ export async function handleMove(
       isUndo?: boolean;
     }> = [];
 
+    let undoProcessed = false; // جلوگیری از پردازش چندباره undo
+
     for (const moveItem of payload) {
       const { from, to, die, isUndo } = moveItem;
       if (isUndo) {
@@ -87,6 +95,12 @@ export async function handleMove(
           console.log(`[MOVE] Ignoring undo for hit move (to BAR)`);
           continue;
         }
+        if (undoProcessed) {
+          console.log(`[MOVE] Duplicate undo request ignored`);
+          continue;
+        }
+        undoProcessed = true;
+
         console.log(
           `[MOVE] Undo requested for game ${gameId}, player ${playerId}`,
         );
@@ -97,6 +111,10 @@ export async function handleMove(
             payload: onErrorSocketResponse("It's not your turn to undo"),
           });
         }
+
+        // دریافت اطلاعات hit مربوط به آخرین حرکت این بازیکن (اگر وجود داشته باشد)
+        const hitInfo = lastHitInfo.get(gameId);
+
         const undonePayload = await undoLastMove(gameId, playerId);
         if (!undonePayload) {
           console.log(`[MOVE] Undo failed: no move to undo`);
@@ -105,11 +123,39 @@ export async function handleMove(
             payload: onErrorSocketResponse("No move to undo"),
           });
         }
-        const stateAfterUndo = await loadGameState(gameId);
+
+        let stateAfterUndo = await loadGameState(gameId);
         if (!stateAfterUndo)
           throw new Error("Failed to rebuild state after undo");
+
+        // اگر hit وجود داشت، اثر آن را به صورت دستی برگردانیم
+        if (hitInfo) {
+          const { opponentId, fromPoint } = hitInfo;
+          // مهره حریف را از بار خارج کن
+          if (stateAfterUndo.board.bar[opponentId] > 0) {
+            stateAfterUndo.board.bar[opponentId]--;
+            // برگرداندن مهره به نقطه قبلی
+            const targetPoint = stateAfterUndo.board.points[fromPoint];
+            if (targetPoint.owner === null) {
+              targetPoint.owner = opponentId;
+              targetPoint.count = 1;
+            } else if (targetPoint.owner === opponentId) {
+              targetPoint.count++;
+            } else {
+              console.warn(
+                `Point ${fromPoint} is blocked, cannot restore hit checker`,
+              );
+            }
+            // ذخیره تغییرات دستی در snapshot
+            await forceSnapshot(gameId, stateAfterUndo);
+          }
+          // پاک کردن اطلاعات hit برای این بازی (فقط یک بار استفاده شود)
+          lastHitInfo.delete(gameId);
+        }
+
         finalGame = stateAfterUndo;
         saveGame(finalGame);
+
         broadcastMoves.push({
           playerId,
           from,
@@ -118,7 +164,11 @@ export async function handleMove(
           ownerId: playerId,
           isUndo: true,
         });
+
+        // بعد از undo، حلقه را می‌شکنیم تا حرکت دیگری پردازش نشود
+        break;
       } else {
+        // حرکت عادی (غیر undo)
         if (finalGame.turn !== playerId) {
           return ctx.send({
             type: "game.error",
@@ -155,6 +205,8 @@ export async function handleMove(
             (p) => p.id !== playerId,
           )?.id;
           if (opponentId) {
+            // ذخیره اطلاعات hit در حافظه برای استفاده در undo بعدی
+            lastHitInfo.set(gameId, { opponentId, fromPoint: to });
             broadcastMoves.push({
               playerId: opponentId,
               from: to,
@@ -201,9 +253,6 @@ export async function handleMove(
       }
     }
 
-    // Auto-pass and auto-dice block has been removed
-    // Now the player must explicitly call game.endTurn to pass the turn.
-
     const subStatus = calculateSubStatus(finalGame);
     const legalMoves = generateMoveSequences(
       finalGame,
@@ -211,17 +260,11 @@ export async function handleMove(
     );
     const flatLegalMoves = flattenMoveSequences(legalMoves);
 
-    // ========== ساخت stateToSend با حذف کامل turnRoll ==========
     const stateToSend = { ...finalGame, legalMoves: flatLegalMoves };
-    // فقط در صورتی که تاس وجود دارد، subStatus را ارسال کن
-
     if (finalGame.dice && finalGame.dice.length > 0) {
       stateToSend.subStatus =
         flatLegalMoves.length > 0 ? "playDice" : "mustEndTurn";
     }
-    // در غیر این صورت (dice خالی) هیچ subStatusی اضافه نمی‌شود
-
-    // ==========================================================
 
     rooms.broadcast(gameId, {
       type: "game.state",
@@ -229,8 +272,6 @@ export async function handleMove(
     });
 
     if (broadcastMoves.length) {
-      const payloadToSend =
-        broadcastMoves.length === 1 ? broadcastMoves[0] : broadcastMoves;
       rooms.broadcast(gameId, {
         type: "player.move",
         payload: onOkSocketResponse(broadcastMoves),
