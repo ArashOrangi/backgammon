@@ -16,7 +16,7 @@ import {
   generateMoveSequences,
   flattenMoveSequences,
 } from "@/game/moveGenerator";
-import { runBotIfNeeded } from "@/game/botRunner";
+import { runBotIfNeeded } from "@/game/botRunner"; // اضافه شده
 
 // ذخیره وضعیت آمادگی هر بازی (در حافظه، نه در state بازی)
 const readyStates = new Map<number, Set<number>>();
@@ -139,11 +139,11 @@ export async function handleReady(
       ? generateMoveSequences(freshGame, freshGame.turn)
       : [];
     const flatLegalMoves = flattenMoveSequences(legalMoves);
-    const stateToSend: any = { ...freshGame, legalMoves: flatLegalMoves };
-    // فقط در صورت وجود حرکت قانونی (playDice) subStatus ارسال شود
-    if (subStatus === "playDice") {
-      stateToSend.subStatus = "playDice";
-    }
+    const stateToSend = {
+      ...freshGame,
+      subStatus,
+      legalMoves: flatLegalMoves,
+    };
 
     rooms.broadcast(gameId, {
       type: "game.state",

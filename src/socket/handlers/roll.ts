@@ -137,11 +137,7 @@ export async function handleRoll(
           ? generateMoveSequences(game, game.turn)
           : [];
         const flatLegalMoves = flattenMoveSequences(legalMoves);
-        const stateToSend: any = { ...game, legalMoves: flatLegalMoves };
-        // فقط در صورت وجود حرکت قانونی (playDice) subStatus ارسال شود
-        if (subStatus === "playDice") {
-          stateToSend.subStatus = "playDice";
-        }
+        const stateToSend = { ...game, subStatus, legalMoves: flatLegalMoves };
         rooms.broadcast(gameId, {
           type: "game.state",
           payload: onOkSocketResponse(stateToSend),
@@ -196,11 +192,7 @@ export async function handleRoll(
       }
 
       const subStatus = calculateSubStatus(game);
-      const stateToSend: any = { ...game, legalMoves: flatLegalMoves };
-      // فقط در صورت وجود حرکت قانونی (playDice) subStatus ارسال شود
-      if (subStatus === "playDice") {
-        stateToSend.subStatus = "playDice";
-      }
+      const stateToSend = { ...game, subStatus, legalMoves: flatLegalMoves };
       rooms.broadcast(gameId, {
         type: "game.state",
         payload: onOkSocketResponse(stateToSend),

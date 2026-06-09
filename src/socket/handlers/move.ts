@@ -245,18 +245,20 @@ export async function handleMove(
       }
     }
 
+    // در غیر این صورت، subStatus را ارسال نکنید (حتی اگر mustEndTurn باشد)
     const subStatus = calculateSubStatus(finalGame);
     const legalMoves = generateMoveSequences(
       finalGame,
       finalGame.turn ?? playerId,
     );
     const flatLegalMoves = flattenMoveSequences(legalMoves);
-    const stateToSend: any = { ...finalGame, legalMoves: flatLegalMoves };
-    // فقط در صورت وجود حرکت قانونی (playDice) subStatus ارسال شود
-    if (subStatus === "playDice") {
-      stateToSend.subStatus = "playDice";
+    const stateToSend = { ...finalGame, legalMoves: flatLegalMoves };
+    if (finalGame.dice && finalGame.dice.length > 0) {
+      stateToSend.subStatus =
+        flatLegalMoves.length > 0 ? "playDice" : "mustEndTurn";
+    } else {
+      stateToSend.subStatus = "mustEndTurn"; // اضافه شد
     }
-    // در غیر این صورت هیچ فیلد subStatus اضافه نمی‌شود
 
     rooms.broadcast(gameId, {
       type: "game.state",
