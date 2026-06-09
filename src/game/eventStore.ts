@@ -447,16 +447,37 @@ export function calculateSubStatus(state: GameState): SubStatus | undefined {
   return legalMoves && legalMoves.length > 0 ? "playDice" : undefined;
 }
 
+// export async function undoLastMove(gameId: number, playerId: PlayerId) {
+//   console.log(`[undoLastMove] game=${gameId}, player=${playerId}`);
+//   const result = await prismaGameEventMarkAsUndo(gameId, playerId);
+//   console.log(`[undoLastMove] result=`, result);
+//   if (result === OrmState.Error || !result) return null;
+//   const undoneEvent = result as GameEvent;
+//   console.log(`[undoLastMove] undoneEvent payload:`, undoneEvent.payload);
+//   return undoneEvent.payload;
+// }
 export async function undoLastMove(gameId: number, playerId: PlayerId) {
   console.log(`[undoLastMove] game=${gameId}, player=${playerId}`);
   const result = await prismaGameEventMarkAsUndo(gameId, playerId);
-  console.log(`[undoLastMove] result=`, result);
   if (result === OrmState.Error || !result) return null;
-  const undoneEvent = result as GameEvent;
-  console.log(`[undoLastMove] undoneEvent payload:`, undoneEvent.payload);
-  return undoneEvent.payload;
-}
 
+  // پس از علامت‌گذاری، وضعیت جدید را بارگذاری کن
+  const newState = await loadGameState(gameId);
+  if (newState) {
+    // یک اسنپ‌شات جدید با sequence = آخرین sequence + 1 ایجاد کن
+    // تا اسنپ‌شات قبلی را override نکند بلکه جدید بسازد
+    const lastSequence = await prismaGameEventGetLastSequence(gameId);
+    if (typeof lastSequence === "number") {
+      await prismaGameSnapshotCreate({
+        gameId,
+        sequence: lastSequence + 1, // sequence جدید
+        state: newState as unknown as Prisma.InputJsonValue,
+      });
+    }
+  }
+
+  return (result as GameEvent).payload;
+}
 export async function forceSnapshot(gameId: number, state: GameState) {
   const lastSequence = await prismaGameEventGetLastSequence(gameId);
   if (typeof lastSequence !== "number") return;
