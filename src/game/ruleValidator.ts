@@ -40,13 +40,16 @@ function computeDistance(
   to: number,
 ): number | null {
   const dir = getDirection(game, playerId);
+  const player = game.players.find((p) => p.id === playerId);
+  if (!player) return null;
 
   // from bar
   if (from === SPECIAL_POSITIONS.BAR) {
-    const player = game.players.find((p) => p.id === playerId);
-    if (player?.color === "white") {
+    if (player.color === "white") {
+      // سفید: نقاط 0 تا 5
       return to + 1;
     } else {
+      // سیاه: نقاط 18 تا 23
       return 24 - to;
     }
   }

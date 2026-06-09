@@ -86,8 +86,7 @@ function recurse(
     }
     const snapshot = takeSnapshot(game);
     try {
-      // تغییر: ارسال move.die به applyMove
-      applyMove(game, playerId, move.from, move.to, move.die);
+      applyMove(game, playerId, move.from, move.to);
       const remaining = removeDie(dice, move.die);
       if (DEBUG_DOUBLE) {
         console.log(
@@ -249,10 +248,13 @@ function computeTargetFromBar(
   die: number,
 ): number {
   const player = game.players.find((p) => p.id === playerId);
-  if (player?.color === "white") {
-    return die - 1; // برعکس حالت استاندارد
+  if (!player) throw new Error("Player not found");
+  // سفید: وارد خانه سیاه (نقاط 0 تا 5) می‌شود
+  // سیاه: وارد خانه سفید (نقاط 18 تا 23) می‌شود
+  if (player.color === "white") {
+    return die - 1;
   } else {
-    return 24 - die; // برعکس حالت استاندارد
+    return 24 - die;
   }
 }
 
