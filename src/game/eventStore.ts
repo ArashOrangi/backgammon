@@ -1,4 +1,4 @@
-import { GameState, PlayerId, SubStatus, SPECIAL_POSITIONS } from "./types";
+import { GameState, PlayerId, SubStatus } from "./types";
 import { $Enums, Prisma } from "@prisma/client";
 
 import {
@@ -75,8 +75,8 @@ export type MoveAppliedEvent = {
     to: number;
     die: number;
     isUndo?: boolean;
-    hitOpponentId?: PlayerId; // اضافه شده برای ذخیره ضربه
-    hitFromPoint?: number; // نقطه‌ای که مهره حریف از آن خارج شده
+    hitOpponentId?: PlayerId;
+    hitFromPoint?: number;
   };
 };
 
@@ -187,9 +187,11 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
   switch (event.type) {
     case "PLAYER_JOINED": {
       const { playerId, color } = event.payload;
+
       if (!state.players.some((p) => p.id === playerId)) {
         state.players.push({ id: playerId, color });
       }
+
       return state;
     }
 
@@ -197,6 +199,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       state.players = state.players.filter(
         (p) => p.id !== event.payload.playerId,
       );
+
       return state;
     }
 
@@ -207,8 +210,13 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
 
     case "STARTING_ROLLED": {
       const { playerId, value } = event.payload;
-      if (!state.startingDice) state.startingDice = {};
+
+      if (!state.startingDice) {
+        state.startingDice = {};
+      }
+
       state.startingDice[playerId] = value;
+
       return state;
     }
 
@@ -221,6 +229,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
         secondarySeconds,
         dice,
       } = event.payload;
+
       state.status = "in-progress";
       state.turn = startingPlayerId;
       state.board = createInitialBoard(whitePlayerId, blackPlayerId);
@@ -232,6 +241,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       };
       state.dice = dice;
       state.rolledThisTurn = true;
+
       return state;
     }
 
@@ -239,6 +249,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       state.dice = event.payload.dice;
       state.turnStartedAt = Date.now();
       state.rolledThisTurn = true;
+
       return state;
     }
 
@@ -250,6 +261,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
         event.payload.to,
         event.payload.die,
       );
+
       return state;
     }
 
@@ -258,6 +270,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       state.dice = [];
       state.turnStartedAt = Date.now();
       state.rolledThisTurn = false;
+
       return state;
     }
 
@@ -271,18 +284,21 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       state.winner = event.payload.winner;
       state.winType = event.payload.winType;
       state.turn = null;
+
       return state;
     }
 
     case "PRACTICE_BEAROFF_SETUP": {
       const { playerId } = event.payload;
       const player = state.players.find((p) => p.id === playerId);
+
       if (!player) return state;
 
       const homeIndices =
         player.color === "white"
           ? [0, 1, 2, 3, 4, 5]
           : [18, 19, 20, 21, 22, 23];
+
       const firstHome = homeIndices[0];
 
       for (let i = 0; i < 24; i++) {
@@ -291,6 +307,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
           state.board.points[i].count = 0;
         }
       }
+
       state.board.bar[playerId] = 0;
       state.board.borneOff[playerId] = 0;
 
@@ -301,12 +318,14 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       state.rolledThisTurn = false;
       state.turn = playerId;
       state.turnStartedAt = Date.now();
+
       return state;
     }
 
     case "PRACTICE_REARRANGE": {
       const { playerId, points } = event.payload;
       const player = state.players.find((p) => p.id === playerId);
+
       if (!player) return state;
 
       for (let i = 0; i < 24; i++) {
@@ -315,6 +334,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
           state.board.points[i].count = 0;
         }
       }
+
       state.board.bar[playerId] = 0;
       state.board.borneOff[playerId] = 0;
 
@@ -329,11 +349,13 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       state.rolledThisTurn = false;
       state.turn = playerId;
       state.turnStartedAt = Date.now();
+
       return state;
     }
 
     case "PRACTICE_SETUP_BOARD": {
       const { board } = event.payload;
+
       state.board.points = board.points.map((p) => ({ ...p }));
       state.board.bar = { ...board.bar };
       state.board.borneOff = { ...board.borneOff };
@@ -341,6 +363,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       state.rolledThisTurn = false;
       state.turn = event.payload.playerId;
       state.turnStartedAt = Date.now();
+
       return state;
     }
 
@@ -350,11 +373,46 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Internal Rebuild Helpers                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Rebuilds game state from the very beginning, ignoring snapshots.
+ *
+ * This is intentionally used after undo, because the latest snapshot may have
+ * been created at the same sequence as the event that was just marked as undo.
+ * If we load from that snapshot, we may accidentally keep the undone move in
+ * the rebuilt state.
+ */
+async function rebuildGameStateFromScratch(
+  gameId: number,
+): Promise<GameState | null> {
+  let state = await createInitialGameState(gameId);
+
+  const events = await prismaGameEventGetAfterSequence({
+    gameId,
+    sequence: -1,
+  });
+
+  for (const row of events) {
+    if (!isEventRow(row)) continue;
+
+    state = applyEvent(state, {
+      type: row.type,
+      payload: row.payload,
+    } as any);
+  }
+
+  return state;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Public API                                                                 */
 /* -------------------------------------------------------------------------- */
 
 export async function loadGameState(gameId: number): Promise<GameState | null> {
   const snapshot = await prismaGameSnapshotGetLast(gameId);
+
   let state: GameState;
   let sequence = -1;
 
@@ -365,11 +423,18 @@ export async function loadGameState(gameId: number): Promise<GameState | null> {
     state = await createInitialGameState(gameId);
   }
 
-  const events = await prismaGameEventGetAfterSequence({ gameId, sequence });
+  const events = await prismaGameEventGetAfterSequence({
+    gameId,
+    sequence,
+  });
 
   for (const row of events) {
     if (!isEventRow(row)) continue;
-    state = applyEvent(state, { type: row.type, payload: row.payload } as any);
+
+    state = applyEvent(state, {
+      type: row.type,
+      payload: row.payload,
+    } as any);
   }
 
   return state;
@@ -377,7 +442,11 @@ export async function loadGameState(gameId: number): Promise<GameState | null> {
 
 export async function appendGameEvent(gameId: number, event: GameEvent) {
   const lastSequence = await prismaGameEventGetLastSequence(gameId);
-  if (typeof lastSequence !== "number") return lastSequence;
+
+  if (typeof lastSequence !== "number") {
+    return lastSequence;
+  }
+
   const nextSequence = lastSequence + 1;
 
   const created = await prismaGameEventCreate({
@@ -393,14 +462,12 @@ export async function appendGameEvent(gameId: number, event: GameEvent) {
 
   if (nextSequence % SNAPSHOT_INTERVAL === 0) {
     const state = await loadGameState(gameId);
+
     if (state) {
-      await prismaGameSnapshotCreate({
-        gameId,
-        sequence: nextSequence,
-        state: state as unknown as Prisma.InputJsonValue,
-      });
+      await forceSnapshot(gameId, state);
     }
   }
+
   return created;
 }
 
@@ -409,6 +476,7 @@ export async function loadGameStateUntil(
   untilSequence?: number,
 ): Promise<GameState | null> {
   const snapshot = await prismaGameSnapshotGetLast(gameId);
+
   let state: GameState;
   let sequence = -1;
 
@@ -424,73 +492,93 @@ export async function loadGameStateUntil(
     sequence,
     untilSequence,
   });
+
   if (!events) return null;
 
   for (const row of events) {
     if (!isEventRow(row)) continue;
-    state = applyEvent(state, { type: row.type, payload: row.payload } as any);
+
+    state = applyEvent(state, {
+      type: row.type,
+      payload: row.payload,
+    } as any);
   }
 
   return state;
 }
 
 export function calculateSubStatus(state: GameState): SubStatus | undefined {
-  if (state.status !== "in-progress" || !state.turn) return undefined;
-  if (!state.dice || state.dice.length === 0) return undefined;
+  if (state.status !== "in-progress" || !state.turn) {
+    return undefined;
+  }
+
+  if (!state.dice || state.dice.length === 0) {
+    return undefined;
+  }
 
   const legalMoves = generateMoveSequences(state, state.turn);
-
   const hasRealMove = legalMoves.some((seq) => seq.moves.length > 0);
 
   return hasRealMove ? "playDice" : undefined;
 }
 
-// export async function undoLastMove(gameId: number, playerId: PlayerId) {
-//   console.log(`[undoLastMove] game=${gameId}, player=${playerId}`);
-//   const result = await prismaGameEventMarkAsUndo(gameId, playerId);
-//   console.log(`[undoLastMove] result=`, result);
-//   if (result === OrmState.Error || !result) return null;
-//   const undoneEvent = result as GameEvent;
-//   console.log(`[undoLastMove] undoneEvent payload:`, undoneEvent.payload);
-//   return undoneEvent.payload;
-// }
 export async function undoLastMove(gameId: number, playerId: PlayerId) {
   console.log(`[undoLastMove] game=${gameId}, player=${playerId}`);
-  const result = await prismaGameEventMarkAsUndo(gameId, playerId);
-  if (result === OrmState.Error || !result) return null;
 
-  const newState = await loadGameState(gameId);
-  if (newState) {
-    const lastSequence = await prismaGameEventGetLastSequence(gameId);
-    if (typeof lastSequence === "number") {
-      await prismaGameSnapshotCreate({
-        gameId,
-        sequence: lastSequence + 1,
-        state: newState as unknown as Prisma.InputJsonValue,
-      });
-    }
+  const result = await prismaGameEventMarkAsUndo(gameId, playerId);
+
+  if (result === OrmState.Error || !result) {
+    return null;
   }
+
+  /**
+   * Important:
+   *
+   * Do NOT call loadGameState(gameId) here.
+   *
+   * The latest snapshot may already be at the same sequence as the event that
+   * was just marked as undo. In that case, loadGameState() would load the stale
+   * snapshot and skip replaying the changed event, keeping the undone move alive.
+   */
+  const newState = await rebuildGameStateFromScratch(gameId);
+
+  if (newState) {
+    await forceSnapshot(gameId, newState);
+  }
+
   return (result as GameEvent).payload;
 }
 
 export async function forceSnapshot(gameId: number, state: GameState) {
   const lastSequence = await prismaGameEventGetLastSequence(gameId);
-  if (typeof lastSequence !== "number") return;
+
+  if (typeof lastSequence !== "number") {
+    return;
+  }
 
   const existing = await prisma.gameSnapshots.findFirst({
-    where: { gameId, sequence: lastSequence },
+    where: {
+      gameId,
+      sequence: lastSequence,
+    },
   });
 
   if (existing) {
     await prisma.gameSnapshots.update({
-      where: { id: existing.id },
-      data: { state: state as unknown as Prisma.InputJsonValue },
+      where: {
+        id: existing.id,
+      },
+      data: {
+        state: state as unknown as Prisma.InputJsonValue,
+      },
     });
-  } else {
-    await prismaGameSnapshotCreate({
-      gameId,
-      sequence: lastSequence,
-      state: state as unknown as Prisma.InputJsonValue,
-    });
+
+    return;
   }
+
+  await prismaGameSnapshotCreate({
+    gameId,
+    sequence: lastSequence,
+    state: state as unknown as Prisma.InputJsonValue,
+  });
 }

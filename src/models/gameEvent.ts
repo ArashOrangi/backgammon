@@ -56,6 +56,7 @@ export async function prismaGameEventGetLastSequence(gameId: number) {
       orderBy: { sequence: "desc" },
       select: prismaSelectGameEvent,
     });
+
     return event ? event.sequence : -1;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
@@ -77,7 +78,9 @@ export async function prismaGameEventAppend({
       orderBy: { sequence: "desc" },
       select: { sequence: true },
     });
+
     const sequence = (last?.sequence ?? -1) + 1;
+
     const event = await prisma.gameEvents.create({
       data: {
         gameId,
@@ -87,6 +90,7 @@ export async function prismaGameEventAppend({
       },
       select: prismaSelectGameEvent,
     });
+
     return event;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
@@ -96,10 +100,14 @@ export async function prismaGameEventAppend({
 export async function prismaGameEventGetAll(gameId: number) {
   try {
     const events = await prisma.gameEvents.findMany({
-      where: { gameId, isUndo: false },
+      where: {
+        gameId,
+        isUndo: false,
+      },
       orderBy: { sequence: "asc" },
       select: prismaSelectGameEvent,
     });
+
     return events;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
@@ -123,6 +131,7 @@ export async function prismaGameEventGetFromSequence({
       orderBy: { sequence: "asc" },
       select: prismaSelectGameEvent,
     });
+
     return events;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
@@ -149,6 +158,7 @@ export async function prismaGameEventGetAfterSequence({
         },
       },
       orderBy: { sequence: "asc" },
+      select: prismaSelectGameEvent,
     });
   } catch (error) {
     return errorHandlersOnPrisma({ error });
@@ -158,9 +168,14 @@ export async function prismaGameEventGetAfterSequence({
 export async function prismaGameEventsFind(gameId: number) {
   try {
     const events = await prisma.gameEvents.findMany({
-      where: { gameId, isUndo: false }, // اصلاح: فقط ایونت‌های معتبر
+      where: {
+        gameId,
+        isUndo: false,
+      },
       orderBy: { sequence: "asc" },
+      select: prismaSelectGameEvent,
     });
+
     return events;
   } catch (error) {
     return OrmState.Error;
@@ -169,30 +184,13 @@ export async function prismaGameEventsFind(gameId: number) {
 
 export async function getGameEvents(gameId: number) {
   return prisma.gameEvents.findMany({
-    where: { gameId, isUndo: false }, // اصلاح: فقط ایونت‌های معتبر
-    orderBy: { sequence: "asc" },
-  });
-}
-
-// تابع زیر فقط برای سازگاری با کدهای قدیمی نگهداری شده است، استفاده از آن توصیه نمی‌شود.
-export async function prismaGameEventDeleteLastMove(
-  gameId: number,
-  playerId: number,
-) {
-  const lastMove = await prisma.gameEvents.findFirst({
     where: {
       gameId,
-      type: "MOVE_APPLIED",
-      payload: { path: ["playerId"], equals: playerId },
+      isUndo: false,
     },
-    orderBy: { sequence: "desc" },
+    orderBy: { sequence: "asc" },
+    select: prismaSelectGameEvent,
   });
-  if (lastMove) {
-    return await prisma.gameEvents.delete({
-      where: { id: lastMove.id },
-    });
-  }
-  return null;
 }
 
 export async function prismaGameEventMarkAsUndo(
@@ -200,20 +198,49 @@ export async function prismaGameEventMarkAsUndo(
   playerId: number,
 ) {
   try {
-    const lastMove = await prisma.gameEvents.findFirst({
-      where: {
-        gameId,
-        type: "MOVE_APPLIED",
-        isUndo: false,
-        payload: { path: ["playerId"], equals: playerId },
-      },
-      orderBy: { sequence: "desc" },
-    });
-    if (!lastMove) return null;
-    return await prisma.gameEvents.update({
-      where: { id: lastMove.id },
-      data: { isUndo: true },
-      select: prismaSelectGameEvent,
+    return await prisma.$transaction(async (tx) => {
+      const lastMove = await tx.gameEvents.findFirst({
+        where: {
+          gameId,
+          type: "MOVE_APPLIED",
+          isUndo: false,
+          payload: {
+            path: ["playerId"],
+            equals: playerId,
+          },
+        },
+        orderBy: {
+          sequence: "desc",
+        },
+        select: prismaSelectGameEvent,
+      });
+
+      if (!lastMove) {
+        return null;
+      }
+
+      const updateResult = await tx.gameEvents.updateMany({
+        where: {
+          id: lastMove.id,
+          gameId,
+          type: "MOVE_APPLIED",
+          isUndo: false,
+        },
+        data: {
+          isUndo: true,
+        },
+      });
+
+      if (updateResult.count !== 1) {
+        return null;
+      }
+
+      return await tx.gameEvents.findUnique({
+        where: {
+          id: lastMove.id,
+        },
+        select: prismaSelectGameEvent,
+      });
     });
   } catch (error) {
     return errorHandlersOnPrisma({ error });

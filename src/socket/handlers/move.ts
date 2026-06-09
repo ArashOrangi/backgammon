@@ -28,6 +28,7 @@ type MoveItem = {
   die: number;
   isUndo?: boolean;
 };
+
 type MovePayloadArray = MoveItem[];
 
 const gameQueue = new GameQueue();
@@ -38,19 +39,23 @@ export async function handleMove(
   rooms: RoomManager,
 ) {
   const playerId = ctx.userId;
+
   if (!playerId) {
     return ctx.send({
       type: "game.error",
       payload: onErrorSocketResponse("Not authenticated"),
     });
   }
+
   if (!payload || !payload.length) {
     return ctx.send({
       type: "game.error",
       payload: onErrorSocketResponse("Empty moves array"),
     });
   }
+
   const gameId = payload[0].gameId;
+
   for (const move of payload) {
     if (move.gameId !== gameId) {
       return ctx.send({
@@ -62,6 +67,7 @@ export async function handleMove(
 
   await gameQueue.enqueue(gameId, async () => {
     let finalGame = await loadGameState(gameId);
+
     if (!finalGame) {
       return ctx.send({
         type: "game.error",
@@ -78,17 +84,32 @@ export async function handleMove(
       isUndo?: boolean;
     }> = [];
 
+    /**
+     * Important:
+     *
+     * Some clients may send multiple visual items for undo, especially when the
+     * original move was a hit and the opponent checker visually goes to BAR.
+     *
+     * In event-sourcing we only undo the actual MOVE_APPLIED event once.
+     * So this guard prevents double-undo in a single move request.
+     */
+    let undoAppliedInThisRequest = false;
+
     for (const moveItem of payload) {
       const { from, to, die, isUndo } = moveItem;
+
       if (isUndo) {
-        if (to === SPECIAL_POSITIONS.BAR) {
-          console.log(`[MOVE] Ignoring undo for hit move (to BAR)`);
+        if (undoAppliedInThisRequest) {
+          console.log(
+            `[MOVE] Extra undo item ignored in same request. game=${gameId}, player=${playerId}`,
+          );
           continue;
         }
 
         console.log(
           `[MOVE] Undo requested for game ${gameId}, player ${playerId}`,
         );
+
         if (finalGame.turn !== playerId) {
           return ctx.send({
             type: "game.error",
@@ -97,8 +118,10 @@ export async function handleMove(
         }
 
         const undonePayload = await undoLastMove(gameId, playerId);
+
         if (!undonePayload) {
           console.log(`[MOVE] Undo failed: no move to undo`);
+
           return ctx.send({
             type: "game.error",
             payload: onErrorSocketResponse("No move to undo"),
@@ -106,158 +129,184 @@ export async function handleMove(
         }
 
         const stateAfterUndo = await loadGameState(gameId);
-        if (!stateAfterUndo)
+
+        if (!stateAfterUndo) {
           throw new Error("Failed to rebuild state after undo");
+        }
+
         finalGame = stateAfterUndo;
         saveGame(finalGame);
 
-        // Immediately broadcast the new state after undo
-        const subStatus = calculateSubStatus(finalGame);
-        const legalMoves = generateMoveSequences(
-          finalGame,
-          finalGame.turn ?? playerId,
-        );
-        const flatLegalMoves = flattenMoveSequences(legalMoves);
-        const stateToSend: any = { ...finalGame, legalMoves: flatLegalMoves };
-        if (subStatus === "playDice") {
-          stateToSend.subStatus = "playDice";
-        }
-        rooms.broadcast(gameId, {
-          type: "game.state",
-          payload: onOkSocketResponse(stateToSend, "Undo applied"),
-        });
+        undoAppliedInThisRequest = true;
+
+        /**
+         * Prefer the event-store payload over the client payload.
+         * The client payload may contain visual/helper moves, especially for hits.
+         */
+        const normalizedUndonePayload = undonePayload as {
+          playerId?: number;
+          from?: number;
+          to?: number;
+          die?: number;
+        };
 
         broadcastMoves.push({
-          playerId,
-          from,
-          to,
-          die,
-          ownerId: playerId,
+          playerId: normalizedUndonePayload.playerId ?? playerId,
+          from: normalizedUndonePayload.from ?? from,
+          to: normalizedUndonePayload.to ?? to,
+          die: normalizedUndonePayload.die ?? die,
+          ownerId: normalizedUndonePayload.playerId ?? playerId,
           isUndo: true,
         });
 
-        // break; // فقط یک undo انجام شود (کامنت شده)
+        continue;
+      }
+
+      if (finalGame.turn !== playerId) {
+        return ctx.send({
+          type: "game.error",
+          payload: onErrorSocketResponse("It's not your turn"),
+        });
+      }
+
+      const validation = validateMove(finalGame, playerId, from, to, [die]);
+
+      if (!validation.isValid) {
+        return ctx.send({
+          type: "game.error",
+          payload: onErrorSocketResponse(validation.message ?? "Invalid move"),
+        });
+      }
+
+      if (validation.isHit) {
+        const opponentId = finalGame.players.find((p) => p.id !== playerId)?.id;
+
+        await appendGameEvent(gameId, {
+          type: "MOVE_APPLIED",
+          payload: {
+            playerId,
+            from,
+            to,
+            die,
+            hitOpponentId: opponentId,
+            hitFromPoint: to,
+          },
+        });
       } else {
-        if (finalGame.turn !== playerId) {
-          return ctx.send({
-            type: "game.error",
-            payload: onErrorSocketResponse("It's not your turn"),
+        await appendGameEvent(gameId, {
+          type: "MOVE_APPLIED",
+          payload: {
+            playerId,
+            from,
+            to,
+            die,
+          },
+        });
+      }
+
+      const updatedGame = await loadGameState(gameId);
+
+      if (!updatedGame) {
+        throw new Error("Failed to rebuild state after move");
+      }
+
+      finalGame = updatedGame;
+      saveGame(finalGame);
+
+      broadcastMoves.push({
+        playerId,
+        from,
+        to,
+        die,
+        ownerId: playerId,
+        isUndo: false,
+      });
+
+      if (validation.isHit) {
+        const opponentId = finalGame.players.find((p) => p.id !== playerId)?.id;
+
+        if (opponentId) {
+          broadcastMoves.push({
+            playerId: opponentId,
+            from: to,
+            to: SPECIAL_POSITIONS.BAR,
+            die: 0,
+            ownerId: opponentId,
+            isUndo: false,
           });
         }
-        const validation = validateMove(finalGame, playerId, from, to, [die]);
-        if (!validation.isValid) {
-          return ctx.send({
-            type: "game.error",
-            payload: onErrorSocketResponse(
-              validation.message ?? "Invalid move",
-            ),
-          });
-        }
+      }
 
-        // ثبت حرکت با ذخیره اطلاعات ضربه در صورت وجود
-        if (validation.isHit) {
-          const opponentId = finalGame.players.find(
-            (p) => p.id !== playerId,
-          )?.id;
-          await appendGameEvent(gameId, {
-            type: "MOVE_APPLIED",
-            payload: {
-              playerId,
-              from,
-              to,
-              die,
-              hitOpponentId: opponentId,
-              hitFromPoint: to,
-            },
-          });
-        } else {
-          await appendGameEvent(gameId, {
-            type: "MOVE_APPLIED",
-            payload: { playerId, from, to, die },
-          });
-        }
+      if (isGameOver(finalGame)) {
+        const winType = calculateWinType(finalGame, playerId);
 
-        const updatedGame = await loadGameState(gameId);
-        if (!updatedGame) throw new Error("Failed to rebuild state after move");
-        finalGame = updatedGame;
-        saveGame(finalGame);
-
-        broadcastMoves.push({
-          playerId,
-          from,
-          to,
-          die,
-          ownerId: playerId,
-          isUndo: false,
+        await appendGameEvent(gameId, {
+          type: "GAME_FINISHED",
+          payload: {
+            winner: playerId,
+            winType,
+            reason: "REGULAR",
+          },
         });
 
-        if (validation.isHit) {
-          const opponentId = finalGame.players.find(
-            (p) => p.id !== playerId,
-          )?.id;
-          if (opponentId) {
-            broadcastMoves.push({
-              playerId: opponentId,
-              from: to,
-              to: SPECIAL_POSITIONS.BAR,
-              die: 0,
-              ownerId: opponentId,
-              isUndo: false,
-            });
-          }
+        const finishedGame = await loadGameState(gameId);
+
+        if (finishedGame) {
+          finalGame = finishedGame;
+          saveGame(finalGame);
         }
 
-        if (isGameOver(finalGame)) {
-          const winType = calculateWinType(finalGame, playerId);
-          await appendGameEvent(gameId, {
-            type: "GAME_FINISHED",
-            payload: { winner: playerId, winType, reason: "REGULAR" },
-          });
-          const finishedGame = await loadGameState(gameId);
-          if (finishedGame) {
-            finalGame = finishedGame;
-            saveGame(finalGame);
-          }
-          rooms.broadcast(gameId, {
-            type: "game.result",
-            payload: onOkSocketResponse({
-              winner: playerId,
-              winType,
-              reason: "REGULAR",
-            }),
-          });
-          const finalStateWithMeta = {
-            ...finalGame,
-            subStatus: calculateSubStatus(finalGame),
-            legalMoves: [],
-          };
-          rooms.broadcast(gameId, {
-            type: "game.state",
-            payload: onOkSocketResponse(
-              finalStateWithMeta,
-              `Game finished: ${winType}`,
-            ),
-          });
-          return;
-        }
+        rooms.broadcast(gameId, {
+          type: "game.result",
+          payload: onOkSocketResponse({
+            winner: playerId,
+            winType,
+            reason: "REGULAR",
+          }),
+        });
+
+        const finalStateWithMeta = {
+          ...finalGame,
+          subStatus: calculateSubStatus(finalGame),
+          legalMoves: [],
+        };
+
+        rooms.broadcast(gameId, {
+          type: "game.state",
+          payload: onOkSocketResponse(
+            finalStateWithMeta,
+            `Game finished: ${winType}`,
+          ),
+        });
+
+        return;
       }
     }
 
-    // ارسال state نهایی با subStatus فقط در صورت playDice
     const subStatus = calculateSubStatus(finalGame);
+
     const legalMoves = generateMoveSequences(
       finalGame,
       finalGame.turn ?? playerId,
     );
+
     const flatLegalMoves = flattenMoveSequences(legalMoves);
-    const stateToSend: any = { ...finalGame, legalMoves: flatLegalMoves };
+
+    const stateToSend: any = {
+      ...finalGame,
+      legalMoves: flatLegalMoves,
+    };
+
     if (subStatus === "playDice") {
       stateToSend.subStatus = "playDice";
     }
 
     rooms.broadcast(gameId, {
       type: "game.state",
-      payload: onOkSocketResponse(stateToSend),
+      payload: onOkSocketResponse(
+        stateToSend,
+        undoAppliedInThisRequest ? "Undo applied" : undefined,
+      ),
     });
 
     if (broadcastMoves.length) {
@@ -268,6 +317,7 @@ export async function handleMove(
     }
 
     const afterMoveState = await loadGameState(gameId);
+
     if (afterMoveState && afterMoveState.status === "in-progress") {
       await runBotIfNeeded(gameId, afterMoveState.turn!, rooms);
     }

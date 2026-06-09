@@ -1,7 +1,11 @@
 import { SocketContext } from "../socket-context";
 import { GameQueue } from "../../game/gameQueue";
-import { loadGameState, calculateSubStatus } from "../../game/eventStore";
-import { prismaGameEventDeleteLastMove } from "../../models/gameEvent";
+import {
+  loadGameState,
+  calculateSubStatus,
+  undoLastMove,
+} from "../../game/eventStore";
+// import { prismaGameEventDeleteLastMove } from "../../models/gameEvent";
 import { generateMoveSequences } from "../../game/moveGenerator";
 import {
   onOkSocketResponse,
@@ -37,9 +41,18 @@ export async function handleUndo(
     }
 
     // ۲. حذف آخرین حرکت از دیتابیس
-    const deleted = await prismaGameEventDeleteLastMove(gameId, playerId);
+    // const deleted = await prismaGameEventDeleteLastMove(gameId, playerId);
 
-    if (!deleted) {
+    // if (!deleted) {
+    //   return ctx.send({
+    //     type: "game.error",
+    //     payload: onErrorSocketResponse("حرکتی برای برگشت وجود ندارد"),
+    //   });
+    // }
+    // ۲. undo آخرین حرکت
+    const undone = await undoLastMove(gameId, playerId);
+
+    if (!undone) {
       return ctx.send({
         type: "game.error",
         payload: onErrorSocketResponse("حرکتی برای برگشت وجود ندارد"),
