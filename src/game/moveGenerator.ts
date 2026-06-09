@@ -14,39 +14,69 @@ export function generateMoveSequences(
   playerId: PlayerId,
 ): MoveSequence[] {
   if (!game.dice || game.dice.length === 0) return [];
+
   const dice = normalizeDice(game.dice);
+
   if (DEBUG_DOUBLE) {
     console.log(
       `[DEBUG] generateMoveSequences: player=${playerId}, originalDice=${game.dice}, normalized=${dice}`,
     );
   }
+
   const results: MoveSequence[] = [];
+
   recurse(game, playerId, dice, [], results);
+
   if (DEBUG_DOUBLE) {
     console.log(
       `[DEBUG] generateMoveSequences: total sequences=${results.length}`,
     );
   }
+
   if (results.length === 0) return [];
+
   const maxLen = Math.max(...results.map((r) => r.moves.length));
+
+  /**
+   * Critical fix:
+   * If the best sequence has length 0, it means there are no real legal moves.
+   * Previously this returned [{ moves: [] }], which made calculateSubStatus think
+   * the player still has playable dice.
+   */
+  if (maxLen === 0) {
+    if (DEBUG_DOUBLE) {
+      console.log(
+        `[DEBUG] generateMoveSequences: maxLen=0, no real legal moves`,
+      );
+    }
+    return [];
+  }
+
   let filtered = results.filter((r) => r.moves.length === maxLen);
+
   if (DEBUG_DOUBLE) {
     console.log(
       `[DEBUG] generateMoveSequences: maxLen=${maxLen}, filtered=${filtered.length}`,
     );
   }
+
   if (maxLen === 1 && dice.length === 2 && dice[0] !== dice[1]) {
     const higher = Math.max(...dice);
     const hasHigher = filtered.some((seq) => seq.moves[0].die === higher);
-    if (hasHigher)
+
+    if (hasHigher) {
       filtered = filtered.filter((seq) => seq.moves[0].die === higher);
+    }
   }
+
   const unique = deduplicateSequences(filtered);
+
   if (DEBUG_DOUBLE) {
     console.log(
       `[DEBUG] generateMoveSequences: returning ${unique.length} unique sequences`,
     );
   }
+
   return unique;
 }
 
@@ -86,13 +116,16 @@ function recurse(
     }
     const snapshot = takeSnapshot(game);
     try {
-      applyMove(game, playerId, move.from, move.to);
+      applyMove(game, playerId, move.from, move.to, move.die);
+
       const remaining = removeDie(dice, move.die);
+
       if (DEBUG_DOUBLE) {
         console.log(
           `[DEBUG] recurse: after apply, remaining dice=${remaining}`,
         );
       }
+
       recurse(game, playerId, remaining, [...path, move], results);
     } catch (err) {
       if (DEBUG_DOUBLE) {

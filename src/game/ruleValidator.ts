@@ -8,7 +8,7 @@ function getDirection(game: GameState, playerId: PlayerId): 1 | -1 {
 
 function getHomeRange(game: GameState, playerId: PlayerId): [number, number] {
   const dir = getDirection(game, playerId);
-  return dir === -1 ? [18, 23] : [0, 5];
+  return dir === -1 ? [0, 5] : [18, 23];
 }
 
 export function canBearOff(game: GameState, playerId: PlayerId): boolean {

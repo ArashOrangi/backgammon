@@ -437,8 +437,12 @@ export async function loadGameStateUntil(
 export function calculateSubStatus(state: GameState): SubStatus | undefined {
   if (state.status !== "in-progress" || !state.turn) return undefined;
   if (!state.dice || state.dice.length === 0) return undefined;
+
   const legalMoves = generateMoveSequences(state, state.turn);
-  return legalMoves && legalMoves.length > 0 ? "playDice" : undefined;
+
+  const hasRealMove = legalMoves.some((seq) => seq.moves.length > 0);
+
+  return hasRealMove ? "playDice" : undefined;
 }
 
 // export async function undoLastMove(gameId: number, playerId: PlayerId) {
