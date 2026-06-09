@@ -71,7 +71,7 @@ export async function handleEndTurn(
 
       saveGame(updatedGame);
 
-      const subStatus = calculateSubStatus(updatedGame);
+      // const subStatus = calculateSubStatus(updatedGame);
       let legalMoves: any[] = [];
       if (updatedGame.turn !== null) {
         legalMoves = generateMoveSequences(updatedGame, updatedGame.turn);
@@ -79,7 +79,7 @@ export async function handleEndTurn(
       const flatLegalMoves = flattenMoveSequences(legalMoves);
       const stateToSend = {
         ...updatedGame,
-        subStatus,
+        subStatus: "mustEndTurn",
         legalMoves: flatLegalMoves,
       };
 
