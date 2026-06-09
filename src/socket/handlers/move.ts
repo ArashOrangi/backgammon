@@ -78,8 +78,6 @@ export async function handleMove(
       isUndo?: boolean;
     }> = [];
 
-    // let undoProcessed = false;
-
     for (const moveItem of payload) {
       const { from, to, die, isUndo } = moveItem;
       if (isUndo) {
@@ -245,7 +243,7 @@ export async function handleMove(
       }
     }
 
-    // در غیر این صورت، subStatus را ارسال نکنید (حتی اگر mustEndTurn باشد)
+    // ارسال state نهایی با subStatus فقط در صورت playDice
     const subStatus = calculateSubStatus(finalGame);
     const legalMoves = generateMoveSequences(
       finalGame,
