@@ -43,12 +43,8 @@ function computeDistance(
 
   // from bar
   if (from === SPECIAL_POSITIONS.BAR) {
-    const player = game.players.find((p) => p.id === playerId);
-    if (player?.color === "white") {
-      return to + 1;
-    } else {
-      return 24 - to;
-    }
+    const entry = dir === -1 ? 24 : -1;
+    return dir === -1 ? entry - to : to - entry;
   }
 
   // to bear off

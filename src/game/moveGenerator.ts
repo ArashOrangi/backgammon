@@ -124,13 +124,12 @@ function generateSingleMoves(
     const barCount = board.bar[playerId] ?? 0;
     if (barCount > 0) {
       const to = computeTargetFromBar(game, playerId, die);
-      console.log(
-        `[DEBUG] Bar move: die=${die}, to=${to}, barCount=${barCount}`,
-      );
+      if (DEBUG_DOUBLE) {
+        console.log(
+          `[DEBUG] generateSingleMoves: bar move die=${die} -> to=${to}`,
+        );
+      }
       const res = validateMove(game, playerId, SPECIAL_POSITIONS.BAR, to, dice);
-      console.log(
-        `[DEBUG] validateMove result: isValid=${res.isValid}, dieUsed=${res.dieUsed}, message=${res.message}`,
-      );
       if (res.isValid && res.dieUsed !== undefined) {
         moves.push({
           from: SPECIAL_POSITIONS.BAR,
@@ -138,6 +137,14 @@ function generateSingleMoves(
           die: res.dieUsed,
           ownerId: playerId,
         });
+        if (DEBUG_DOUBLE)
+          console.log(
+            `[DEBUG] generateSingleMoves: bar move valid, dieUsed=${res.dieUsed}`,
+          );
+      } else if (DEBUG_DOUBLE) {
+        console.log(
+          `[DEBUG] generateSingleMoves: bar move invalid: ${res.message}`,
+        );
       }
       continue;
     }
@@ -248,12 +255,9 @@ function computeTargetFromBar(
   playerId: PlayerId,
   die: number,
 ): number {
-  const player = game.players.find((p) => p.id === playerId);
-  if (player?.color === "white") {
-    return die - 1; // برعکس حالت استاندارد
-  } else {
-    return 24 - die; // برعکس حالت استاندارد
-  }
+  const dir = getDirection(game, playerId);
+  if (dir === -1) return 24 - die; // سفید
+  return die - 1; // سیاه
 }
 
 function getDirection(game: GameState, playerId: PlayerId): number {
