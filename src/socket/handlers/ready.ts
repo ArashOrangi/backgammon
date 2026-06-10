@@ -139,10 +139,11 @@ export async function handleReady(
       ? generateMoveSequences(freshGame, freshGame.turn)
       : [];
     const flatLegalMoves = flattenMoveSequences(legalMoves);
-    const stateToSend: any = { ...freshGame, legalMoves: flatLegalMoves };
-    if (subStatus === "playDice") {
-      stateToSend.subStatus = "playDice";
-    }
+    const stateToSend = {
+      ...freshGame,
+      subStatus,
+      legalMoves: flatLegalMoves,
+    };
 
     rooms.broadcast(gameId, {
       type: "game.state",
