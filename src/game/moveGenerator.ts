@@ -281,14 +281,39 @@ function computeTargetFromBar(
   die: number,
 ): number {
   const player = game.players.find((p) => p.id === playerId);
-  if (!player) throw new Error("Player not found");
-  // سفید: وارد خانه سیاه (نقاط 0 تا 5) می‌شود
-  // سیاه: وارد خانه سفید (نقاط 18 تا 23) می‌شود
+
+  if (!player) {
+    throw new Error("Player not found");
+  }
+
+  if (!Number.isInteger(die) || die < 1 || die > 6) {
+    throw new Error(`Invalid die for BAR entry: ${die}`);
+  }
+
+  /**
+   * BAR entry mapping:
+   *
+   * White:
+   * die 1 -> 23
+   * die 2 -> 22
+   * die 3 -> 21
+   * die 4 -> 20
+   * die 5 -> 19
+   * die 6 -> 18
+   *
+   * Black:
+   * die 1 -> 0
+   * die 2 -> 1
+   * die 3 -> 2
+   * die 4 -> 3
+   * die 5 -> 4
+   * die 6 -> 5
+   */
   if (player.color === "white") {
-    return die - 1;
-  } else {
     return 24 - die;
   }
+
+  return die - 1;
 }
 
 function getDirection(game: GameState, playerId: PlayerId): number {

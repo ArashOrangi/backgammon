@@ -294,12 +294,9 @@ export async function handleMove(
 
     const stateToSend: any = {
       ...finalGame,
+      subStatus,
       legalMoves: flatLegalMoves,
     };
-
-    if (subStatus === "playDice") {
-      stateToSend.subStatus = "playDice";
-    }
 
     rooms.broadcast(gameId, {
       type: "game.state",

@@ -43,14 +43,20 @@ function computeDistance(
   const player = game.players.find((p) => p.id === playerId);
   if (!player) return null;
 
-  // from bar
+  // ---------------------------------------------------------
+  // اصلاح منطق ورود از BAR برای هماهنگی با Engine
+  // ---------------------------------------------------------
   if (from === SPECIAL_POSITIONS.BAR) {
     if (player.color === "white") {
-      // سفید: نقاط 0 تا 5
-      return to + 1;
+      // سفید از سمت بالا (ایندکس 23 به پایین) وارد می‌شود
+      // Die 1 -> Index 23, Die 6 -> Index 18
+      const dist = 24 - to;
+      return dist >= 1 && dist <= 6 ? dist : null;
     } else {
-      // سیاه: نقاط 18 تا 23
-      return 24 - to;
+      // سیاه از سمت پایین (ایندکس 0 به بالا) وارد می‌شود
+      // Die 1 -> Index 0, Die 6 -> Index 5
+      const dist = to + 1;
+      return dist >= 1 && dist <= 6 ? dist : null;
     }
   }
 
@@ -65,7 +71,8 @@ function computeDistance(
   }
 
   // normal move
-  return dir === -1 ? from - to : to - from;
+  const normalDist = dir === -1 ? from - to : to - from;
+  return normalDist > 0 ? normalDist : null;
 }
 
 function findMatchingDie(
