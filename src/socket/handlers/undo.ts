@@ -5,20 +5,33 @@ import {
   calculateSubStatus,
   undoLastMove,
 } from "../../game/eventStore";
-// import { prismaGameEventDeleteLastMove } from "../../models/gameEvent";
 import { generateMoveSequences } from "../../game/moveGenerator";
 import {
   onOkSocketResponse,
   onErrorSocketResponse,
 } from "../../responses/response-builder";
-import { runBotIfNeeded } from "@/game/botRunner"; // اضافه شده
+import { runBotIfNeeded } from "@/game/botRunner";
+import { RoomManager } from "../room-manager";
 
 const gameQueue = new GameQueue();
+
+function broadcastTurnChange(gameId: number, game: any, rooms: RoomManager) {
+  const nextPlayer = game.players.find((p: any) => p.id === game.turn);
+  if (nextPlayer) {
+    rooms.broadcast(gameId, {
+      type: "game.turn",
+      payload: onOkSocketResponse({
+        playerId: nextPlayer.id,
+        color: nextPlayer.color,
+      }),
+    });
+  }
+}
 
 export async function handleUndo(
   ctx: SocketContext,
   payload: { gameId: number },
-  rooms: any,
+  rooms: RoomManager,
 ) {
   const { gameId } = payload;
   const playerId = ctx.userId;
@@ -40,18 +53,8 @@ export async function handleUndo(
       });
     }
 
-    // ۲. حذف آخرین حرکت از دیتابیس
-    // const deleted = await prismaGameEventDeleteLastMove(gameId, playerId);
-
-    // if (!deleted) {
-    //   return ctx.send({
-    //     type: "game.error",
-    //     payload: onErrorSocketResponse("حرکتی برای برگشت وجود ندارد"),
-    //   });
-    // }
     // ۲. undo آخرین حرکت
     const undone = await undoLastMove(gameId, playerId);
-
     if (!undone) {
       return ctx.send({
         type: "game.error",
@@ -67,7 +70,10 @@ export async function handleUndo(
     updatedGame.subStatus = calculateSubStatus(updatedGame);
     const legalMoves = generateMoveSequences(updatedGame, playerId);
 
-    // ۵. خبر دادن به همه برای آپدیت گرافیک
+    // ۵. ارسال game.turn برای اطلاع‌رسانی نوبت جدید (در صورت تغییر)
+    broadcastTurnChange(gameId, updatedGame, rooms);
+
+    // ۶. ارسال state جدید
     rooms.broadcast(gameId, {
       type: "game.state",
       payload: onOkSocketResponse(updatedGame),
@@ -78,7 +84,25 @@ export async function handleUndo(
       payload: onOkSocketResponse(legalMoves),
     });
 
-    // ۶. اگر بعد از Undo نوبت بات است، اجرا کن
+    // ۷. ارسال یک رویداد حرکت برای بازخورد بصری Undo (اختیاری)
+    // اگر کلاینت شما برای نمایش انیمیشن Undo نیاز به player.move دارد، این بخش را فعال کنید
+    if (undone && (undone as any).from !== undefined) {
+      rooms.broadcast(gameId, {
+        type: "player.move",
+        payload: onOkSocketResponse([
+          {
+            playerId,
+            from: (undone as any).from,
+            to: (undone as any).to,
+            die: (undone as any).die,
+            ownerId: playerId,
+            isUndo: true,
+          },
+        ]),
+      });
+    }
+
+    // ۸. اگر بعد از Undo نوبت بات است، اجرا کن
     if (updatedGame.status === "in-progress") {
       const botId = updatedGame.players.find((p) => p.id !== playerId)?.id;
       if (botId && updatedGame.turn === botId) {

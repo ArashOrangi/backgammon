@@ -1,4 +1,4 @@
-// botRunner.ts (نسخه اصلاح شده نهایی)
+// botRunner.ts (نسخه اصلاح شده نهایی با ارسال game.turn)
 
 import {
   loadGameState,
@@ -15,7 +15,6 @@ import { BOT_USER_ID } from "@/static/statics";
 import { saveGame } from "./gameStore";
 import { isGameOver, calculateWinType } from "./engine";
 
-// تأخیر کوتاه بین اقدامات بات (میلی‌ثانیه)
 const BOT_ACTION_DELAY_MS = 5;
 
 function broadcastGameState(
@@ -34,6 +33,21 @@ function broadcastGameState(
   });
 }
 
+function broadcastTurnChange(gameId: number, game: any, rooms: RoomManager) {
+  console.log("vaaaaaaaaaaaaaaaaaaaaaaaaaaaaredddddddddddddddddddddd shod");
+
+  const nextPlayer = game.players.find((p: any) => p.id === game.turn);
+  if (nextPlayer) {
+    rooms.broadcast(gameId, {
+      type: "game.turn",
+      payload: onOkSocketResponse({
+        playerId: nextPlayer.id,
+        color: nextPlayer.color,
+      }),
+    });
+  }
+}
+
 export async function runBotIfNeeded(
   gameId: number,
   playerId: PlayerId,
@@ -41,7 +55,6 @@ export async function runBotIfNeeded(
 ) {
   if (playerId !== BOT_USER_ID) return;
 
-  // تابع کمکی برای بارگذاری و بررسی وضعیت
   const getValidState = async () => {
     const state = await loadGameState(gameId);
     if (!state || state.status !== "in-progress" || state.turn !== playerId)
@@ -53,7 +66,7 @@ export async function runBotIfNeeded(
   if (!state) return;
 
   // ---------------------------------------------
-  // 1️⃣ ریختن تاس در صورت نیاز (همزمان + تأخیر)
+  // 1️⃣ ریختن تاس در صورت نیاز
   // ---------------------------------------------
   if (!state.dice || state.dice.length === 0) {
     const dice = rollDiceUtil();
@@ -62,7 +75,6 @@ export async function runBotIfNeeded(
       payload: { playerId, dice },
     });
 
-    // تأخیر کوتاه بعد از ذخیره‌ی تاس
     await new Promise((resolve) => setTimeout(resolve, BOT_ACTION_DELAY_MS));
 
     state = await loadGameState(gameId);
@@ -76,7 +88,7 @@ export async function runBotIfNeeded(
   }
 
   // ---------------------------------------------
-  // 2️⃣ حلقه‌ی اجرای حرکت تا زمانی که تاس وجود دارد
+  // 2️⃣ حلقه‌ی اجرای حرکت
   // ---------------------------------------------
   while (
     state &&
@@ -97,11 +109,11 @@ export async function runBotIfNeeded(
       if (state) {
         saveGame(state);
         broadcastGameState(gameId, state, rooms, "Bot turn passed (no moves)");
+        broadcastTurnChange(gameId, state, rooms); // ✅ اضافه شد
       }
       break;
     }
 
-    // انتخاب اولین حرکت (AI ساده)
     const move = moves[0];
     const opponentId = state.players.find((p) => p.id !== playerId)?.id;
 
@@ -113,7 +125,6 @@ export async function runBotIfNeeded(
       console.error(
         `[Bot] Invalid move: ${validation.message}. move=${JSON.stringify(move)}`,
       );
-      // در صورت invalid، نوبت را رد می‌کنیم
       await appendGameEvent(gameId, {
         type: "TURN_PASSED",
         payload: { playerId, reason: "NO_LEGAL_MOVES" },
@@ -127,11 +138,11 @@ export async function runBotIfNeeded(
           rooms,
           "Bot turn passed (invalid move)",
         );
+        broadcastTurnChange(gameId, state, rooms); // ✅ اضافه شد
       }
       break;
     }
 
-    // ثبت حرکت
     const movePayload: any = {
       playerId,
       from: move.from,
@@ -148,15 +159,12 @@ export async function runBotIfNeeded(
       payload: movePayload,
     });
 
-    // تأخیر بعد از ذخیره‌ی حرکت
     await new Promise((resolve) => setTimeout(resolve, BOT_ACTION_DELAY_MS));
 
-    // بارگذاری مجدد state بعد از حرکت
     state = await loadGameState(gameId);
     if (!state) break;
     saveGame(state);
 
-    // پخش حرکت برای همه کلاینت‌ها
     const broadcastMoves = [
       {
         playerId,
@@ -180,7 +188,6 @@ export async function runBotIfNeeded(
       payload: onOkSocketResponse(broadcastMoves),
     });
 
-    // بررسی پایان بازی
     if (isGameOver(state)) {
       const winType = calculateWinType(state, playerId);
       await appendGameEvent(gameId, {
@@ -210,12 +217,11 @@ export async function runBotIfNeeded(
       return;
     }
 
-    // ارسال state جدید
     broadcastGameState(gameId, state, rooms);
   }
 
   // ---------------------------------------------
-  // 3️⃣ اگر از حلقه خارج شدیم ولی هنوز نوبت بات است (یعنی تاس تمام شده) → تعویض نوبت
+  // 3️⃣ تاس تمام شده → تعویض نوبت
   // ---------------------------------------------
   const finalState = await loadGameState(gameId);
   if (
@@ -236,6 +242,7 @@ export async function runBotIfNeeded(
         rooms,
         "Bot turn ended (no dice left)",
       );
+      broadcastTurnChange(gameId, afterPass, rooms); // ✅ اضافه شد
     }
   }
 }
