@@ -27,10 +27,7 @@ function broadcastGameState(
     game.turn !== null ? generateMoveSequences(game, game.turn) : [];
   const legalMoves = flattenMoveSequences(sequences);
   let subStatus = calculateSubStatus(game);
-  // اگر تاس خالی است و نوبت مشخص است (شروع نوبت جدید)، subStatus را "mustEndTurn" بده
-  if (game.turn !== null && (!game.dice || game.dice.length === 0)) {
-    subStatus = "mustEndTurn";
-  }
+
   rooms.broadcast(gameId, {
     type: "game.state",
     payload: onOkSocketResponse({ ...game, subStatus, legalMoves }, message),

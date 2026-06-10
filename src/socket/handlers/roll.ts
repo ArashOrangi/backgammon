@@ -139,10 +139,14 @@ export async function handleRoll(
           ? generateMoveSequences(game, game.turn)
           : [];
         const flatLegalMoves = flattenMoveSequences(legalMoves);
-        const stateToSend: any = { ...game, legalMoves: flatLegalMoves };
-        if (subStatus === "playDice") {
-          stateToSend.subStatus = "playDice";
-        }
+        const stateToSend: any = {
+          ...game,
+          subStatus,
+          legalMoves: flatLegalMoves,
+        };
+        // if (subStatus === "playDice") {
+        //   stateToSend.subStatus = "playDice";
+        // }
         rooms.broadcast(gameId, {
           type: "game.state",
           payload: onOkSocketResponse(stateToSend),

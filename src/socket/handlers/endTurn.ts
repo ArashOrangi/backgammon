@@ -93,6 +93,7 @@ export async function handleEndTurn(
       if (updatedGame.turn !== null) {
         legalMoves = generateMoveSequences(updatedGame, updatedGame.turn);
       }
+
       const flatLegalMoves = flattenMoveSequences(legalMoves);
 
       const stateToSend = {
