@@ -511,30 +511,40 @@ export async function loadGameStateUntil(
 
 // eventStore.ts
 
-export function calculateSubStatus(
-  state: GameState,
-): GameSubStatus | undefined {
-  // اگر بازی در حالت ready است و هر دو بازیکن حضور دارند → gameReady
-  if (state.status === "ready" && state.players.length === 2) {
-    return "gameReady";
-  }
+// export function calculateSubStatus(
+//   state: GameState,
+// ): GameSubStatus | undefined {
+//   // اگر بازی در حالت ready است و هر دو بازیکن حضور دارند → gameReady
+//   if (state.status === "ready" && state.players.length === 2) {
+//     return "gameReady";
+//   }
 
-  if (state.status !== "in-progress" || !state.turn) {
-    return undefined;
-  }
+//   if (state.status !== "in-progress" || !state.turn) {
+//     return undefined;
+//   }
 
-  const hasDice = state.dice && state.dice.length > 0;
+//   const hasDice = state.dice && state.dice.length > 0;
 
-  if (!hasDice) {
-    // بدون تاس: اگر قبلاً تاس ریخته شده => نوبت تمام شده (mustEndTurn)
-    // در غیر این صورت => منتظر ریختن تاس (waitForRoll)
-    return state.rolledThisTurn === true ? "mustEndTurn" : "waitForRoll";
-  }
+//   if (!hasDice) {
+//     // بدون تاس: اگر قبلاً تاس ریخته شده => نوبت تمام شده (mustEndTurn)
+//     // در غیر این صورت => منتظر ریختن تاس (waitForRoll)
+//     return state.rolledThisTurn === true ? "mustEndTurn" : "waitForRoll";
+//   }
 
-  // تاس موجود است: بررسی حرکت قانونی
+//   // تاس موجود است: بررسی حرکت قانونی
+//   const legalMoves = generateMoveSequences(state, state.turn);
+//   const hasRealMove = legalMoves.some((seq) => seq.moves.length > 0);
+//   return hasRealMove ? "playDice" : "mustEndTurn";
+// }
+export function calculateSubStatus(state: GameState): SubStatus | undefined {
+  // اگر بازی در جریان نیست یا نوبت مشخص نیست → undefined (نه mustEndTurn)
+  if (state.status !== "in-progress" || !state.turn) return undefined;
+  // اگر تاسی وجود ندارد → undefined (بازیکن باید تاس بریزد یا نوبت تمام شود، اما subStatus نمی‌فرستیم)
+  if (!state.dice || state.dice.length === 0) return undefined;
+  // بررسی حرکت قانونی
   const legalMoves = generateMoveSequences(state, state.turn);
-  const hasRealMove = legalMoves.some((seq) => seq.moves.length > 0);
-  return hasRealMove ? "playDice" : "mustEndTurn";
+  // فقط در صورتی که حرکت قانونی موجود باشد، playDice برگردان
+  return legalMoves && legalMoves.length > 0 ? "playDice" : undefined;
 }
 
 export async function undoLastMove(gameId: number, playerId: PlayerId) {
