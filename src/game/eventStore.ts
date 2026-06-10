@@ -521,7 +521,7 @@ export function calculateSubStatus(state: GameState): SubStatus | undefined {
   if (!hasDice) {
     // بدون تاس: اگر قبلاً تاس ریخته شده => باید نوبت تمام شود
     // در غیر این صورت => باید تاس بیندازد
-    return state.rolledThisTurn === true ? "mustEndTurn" : "turnRoll";
+    return state.rolledThisTurn === true ? "mustEndTurn" : undefined;
   }
 
   // تاس موجود است: بررسی حرکت قانونی
