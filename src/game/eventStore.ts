@@ -509,6 +509,8 @@ export async function loadGameStateUntil(
 
 // eventStore.ts
 
+// eventStore.ts
+
 export function calculateSubStatus(state: GameState): SubStatus | undefined {
   if (state.status !== "in-progress" || !state.turn) {
     return undefined;
@@ -519,7 +521,7 @@ export function calculateSubStatus(state: GameState): SubStatus | undefined {
   if (!hasDice) {
     // بدون تاس: اگر قبلاً تاس ریخته شده => باید نوبت تمام شود
     // در غیر این صورت => باید تاس بیندازد
-    return state.rolledThisTurn === true ? "mustEndTurn" : "playDice";
+    return state.rolledThisTurn === true ? "mustEndTurn" : "turnRoll";
   }
 
   // تاس موجود است: بررسی حرکت قانونی
