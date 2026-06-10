@@ -541,21 +541,18 @@ export function calculateSubStatus(state: GameState): SubStatus | undefined {
     return undefined;
   }
 
-  // هنوز تاس نریخته
-  if (!state.dice || state.dice.length === 0) {
-    return "turnRoll";
+  const hasDice = state.dice && state.dice.length > 0;
+
+  if (!hasDice) {
+    // بدون تاس: اگر قبلاً در این نوبت تاس ریخته شده باشد → باید نوبت تمام شود
+    // در غیر این صورت → منتظر ریختن تاس
+    return state.rolledThisTurn === true ? "mustEndTurn" : "waitForRoll";
   }
 
+  // تاس موجود است: بررسی حرکت قانونی
   const legalMoves = generateMoveSequences(state, state.turn);
   const hasRealMove = legalMoves.some((seq) => seq.moves.length > 0);
-
-  // تاس ریخته شده و حرکت داریم
-  if (hasRealMove) {
-    return "playDice";
-  }
-
-  // تاس ریخته شده ولی هیچ حرکت قانونی نداریم
-  return "mustEndTurn";
+  return hasRealMove ? "playDice" : "mustEndTurn";
 }
 
 export async function undoLastMove(gameId: number, playerId: PlayerId) {
