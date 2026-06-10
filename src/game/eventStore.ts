@@ -537,24 +537,10 @@ export async function loadGameStateUntil(
 //   return hasRealMove ? "playDice" : "mustEndTurn";
 // }
 export function calculateSubStatus(state: GameState): SubStatus | undefined {
-  if (state.status !== "in-progress" || !state.turn) {
-    return undefined;
-  }
-
-  const hasDice = state.dice && state.dice.length > 0;
-  console.log(
-    `[calculateSubStatus] status=${state.status}, turn=${state.turn}, dice=${state.dice}, rolledThisTurn=${state.rolledThisTurn}`,
-  );
-  if (!hasDice) {
-    // بدون تاس: اگر در این نوبت قبلاً تاس ریخته شده → باید نوبت تمام شود
-    // در غیر این صورت → منتظر ریختن تاس
-
-    return state.rolledThisTurn === true ? "mustEndTurn" : "waitForRoll";
-  }
-
+  if (state.status !== "in-progress" || !state.turn) return undefined;
+  if (!state.dice || state.dice.length === 0) return undefined;
   const legalMoves = generateMoveSequences(state, state.turn);
-  const hasRealMove = legalMoves.some((seq) => seq.moves.length > 0);
-  return hasRealMove ? "playDice" : "mustEndTurn";
+  return legalMoves && legalMoves.length > 0 ? "playDice" : undefined;
 }
 
 export async function undoLastMove(gameId: number, playerId: PlayerId) {
