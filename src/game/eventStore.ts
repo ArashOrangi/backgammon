@@ -537,10 +537,21 @@ export async function loadGameStateUntil(
 //   return hasRealMove ? "playDice" : "mustEndTurn";
 // }
 export function calculateSubStatus(state: GameState): SubStatus | undefined {
-  if (state.status !== "in-progress" || !state.turn) return undefined;
-  if (!state.dice || state.dice.length === 0) return "turnRoll"; //undefined;
+  if (state.status !== "in-progress" || !state.turn) {
+    return undefined;
+  }
+
+  const hasDice = Array.isArray(state.dice) && state.dice.length > 0;
+
+  if (!hasDice) {
+    return state.rolledThisTurn ? "mustEndTurn" : "waitForRoll";
+  }
+
   const legalMoves = generateMoveSequences(state, state.turn);
-  return legalMoves && legalMoves.length > 0 ? "playDice" : undefined;
+
+  const hasLegalMove = legalMoves.length > 0;
+
+  return hasLegalMove ? "playDice" : "mustEndTurn";
 }
 
 export async function undoLastMove(gameId: number, playerId: PlayerId) {

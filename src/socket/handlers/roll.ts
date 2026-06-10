@@ -201,10 +201,14 @@ export async function handleRoll(
       }
 
       const subStatus = calculateSubStatus(game);
-      const stateToSend: any = { ...game, legalMoves: flatLegalMoves };
-      if (subStatus === "playDice") {
-        stateToSend.subStatus = "playDice";
-      }
+      const stateToSend: any = {
+        ...game,
+        subStatus,
+        legalMoves: flatLegalMoves,
+      };
+      // if (subStatus === "playDice") {
+      //   stateToSend.subStatus = "playDice";
+      // }
       rooms.broadcast(gameId, {
         type: "game.state",
         payload: onOkSocketResponse(stateToSend),
