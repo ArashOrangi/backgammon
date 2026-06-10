@@ -1,4 +1,4 @@
-import { GameState, PlayerId, SubStatus } from "./types";
+import { GameState, GameSubStatus, PlayerId, SubStatus } from "./types";
 import { $Enums, Prisma } from "@prisma/client";
 
 import {
@@ -511,7 +511,14 @@ export async function loadGameStateUntil(
 
 // eventStore.ts
 
-export function calculateSubStatus(state: GameState): SubStatus | undefined {
+export function calculateSubStatus(
+  state: GameState,
+): GameSubStatus | undefined {
+  // اگر بازی در حالت ready است و هر دو بازیکن حضور دارند → gameReady
+  if (state.status === "ready" && state.players.length === 2) {
+    return "gameReady";
+  }
+
   if (state.status !== "in-progress" || !state.turn) {
     return undefined;
   }
@@ -519,9 +526,9 @@ export function calculateSubStatus(state: GameState): SubStatus | undefined {
   const hasDice = state.dice && state.dice.length > 0;
 
   if (!hasDice) {
-    // بدون تاس: اگر قبلاً تاس ریخته شده => باید نوبت تمام شود
-    // در غیر این صورت => باید تاس بیندازد
-    return state.rolledThisTurn === true ? "mustEndTurn" : undefined;
+    // بدون تاس: اگر قبلاً تاس ریخته شده => نوبت تمام شده (mustEndTurn)
+    // در غیر این صورت => منتظر ریختن تاس (waitForRoll)
+    return state.rolledThisTurn === true ? "mustEndTurn" : "waitForRoll";
   }
 
   // تاس موجود است: بررسی حرکت قانونی
