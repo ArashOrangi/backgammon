@@ -15,7 +15,7 @@ import { BOT_USER_ID } from "@/static/statics";
 import { saveGame } from "./gameStore";
 import { isGameOver, calculateWinType } from "./engine";
 
-const BOT_ACTION_DELAY_MS = 5;
+const BOT_ACTION_DELAY_MS = 50;
 
 function broadcastGameState(
   gameId: number,
@@ -26,7 +26,11 @@ function broadcastGameState(
   const sequences =
     game.turn !== null ? generateMoveSequences(game, game.turn) : [];
   const legalMoves = flattenMoveSequences(sequences);
-  const subStatus = calculateSubStatus(game);
+  let subStatus = calculateSubStatus(game);
+  // اگر تاس خالی است و نوبت مشخص است (شروع نوبت جدید)، subStatus را "mustEndTurn" بده
+  if (game.turn !== null && (!game.dice || game.dice.length === 0)) {
+    subStatus = "mustEndTurn";
+  }
   rooms.broadcast(gameId, {
     type: "game.state",
     payload: onOkSocketResponse({ ...game, subStatus, legalMoves }, message),
