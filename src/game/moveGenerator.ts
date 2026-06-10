@@ -118,7 +118,7 @@ function recurse(
     try {
       applyMove(game, playerId, move.from, move.to, move.die);
 
-      const remaining = removeDie(dice, move.die);
+      const remaining = game.dice ? [...game.dice] : [];
 
       if (DEBUG_DOUBLE) {
         console.log(
