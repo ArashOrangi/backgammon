@@ -16,6 +16,7 @@ import {
 } from "@/game/eventStore";
 import { GameQueue } from "@/game/gameQueue";
 import { runBotIfNeeded } from "@/game/botRunner";
+import { BOT_USER_ID } from "@/static/statics";
 
 const gameQueue = new GameQueue();
 
@@ -54,6 +55,9 @@ export async function handleEndTurn(
 
     // فقط زمانی که حرکت قانونی وجود دارد (playDice) نباید اجازه endTurn بدهیم
     if (currentSubStatus === "playDice") {
+      if (playerId !== BOT_USER_ID) {
+        console.log("tttttttttttttttttttttttttttttttt");
+      }
       return ctx.send({
         type: "game.error",
         payload: onErrorSocketResponse("You still have legal moves available!"),
