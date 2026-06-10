@@ -543,7 +543,7 @@ export function calculateSubStatus(state: GameState): SubStatus | undefined {
 
   // هنوز تاس نریخته
   if (!state.dice || state.dice.length === 0) {
-    return "waitForRoll";
+    return "turnRoll";
   }
 
   const legalMoves = generateMoveSequences(state, state.turn);
