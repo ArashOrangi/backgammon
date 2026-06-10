@@ -116,16 +116,15 @@ function recurse(
     }
     const snapshot = takeSnapshot(game);
     try {
+      // اعمال حرکت (تاس مصرف می‌شود)
       applyMove(game, playerId, move.from, move.to, move.die);
-
+      // تاس‌های باقی‌مانده را از game.dice می‌گیریم
       const remaining = game.dice ? [...game.dice] : [];
-
       if (DEBUG_DOUBLE) {
         console.log(
           `[DEBUG] recurse: after apply, remaining dice=${remaining}`,
         );
       }
-
       recurse(game, playerId, remaining, [...path, move], results);
     } catch (err) {
       if (DEBUG_DOUBLE) {
@@ -136,7 +135,6 @@ function recurse(
     }
   }
 }
-
 function generateSingleMoves(
   game: GameState,
   playerId: PlayerId,
