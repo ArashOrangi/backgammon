@@ -507,19 +507,27 @@ export async function loadGameStateUntil(
   return state;
 }
 
+// eventStore.ts
+
 export function calculateSubStatus(state: GameState): SubStatus | undefined {
   if (state.status !== "in-progress" || !state.turn) {
     return undefined;
   }
 
+  // اگر تاس وجود ندارد → نوبت تمام شده
   if (!state.dice || state.dice.length === 0) {
-    return undefined;
+    return "mustEndTurn";
   }
 
   const legalMoves = generateMoveSequences(state, state.turn);
   const hasRealMove = legalMoves.some((seq) => seq.moves.length > 0);
 
-  return hasRealMove ? "playDice" : undefined;
+  // اگر تاس دارد ولی هیچ حرکت قانونی ندارد → نوبت تمام شده
+  if (!hasRealMove) {
+    return "mustEndTurn";
+  }
+
+  return "playDice";
 }
 
 export async function undoLastMove(gameId: number, playerId: PlayerId) {
