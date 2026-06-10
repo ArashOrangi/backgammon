@@ -41,7 +41,9 @@ export async function handleRoll(
       payload: onErrorSocketResponse("Not authenticated"),
     });
   }
-
+  console.log(
+    `[ROLL] Received roll request from player ${playerId} for game ${gameId}`,
+  );
   await gameQueue.enqueue(gameId, async () => {
     let game = await loadGameState(gameId);
     if (!game) {

@@ -75,12 +75,25 @@ export async function handleEndTurn(
 
       saveGame(updatedGame);
 
+      // ارسال رویداد game.turn برای اطلاع‌رسانی مستقیم نوبت جدید
+      const nextPlayer = updatedGame.players.find(
+        (p) => p.id === updatedGame.turn,
+      );
+      if (nextPlayer) {
+        rooms.broadcast(gameId, {
+          type: "game.turn",
+          payload: onOkSocketResponse({
+            playerId: nextPlayer.id,
+            color: nextPlayer.color,
+          }),
+        });
+      }
+
       let legalMoves: any[] = [];
       if (updatedGame.turn !== null) {
         legalMoves = generateMoveSequences(updatedGame, updatedGame.turn);
       }
       const flatLegalMoves = flattenMoveSequences(legalMoves);
-      // const nextSubStatus = calculateSubStatus(updatedGame);
 
       const stateToSend = {
         ...updatedGame,
