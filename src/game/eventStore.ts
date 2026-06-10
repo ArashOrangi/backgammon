@@ -542,12 +542,14 @@ export function calculateSubStatus(state: GameState): SubStatus | undefined {
   }
 
   const hasDice = state.dice && state.dice.length > 0;
-
+  console.log(
+    `[calculateSubStatus] status=${state.status}, turn=${state.turn}, dice=${state.dice}, rolledThisTurn=${state.rolledThisTurn}`,
+  );
   if (!hasDice) {
     // بدون تاس: اگر در این نوبت قبلاً تاس ریخته شده → باید نوبت تمام شود
     // در غیر این صورت → منتظر ریختن تاس
 
-    return state.rolledThisTurn === true ? "mustEndTurn" : "turnRoll";
+    return state.rolledThisTurn === true ? "mustEndTurn" : "waitForRoll";
   }
 
   const legalMoves = generateMoveSequences(state, state.turn);
