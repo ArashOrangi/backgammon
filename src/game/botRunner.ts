@@ -23,30 +23,39 @@ function broadcastGameState(
   rooms: RoomManager,
   message?: string,
 ) {
-  const sequences =
-    game.turn !== null ? generateMoveSequences(game, game.turn) : [];
-  const legalMoves = flattenMoveSequences(sequences);
-  let subStatus = calculateSubStatus(game);
+  let legalMoves: any[] = [];
+
+  if (game.turn !== null && game.dice && game.dice.length > 0) {
+    legalMoves = flattenMoveSequences(generateMoveSequences(game, game.turn));
+  }
+
+  const subStatus = calculateSubStatus(game);
 
   rooms.broadcast(gameId, {
     type: "game.state",
-    payload: onOkSocketResponse({ ...game, subStatus, legalMoves }, message),
+    payload: onOkSocketResponse(
+      {
+        ...game,
+        subStatus,
+        legalMoves,
+      },
+      message,
+    ),
   });
 }
 
 function broadcastTurnChange(gameId: number, game: any, rooms: RoomManager) {
-  console.log("vaaaaaaaaaaaaaaaaaaaaaaaaaaaaredddddddddddddddddddddd shod");
-
   const nextPlayer = game.players.find((p: any) => p.id === game.turn);
-  if (nextPlayer) {
-    rooms.broadcast(gameId, {
-      type: "game.turn",
-      payload: onOkSocketResponse({
-        playerId: nextPlayer.id,
-        color: nextPlayer.color,
-      }),
-    });
-  }
+
+  if (!nextPlayer) return;
+
+  rooms.broadcast(gameId, {
+    type: "game.turn",
+    payload: onOkSocketResponse({
+      playerId: nextPlayer.id,
+      color: nextPlayer.color,
+    }),
+  });
 }
 
 export async function runBotIfNeeded(
@@ -109,8 +118,8 @@ export async function runBotIfNeeded(
       state = await loadGameState(gameId);
       if (state) {
         saveGame(state);
+        broadcastTurnChange(gameId, state, rooms);
         broadcastGameState(gameId, state, rooms, "Bot turn passed (no moves)");
-        broadcastTurnChange(gameId, state, rooms); // ✅ اضافه شد
       }
       break;
     }
@@ -133,13 +142,14 @@ export async function runBotIfNeeded(
       state = await loadGameState(gameId);
       if (state) {
         saveGame(state);
+        broadcastTurnChange(gameId, state, rooms);
+
         broadcastGameState(
           gameId,
           state,
           rooms,
           "Bot turn passed (invalid move)",
         );
-        broadcastTurnChange(gameId, state, rooms); // ✅ اضافه شد
       }
       break;
     }
@@ -225,10 +235,14 @@ export async function runBotIfNeeded(
   // 3️⃣ تاس تمام شده → تعویض نوبت
   // ---------------------------------------------
   const finalState = await loadGameState(gameId);
+  const finalSubStatus = finalState
+    ? calculateSubStatus(finalState)
+    : undefined;
+
   if (
     finalState &&
     finalState.turn === playerId &&
-    (!finalState.dice || finalState.dice.length === 0)
+    finalSubStatus === "mustEndTurn"
   ) {
     await appendGameEvent(gameId, {
       type: "TURN_PASSED",
@@ -237,13 +251,14 @@ export async function runBotIfNeeded(
     const afterPass = await loadGameState(gameId);
     if (afterPass) {
       saveGame(afterPass);
+      broadcastTurnChange(gameId, afterPass, rooms); // ✅ اضافه شد
+
       broadcastGameState(
         gameId,
         afterPass,
         rooms,
         "Bot turn ended (no dice left)",
       );
-      broadcastTurnChange(gameId, afterPass, rooms); // ✅ اضافه شد
     }
   }
 }

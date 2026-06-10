@@ -541,17 +541,13 @@ export function calculateSubStatus(state: GameState): SubStatus | undefined {
     return undefined;
   }
 
-  const hasDice = Array.isArray(state.dice) && state.dice.length > 0;
-
-  if (!hasDice) {
-    return state.rolledThisTurn ? "mustEndTurn" : "waitForRoll";
+  if (!state.dice || state.dice.length === 0) {
+    return "mustEndTurn";
   }
 
   const legalMoves = generateMoveSequences(state, state.turn);
 
-  const hasLegalMove = legalMoves.length > 0;
-
-  return hasLegalMove ? "playDice" : "mustEndTurn";
+  return legalMoves.length > 0 ? "playDice" : "mustEndTurn";
 }
 
 export async function undoLastMove(gameId: number, playerId: PlayerId) {
