@@ -38,41 +38,49 @@ function computeDistance(
   playerId: PlayerId,
   from: number,
   to: number,
+  dieOverride?: number,
 ): number | null {
   const dir = getDirection(game, playerId);
   const player = game.players.find((p) => p.id === playerId);
   if (!player) return null;
 
-  // ---------------------------------------------------------
-  // اصلاح منطق ورود از BAR برای هماهنگی با Engine
-  // ---------------------------------------------------------
+  // ورود از BAR (تنها در صورتی که dieOverride داده نشده باشد استفاده می‌شود)
+  // اما در validateMove ما BAR را جداگانه هندل می‌کنیم، اینجا فقط برای حالت‌های عادی و bear off
   if (from === SPECIAL_POSITIONS.BAR) {
+    // اگر die داده شده باشد، مستقیماً فاصله را همان die فرض می‌کنیم (در صورت تطابق نقطه)
+    if (dieOverride !== undefined) {
+      const expectedPoint =
+        player.color === "white" ? 24 - dieOverride : dieOverride - 1;
+      if (to === expectedPoint) {
+        return dieOverride;
+      }
+      return null;
+    }
+    // بدون dieOverride، فاصله را از روی نقطه مقصد محاسبه کن
     if (player.color === "white") {
-      // سفید از سمت بالا (ایندکس 23 به پایین) وارد می‌شود
-      // Die 1 -> Index 23, Die 6 -> Index 18
       const dist = 24 - to;
       return dist >= 1 && dist <= 6 ? dist : null;
     } else {
-      // سیاه از سمت پایین (ایندکس 0 به بالا) وارد می‌شود
-      // Die 1 -> Index 0, Die 6 -> Index 5
       const dist = to + 1;
       return dist >= 1 && dist <= 6 ? dist : null;
     }
   }
 
-  // to bear off
+  // حرکت معمولی (غیر BAR)
   if (
     to === SPECIAL_POSITIONS.BEAR_OFF_WHITE ||
     to === SPECIAL_POSITIONS.BEAR_OFF_BLACK
   ) {
+    // bear off
     if (!canBearOff(game, playerId)) return null;
-    if (dir === -1) return from + 1;
-    return 24 - from;
+    if (dir === -1) return from + 1; // سفید: فاصله = اندیس مهره + 1
+    return 24 - from; // سیاه: فاصله = 24 - اندیس مهره
   }
 
-  // normal move
-  const normalDist = dir === -1 ? from - to : to - from;
-  return normalDist > 0 ? normalDist : null;
+  // حرکت معمولی بین نقاط
+  if (to < 0 || to > 23) return null;
+  const dist = dir === -1 ? from - to : to - from;
+  return dist > 0 ? dist : null;
 }
 
 function findMatchingDie(
@@ -119,7 +127,6 @@ function findHigherDieForBearOff(
     }
   }
 
-  // اگر مهره‌ای عقب‌تر وجود دارد، نمی‌توان از تاس بزرگتر استفاده کرد
   if (hasCheckerBehind) return null;
 
   // پیدا کردن کوچکترین تاس بزرگتر از distance
@@ -150,17 +157,42 @@ export function validateMove(
 
   if (from === SPECIAL_POSITIONS.BAR) {
     if (barCount === 0) return { isValid: false, message: "No checker on bar" };
-  } else {
-    const src = board.points[from];
-    if (!src || src.owner !== playerId || src.count <= 0) {
-      return { isValid: false, message: "Invalid source point" };
+
+    const player = game.players.find((p) => p.id === playerId)!;
+
+    // بررسی هر تاس موجود (اولویت با تاس‌های داده شده یا تاس‌های فعلی)
+    for (const die of dice) {
+      const expectedTo = player.color === "white" ? 24 - die : die - 1;
+      if (to === expectedTo) {
+        // نقطه مقصد نباید بلاک شده باشد (توسط دو یا بیشتر مهره حریف)
+        if (isPointBlocked(game, playerId, to)) {
+          return { isValid: false, message: "Point blocked" };
+        }
+        const targetPoint = game.board.points[to];
+        const isHit =
+          targetPoint.owner &&
+          targetPoint.owner !== playerId &&
+          targetPoint.count === 1;
+        return { isValid: true, dieUsed: die, isHit: !!isHit };
+      }
     }
+    return {
+      isValid: false,
+      message: "No matching die for BAR entry to this point",
+    };
+  }
+
+  // حرکت از نقاط تخته (غیر BAR)
+  const src = board.points[from];
+  if (!src || src.owner !== playerId || src.count <= 0) {
+    return { isValid: false, message: "Invalid source point" };
   }
 
   const isBearOff =
     to === SPECIAL_POSITIONS.BEAR_OFF_WHITE ||
     to === SPECIAL_POSITIONS.BEAR_OFF_BLACK;
 
+  // محاسبه فاصله (برای حرکت عادی یا bear off)
   const distance = computeDistance(game, playerId, from, to);
   if (distance == null || distance <= 0)
     return { isValid: false, message: "Invalid distance" };
@@ -171,7 +203,6 @@ export function validateMove(
     if (isPointBlocked(game, playerId, to))
       return { isValid: false, message: "Point blocked" };
 
-    // تشخیص زدن مهره (Hit)
     const targetPoint = game.board.points[to];
     const isHit =
       targetPoint.owner &&
