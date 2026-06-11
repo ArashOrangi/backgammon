@@ -6,25 +6,21 @@ function getDirection(game: GameState, playerId: PlayerId): 1 | -1 {
   return player.color === "white" ? -1 : 1;
 }
 
-function getHomeRange(game: GameState, playerId: PlayerId): [number, number] {
+export function getHomeRange(
+  game: GameState,
+  playerId: PlayerId,
+): [number, number] {
   const dir = getDirection(game, playerId);
   return dir === -1 ? [0, 5] : [18, 23];
 }
 
 export function canBearOff(game: GameState, playerId: PlayerId): boolean {
-  const player = game.players.find((p) => p.id === playerId);
-  if (!player) return false;
-  if ((game.board.bar[playerId] ?? 0) > 0) return false;
-
-  // تعیین محدوده خانه بر اساس رنگ
-  const homeStart = player.color === "white" ? 0 : 18;
-  const homeEnd = player.color === "white" ? 5 : 23;
-
-  const { points } = game.board;
+  const [start, end] = getHomeRange(game, playerId);
+  const { points, bar } = game.board;
+  if ((bar[playerId] ?? 0) > 0) return false;
   for (let i = 0; i < 24; i++) {
-    if (points[i].owner === playerId && (i < homeStart || i > homeEnd)) {
-      return false;
-    }
+    const p = points[i];
+    if (p.owner === playerId && (i < start || i > end)) return false;
   }
   return true;
 }
@@ -110,26 +106,24 @@ function findHigherDieForBearOff(
 ): number | null {
   const dice = diceOverride ?? game.dice;
   if (!dice || dice.length === 0) return null;
-  const player = game.players.find((p) => p.id === playerId);
-  if (!player) return null;
-
-  const homeStart = player.color === "white" ? 0 : 18;
-  const homeEnd = player.color === "white" ? 5 : 23;
   const { points } = game.board;
+  const dir = getDirection(game, playerId);
+  const [start, end] = getHomeRange(game, playerId);
 
-  // بررسی وجود مهره عقب‌تر (نزدیک‌تر به خروج)
+  // بررسی وجود مهره‌ای عقب‌تر (نسبت به مهره‌ی فعلی)
   let hasCheckerBehind = false;
-  if (player.color === "white") {
-    // سفید: نقاط با اندیس کوچک‌تر از 'from' نزدیک‌تر به خروج هستند
-    for (let i = from - 1; i >= homeStart; i--) {
+
+  if (dir === -1) {
+    // سفید: حرکت به سمت چپ (کاهش ایندکس) → عقب‌تر = ایندکس‌های کوچک‌تر
+    for (let i = from - 1; i >= start; i--) {
       if (points[i].owner === playerId && points[i].count > 0) {
         hasCheckerBehind = true;
         break;
       }
     }
   } else {
-    // سیاه: نقاط با اندیس بزرگ‌تر از 'from' نزدیک‌تر به خروج هستند
-    for (let i = from + 1; i <= homeEnd; i++) {
+    // سیاه: حرکت به سمت راست (افزایش ایندکس) → عقب‌تر = ایندکس‌های بزرگ‌تر
+    for (let i = from + 1; i <= end; i++) {
       if (points[i].owner === playerId && points[i].count > 0) {
         hasCheckerBehind = true;
         break;
@@ -143,6 +137,7 @@ function findHigherDieForBearOff(
   const bigger = dice.filter((d) => d > distance).sort((a, b) => a - b)[0];
   return bigger ?? null;
 }
+
 export function validateMove(
   game: GameState,
   playerId: PlayerId,
@@ -219,7 +214,6 @@ export function validateMove(
       targetPoint.count === 1;
 
     const exactDie = findMatchingDie(game, distance, dice);
-    if (exactDie) return { isValid: true, dieUsed: exactDie, isHit: false };
     if (!exactDie)
       return { isValid: false, message: "No matching die for this distance" };
 
