@@ -20,6 +20,7 @@ import { prisma } from "@/components/prisma";
 import { OrmState } from "@/models/enums";
 import { getDefaultTimerPreset } from "@/models/timerPreset";
 import { GameState } from "@/game/types";
+import { sleep } from "@/components/sleep";
 
 type JoinPayload = { gameId: number; userId: number };
 
@@ -86,13 +87,29 @@ export async function handleJoin(
             waitingTimers.delete(userId);
 
             const gameIdForBot = await createGameWithBot(userId, 1);
+            await sleep(200);
             if (!gameIdForBot) {
               console.error(`Failed to create bot game for user ${userId}`);
               return;
             }
 
-            const game = await loadGameState(gameIdForBot);
+            let game = await loadGameState(gameIdForBot);
             if (!game) return;
+            // بررسی کامل بودن state (هر دو بازیکن)
+            if (game.players.length !== 2) {
+              console.error(
+                `[BotGame] Game ${gameIdForBot} has only ${game.players.length} players, retrying...`,
+              );
+              // یک بار دیگر تلاش
+              await new Promise((resolve) => setTimeout(resolve, 200));
+              game = await loadGameState(gameIdForBot);
+              if (!game || game.players.length !== 2) {
+                console.error(
+                  `[BotGame] Failed to get full state for game ${gameIdForBot}`,
+                );
+                return;
+              }
+            }
 
             await applyTimerSettingsToGame(game);
             rooms.join(gameIdForBot, ctx, "player");
