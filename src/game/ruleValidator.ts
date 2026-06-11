@@ -6,10 +6,7 @@ function getDirection(game: GameState, playerId: PlayerId): 1 | -1 {
   return player.color === "white" ? -1 : 1;
 }
 
-export function getHomeRange(
-  game: GameState,
-  playerId: PlayerId,
-): [number, number] {
+function getHomeRange(game: GameState, playerId: PlayerId): [number, number] {
   const dir = getDirection(game, playerId);
   return dir === -1 ? [0, 5] : [18, 23];
 }
@@ -110,20 +107,19 @@ function findHigherDieForBearOff(
   const dir = getDirection(game, playerId);
   const [start, end] = getHomeRange(game, playerId);
 
-  // بررسی وجود مهره‌ای عقب‌تر (نسبت به مهره‌ی فعلی)
+  // بررسی اینکه آیا مهره‌ای عقب‌تر (نسبت به خروج) وجود دارد
   let hasCheckerBehind = false;
-
   if (dir === -1) {
-    // سفید: حرکت به سمت چپ (کاهش ایندکس) → عقب‌تر = ایندکس‌های کوچک‌تر
-    for (let i = from - 1; i >= start; i--) {
+    // سفید: عقب‌تر یعنی ایندکس بزرگتر (نزدیک به 23)
+    for (let i = from + 1; i <= end; i++) {
       if (points[i].owner === playerId && points[i].count > 0) {
         hasCheckerBehind = true;
         break;
       }
     }
   } else {
-    // سیاه: حرکت به سمت راست (افزایش ایندکس) → عقب‌تر = ایندکس‌های بزرگ‌تر
-    for (let i = from + 1; i <= end; i++) {
+    // سیاه: عقب‌تر یعنی ایندکس کوچکتر (نزدیک به 0)
+    for (let i = from - 1; i >= start; i--) {
       if (points[i].owner === playerId && points[i].count > 0) {
         hasCheckerBehind = true;
         break;
