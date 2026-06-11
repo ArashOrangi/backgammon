@@ -47,7 +47,12 @@ export async function handleReady(
     }
     gameId = actualGameId;
   }
-
+  if (gameId <= 0) {
+    return ctx.send({
+      type: "game.error",
+      payload: onErrorSocketResponse("Still invalid game ID"),
+    });
+  }
   // ۱. بارگذاری آخرین وضعیت از دیتابیس (event sourcing)
   let game = await loadGameState(gameId);
   if (!game) {

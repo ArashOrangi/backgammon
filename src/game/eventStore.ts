@@ -384,7 +384,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
  * If we load from that snapshot, we may accidentally keep the undone move in
  * the rebuilt state.
  */
-async function rebuildGameStateFromScratch(
+export async function rebuildGameStateFromScratch(
   gameId: number,
 ): Promise<GameState | null> {
   let state = await createInitialGameState(gameId);

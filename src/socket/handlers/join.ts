@@ -14,6 +14,7 @@ import {
   loadGameState,
   appendGameEvent,
   forceSnapshot,
+  rebuildGameStateFromScratch,
 } from "@/game/eventStore";
 import { prismaGameCreate } from "@/models/game";
 import { prisma } from "@/components/prisma";
@@ -259,13 +260,7 @@ async function createGameWithBot(
   whiteId: number,
   botId: number,
 ): Promise<number | null> {
-  if (whiteId === botId) {
-    console.error(
-      `[createGameWithBot] whiteId equals botId (${whiteId}), cannot create game`,
-    );
-    return null;
-  }
-
+  if (whiteId === botId) return null;
   const game = await prismaGameCreate(whiteId);
   if (!game || game === OrmState.Error) return null;
   await prisma.games.update({
@@ -281,12 +276,17 @@ async function createGameWithBot(
     payload: { playerId: botId, color: "black" },
   });
 
-  // ✅ گرفتن snapshot فوری برای اطمینان از ذخیره state کامل
-  const state = await loadGameState(game.id);
-  if (state) {
-    await applyTimerSettingsToGame(state);
-    await forceSnapshot(game.id, state);
+  //  استفاده از rebuild به جای loadGameState
+  const state = await rebuildGameStateFromScratch(game.id);
+  if (!state || state.players.length !== 2) {
+    console.error(
+      `[createGameWithBot] Failed to get full state for game ${game.id}`,
+    );
+    await prisma.games.delete({ where: { id: game.id } }).catch(() => {});
+    return null;
   }
+  await applyTimerSettingsToGame(state);
+  await forceSnapshot(game.id, state);
   return game.id;
 }
 
