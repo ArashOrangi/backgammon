@@ -248,3 +248,10 @@ async function addBotToGame(gameId: number, botId: number, rooms: RoomManager) {
   const { handleReady } = await import("./ready");
   await handleReady(fakeCtx, { gameId }, rooms);
 }
+
+export function clearWaitingUser(userId: number) {
+  const timer = waitingTimers.get(userId);
+  if (timer) clearTimeout(timer);
+  waitingTimers.delete(userId);
+  waitingSockets.delete(userId);
+}

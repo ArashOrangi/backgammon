@@ -3,7 +3,7 @@ import { SocketContext } from "./socket-context";
 import { MessageRouter } from "./message-router";
 import { ClientMessage } from "./protocol";
 import { RoomManager } from "./room-manager";
-import { handleJoin } from "./handlers/join";
+import { clearWaitingUser, handleJoin } from "./handlers/join";
 import { handleRoll } from "./handlers/roll";
 import { handleMove } from "./handlers/move";
 import { handleLeave } from "./handlers/leave";
@@ -79,6 +79,10 @@ export function registerSocketHandlers(
     });
 
     ws.on("close", () => {
+      const userId = ctx.userId;
+      if (userId) {
+        clearWaitingUser(userId);
+      }
       const gameId = rooms.getRoomOfSocket(ctx);
       if (gameId) {
         const game = getGame(gameId);

@@ -26,7 +26,7 @@ export async function handleReady(
   payload: { gameId: number },
   rooms: RoomManager,
 ) {
-  const { gameId } = payload;
+  let { gameId } = payload;
   const userId = ctx.userId;
 
   if (!userId) {
@@ -34,6 +34,18 @@ export async function handleReady(
       type: "game.error",
       payload: onErrorSocketResponse("Not authenticated"),
     });
+  }
+
+  // ✅ اصلاح: اگر gameId نامعتبر است (0 یا منفی)، از اتاق سوکت دریافت کن
+  if (gameId <= 0) {
+    const actualGameId = rooms.getRoomOfSocket(ctx);
+    if (!actualGameId) {
+      return ctx.send({
+        type: "game.error",
+        payload: onErrorSocketResponse("Invalid game ID and not in any room"),
+      });
+    }
+    gameId = actualGameId;
   }
 
   // ۱. بارگذاری آخرین وضعیت از دیتابیس (event sourcing)
@@ -160,7 +172,6 @@ export async function handleReady(
 
     // ========== اضافه شده: اجرای بات در صورت نیاز ==========
     if (freshGame.status === "in-progress") {
-      // همواره نوبت فعلی را به بات رانر بده (خودش بررسی می‌کند که آیا آن بازیکن بات است)
       await runBotIfNeeded(gameId, freshGame.turn!, rooms);
     }
     // ====================================================

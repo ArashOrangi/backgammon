@@ -15,6 +15,8 @@ import {
   generateMoveSequences,
 } from "@/game/moveGenerator";
 import { GameQueue } from "@/game/gameQueue";
+import { clearWaitingUser } from "./join";
+import { GameState } from "@/game/types";
 
 const gameQueue = new GameQueue();
 
@@ -32,6 +34,34 @@ export async function handleLeave(
     return ctx.send({
       type: "game.error",
       payload: onErrorSocketResponse("Not authenticated"),
+    });
+  }
+
+  // ✅ حالت مچ‌میکینگ (gameId = -1)
+  if (gameId === -1) {
+    clearWaitingUser(playerId);
+    const waitingGameState: GameState = {
+      id: -1,
+      players: [{ id: playerId, color: "white" }],
+      turn: null,
+      status: "waiting",
+      startingDice: {},
+      board: {
+        points: Array(24).fill({ owner: null, count: 0 }),
+        bar: {},
+        borneOff: {},
+      },
+      pipCount: {},
+      cubeValue: 1,
+      createdAt: Date.now(),
+      lastActionAt: Date.now(),
+      primaryTimePerTurn: 400,
+      secondaryTimeBank: {},
+      rolledThisTurn: false,
+    };
+    return ctx.send({
+      type: "game.state",
+      payload: onOkSocketResponse(waitingGameState, "Left matchmaking queue"),
     });
   }
 
@@ -92,7 +122,10 @@ export async function handleLeave(
 
       rooms.broadcast(gameId, {
         type: "network.timeout",
-        payload: onOkSocketResponse({ playerId, timeoutAt: Date.now() + 60000 }),
+        payload: onOkSocketResponse({
+          playerId,
+          timeoutAt: Date.now() + 60000,
+        }),
       });
     } catch (err) {
       console.error("Leave Error:", err);
