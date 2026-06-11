@@ -16,6 +16,7 @@ export const ToPositionSchema = Type.Union([
   BoardPointSchema,
   Type.Literal(SPECIAL_POSITIONS.BEAR_OFF_WHITE),
   Type.Literal(SPECIAL_POSITIONS.BEAR_OFF_BLACK),
+  Type.Literal(SPECIAL_POSITIONS.BAR),
 ]);
 
 export const MovePieceSchema = Type.Object({

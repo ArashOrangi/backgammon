@@ -162,10 +162,23 @@ export async function handleMove(
         continue;
       }
 
+      // -------------------------------------------------------------
+      // حرکت عادی (غیر Undo)
+      // -------------------------------------------------------------
       if (finalGame.turn !== playerId) {
         return ctx.send({
           type: "game.error",
           payload: onErrorSocketResponse("It's not your turn"),
+        });
+      }
+
+      // جلوگیری از حرکت مستقیم مهره به BAR (حرکت hit فقط توسط سرور ثبت می‌شود)
+      if (to === SPECIAL_POSITIONS.BAR) {
+        return ctx.send({
+          type: "game.error",
+          payload: onErrorSocketResponse(
+            "Invalid move: cannot move checker directly to BAR",
+          ),
         });
       }
 
