@@ -110,19 +110,20 @@ function findHigherDieForBearOff(
   const dir = getDirection(game, playerId);
   const [start, end] = getHomeRange(game, playerId);
 
-  // بررسی اینکه آیا مهره‌ای عقب‌تر (نسبت به خروج) وجود دارد
+  // بررسی وجود مهره‌ای عقب‌تر (نسبت به مهره‌ی فعلی)
   let hasCheckerBehind = false;
+
   if (dir === -1) {
-    // سفید: عقب‌تر یعنی ایندکس بزرگتر (نزدیک به 23)
-    for (let i = from + 1; i <= end; i++) {
+    // سفید: حرکت به سمت چپ (کاهش ایندکس) → عقب‌تر = ایندکس‌های کوچک‌تر
+    for (let i = from - 1; i >= start; i--) {
       if (points[i].owner === playerId && points[i].count > 0) {
         hasCheckerBehind = true;
         break;
       }
     }
   } else {
-    // سیاه: عقب‌تر یعنی ایندکس کوچکتر (نزدیک به 0)
-    for (let i = from - 1; i >= start; i--) {
+    // سیاه: حرکت به سمت راست (افزایش ایندکس) → عقب‌تر = ایندکس‌های بزرگ‌تر
+    for (let i = from + 1; i <= end; i++) {
       if (points[i].owner === playerId && points[i].count > 0) {
         hasCheckerBehind = true;
         break;
