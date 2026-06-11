@@ -80,27 +80,27 @@ export async function handleJoin(
           payload: onOkSocketResponse(waitingGame, "Waiting for opponent"),
         });
 
-        // تنظیم تایمر ۳۰ ثانیه برای ساخت بات
+        // تنظیم تایمر ۱۰ ثانیه برای ساخت بات
         const timer = setTimeout(async () => {
           if (waitingSockets.has(userId)) {
             waitingSockets.delete(userId);
             waitingTimers.delete(userId);
 
             const gameIdForBot = await createGameWithBot(userId, 1);
-            await sleep(200);
             if (!gameIdForBot) {
               console.error(`Failed to create bot game for user ${userId}`);
               return;
             }
+            await sleep(200); // تأخیر برای اطمینان از ثبت کامل رویدادها
 
             let game = await loadGameState(gameIdForBot);
             if (!game) return;
+
             // بررسی کامل بودن state (هر دو بازیکن)
             if (game.players.length !== 2) {
               console.error(
                 `[BotGame] Game ${gameIdForBot} has only ${game.players.length} players, retrying...`,
               );
-              // یک بار دیگر تلاش
               await new Promise((resolve) => setTimeout(resolve, 200));
               game = await loadGameState(gameIdForBot);
               if (!game || game.players.length !== 2) {
@@ -233,10 +233,7 @@ async function createGameWithBot(
   botId: number,
 ): Promise<number | null> {
   const game = await prismaGameCreate(whiteId);
-  if (!game || game === OrmState.Error) {
-    console.error(`[createGameWithBot] failed for whiteId=${whiteId}`);
-    return null;
-  }
+  if (!game || game === OrmState.Error) return null;
   await prisma.games.update({
     where: { id: game.id },
     data: { blackPlayerId: botId },
@@ -249,8 +246,13 @@ async function createGameWithBot(
     type: "PLAYER_JOINED",
     payload: { playerId: botId, color: "black" },
   });
+
+  // ✅ گرفتن snapshot فوری برای اطمینان از ذخیره state کامل
   const state = await loadGameState(game.id);
-  if (state) await applyTimerSettingsToGame(state);
+  if (state) {
+    await applyTimerSettingsToGame(state);
+    await forceSnapshot(game.id, state);
+  }
   return game.id;
 }
 
