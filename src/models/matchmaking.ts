@@ -4,13 +4,14 @@ import {
   appendGameEvent,
   loadGameState,
   forceSnapshot,
-  rebuildGameStateFromScratch, // اضافه کردن import
-} from "@/game/eventStore";
+} from "@/game/eventStore"; // حذف rebuildGameStateFromScratch
 import { saveGame } from "@/game/gameStore";
 import { getDefaultTimerPreset } from "./timerPreset";
 import { prisma } from "@/components/prisma";
 
 const waitingPlayers: number[] = [];
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function addToMatchmaking(userId: number): Promise<number> {
   waitingPlayers.push(userId);
@@ -50,29 +51,27 @@ export async function addToMatchmaking(userId: number): Promise<number> {
       payload: { playerId: blackId, color: "black" },
     });
 
-    // ✅ استفاده از rebuildGameStateFromScratch برای گرفتن state کامل
-    let state = await rebuildGameStateFromScratch(game.id);
+    // ✅ منتظر بمان تا state کامل شود (حداکثر ۱ ثانیه)
+    let state = null;
+    for (let i = 0; i < 5; i++) {
+      await sleep(200);
+      state = await loadGameState(game.id);
+      if (state && state.players.length === 2) break;
+    }
+
     if (!state || state.players.length !== 2) {
       console.error(
-        `[Matchmaking] Failed to get full state for game ${game.id}, retrying...`,
+        `[Matchmaking] Failed to get full state for game ${game.id} after retries`,
       );
-      // یک بار دیگر تلاش با تأخیر
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      state = await rebuildGameStateFromScratch(game.id);
-      if (!state || state.players.length !== 2) {
-        console.error(
-          `[Matchmaking] Still failed to get full state for game ${game.id}`,
-        );
-        // پاک کردن بازی خراب
-        await prisma.gameEvents
-          .deleteMany({ where: { gameId: game.id } })
-          .catch(() => {});
-        await prisma.gameSnapshots
-          .deleteMany({ where: { gameId: game.id } })
-          .catch(() => {});
-        await prisma.games.delete({ where: { id: game.id } }).catch(() => {});
-        return 0;
-      }
+      // پاک کردن بازی خراب
+      await prisma.gameEvents
+        .deleteMany({ where: { gameId: game.id } })
+        .catch(() => {});
+      await prisma.gameSnapshots
+        .deleteMany({ where: { gameId: game.id } })
+        .catch(() => {});
+      await prisma.games.delete({ where: { id: game.id } }).catch(() => {});
+      return 0;
     }
 
     // تنظیم تایمر و ذخیره

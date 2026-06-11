@@ -276,9 +276,13 @@ async function createGameWithBot(
     payload: { playerId: botId, color: "black" },
   });
 
-  //  استفاده از rebuild به جای loadGameState
-  const state = await rebuildGameStateFromScratch(game.id);
-
+  // منتظر بمان تا state کامل شود (حداکثر ۱ ثانیه)
+  let state = null;
+  for (let i = 0; i < 5; i++) {
+    await sleep(200);
+    state = await loadGameState(game.id);
+    if (state && state.players.length === 2) break;
+  }
   if (!state || state.players.length !== 2) {
     console.error(
       `[createGameWithBot] Failed to get full state for game ${game.id}`,
