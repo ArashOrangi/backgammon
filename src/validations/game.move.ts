@@ -47,6 +47,13 @@ export const MovePieceSchema = Type.Object({
       maximum: 6,
     }),
   ),
+
+  /**
+   * isUndo:
+   * اگر true باشد، درخواست برگرداندن آخرین حرکت است.
+   * در این حالت from/to/die نادیده گرفته می‌شوند.
+   */
+  isUndo: Type.Optional(Type.Boolean()),
 });
 
 export const MoveArraySchema = Type.Array(MovePieceSchema, {
