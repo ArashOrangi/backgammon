@@ -51,6 +51,14 @@ export async function handleEndTurn(
       });
     }
 
+    // بررسی تاس: اگر تاس ریخته نشده باشد، اجازه پایان نده
+    if (!game.dice || game.dice.length === 0) {
+      return ctx.send({
+        type: "game.error",
+        payload: onErrorSocketResponse("You must roll the dice first"),
+      });
+    }
+
     const currentSubStatus = calculateSubStatus(game);
 
     // فقط زمانی که حرکت قانونی وجود دارد (playDice) نباید اجازه endTurn بدهیم
@@ -97,7 +105,7 @@ export async function handleEndTurn(
       const flatLegalMoves = flattenMoveSequences(legalMoves);
       const stateToSend = {
         ...updatedGame,
-        subStatus: "mustEndTurn",
+        subStatus: "mustEndTurn", // بعد از تعویض نوبت، برای حالت قبلی نیازی نیست، ولی فرستاده می‌شود
         legalMoves: flatLegalMoves,
       };
 
