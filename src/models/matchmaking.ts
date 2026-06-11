@@ -4,6 +4,7 @@ import {
   appendGameEvent,
   loadGameState,
   forceSnapshot,
+  rebuildGameStateFromScratch, // اضافه کردن import
 } from "@/game/eventStore";
 import { saveGame } from "@/game/gameStore";
 import { getDefaultTimerPreset } from "./timerPreset";
@@ -19,6 +20,14 @@ export async function addToMatchmaking(userId: number): Promise<number> {
     const whiteId = waitingPlayers.shift()!;
     const blackId = waitingPlayers.shift()!;
     console.log(`[Matchmaking] Pairing white=${whiteId}, black=${blackId}`);
+
+    // بررسی یکسان نبودن بازیکنان
+    if (whiteId === blackId) {
+      console.error(
+        `[Matchmaking] whiteId equals blackId (${whiteId}), cannot create game`,
+      );
+      return 0;
+    }
 
     const game = await prismaGameCreate(whiteId);
     if (!game || game === OrmState.Error) {
@@ -41,21 +50,41 @@ export async function addToMatchmaking(userId: number): Promise<number> {
       payload: { playerId: blackId, color: "black" },
     });
 
-    // بارگذاری state و تنظیم تایمر از دیتابیس
-    const state = await loadGameState(game.id);
-    if (state) {
-      const preset = await getDefaultTimerPreset();
-      state.primaryTimePerTurn = preset.primarySeconds;
-      state.secondaryTimeBank = {
-        [whiteId]: preset.secondarySeconds,
-        [blackId]: preset.secondarySeconds,
-      };
-
-      // ذخیره در حافظه سرور
-      saveGame(state);
-      // ثبت snapshot جدید با مقادیر صحیح تایمر در دیتابیس
-      await forceSnapshot(game.id, state);
+    // ✅ استفاده از rebuildGameStateFromScratch برای گرفتن state کامل
+    let state = await rebuildGameStateFromScratch(game.id);
+    if (!state || state.players.length !== 2) {
+      console.error(
+        `[Matchmaking] Failed to get full state for game ${game.id}, retrying...`,
+      );
+      // یک بار دیگر تلاش با تأخیر
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      state = await rebuildGameStateFromScratch(game.id);
+      if (!state || state.players.length !== 2) {
+        console.error(
+          `[Matchmaking] Still failed to get full state for game ${game.id}`,
+        );
+        // پاک کردن بازی خراب
+        await prisma.gameEvents
+          .deleteMany({ where: { gameId: game.id } })
+          .catch(() => {});
+        await prisma.gameSnapshots
+          .deleteMany({ where: { gameId: game.id } })
+          .catch(() => {});
+        await prisma.games.delete({ where: { id: game.id } }).catch(() => {});
+        return 0;
+      }
     }
+
+    // تنظیم تایمر و ذخیره
+    const preset = await getDefaultTimerPreset();
+    state.primaryTimePerTurn = preset.primarySeconds;
+    state.secondaryTimeBank = {
+      [whiteId]: preset.secondarySeconds,
+      [blackId]: preset.secondarySeconds,
+    };
+
+    saveGame(state);
+    await forceSnapshot(game.id, state);
 
     return game.id;
   }

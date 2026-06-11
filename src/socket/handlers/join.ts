@@ -278,6 +278,7 @@ async function createGameWithBot(
 
   //  استفاده از rebuild به جای loadGameState
   const state = await rebuildGameStateFromScratch(game.id);
+
   if (!state || state.players.length !== 2) {
     console.error(
       `[createGameWithBot] Failed to get full state for game ${game.id}`,
