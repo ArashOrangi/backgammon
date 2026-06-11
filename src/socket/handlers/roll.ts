@@ -183,6 +183,9 @@ export async function handleRoll(
         payload: onOkSocketResponse({ dice, playerId, type: "inGame" }),
       });
 
+      //  اضافه کردن تأخیر 100 میلی‌ثانیه
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       const legalMovesSequences = generateMoveSequences(game, playerId);
       const flatLegalMoves = flattenMoveSequences(legalMovesSequences);
       console.log(`[ROLL] legalMoves count = ${legalMovesSequences.length}`);

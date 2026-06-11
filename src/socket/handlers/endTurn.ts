@@ -103,6 +103,9 @@ export async function handleEndTurn(
         payload: onOkSocketResponse(stateToSend, "Turn passed successfully"),
       });
 
+      //  اضافه کردن تأخیر 100 میلی‌ثانیه
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       // اگر نوبت بات است، بلافاصله اجرا کن
       if (updatedGame.status === "in-progress") {
         const opponentId = updatedGame.players.find(
