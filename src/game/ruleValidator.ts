@@ -6,7 +6,10 @@ function getDirection(game: GameState, playerId: PlayerId): 1 | -1 {
   return player.color === "white" ? -1 : 1;
 }
 
-function getHomeRange(game: GameState, playerId: PlayerId): [number, number] {
+export function getHomeRange(
+  game: GameState,
+  playerId: PlayerId,
+): [number, number] {
   const dir = getDirection(game, playerId);
   return dir === -1 ? [0, 5] : [18, 23];
 }
