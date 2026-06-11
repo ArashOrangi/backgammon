@@ -51,21 +51,10 @@ export async function handleEndTurn(
       });
     }
 
-    // بررسی تاس: اگر تاس ریخته نشده باشد، اجازه پایان نده
-    if (!game.dice || game.dice.length === 0) {
-      return ctx.send({
-        type: "game.error",
-        payload: onErrorSocketResponse("You must roll the dice first"),
-      });
-    }
-
     const currentSubStatus = calculateSubStatus(game);
 
     // فقط زمانی که حرکت قانونی وجود دارد (playDice) نباید اجازه endTurn بدهیم
     if (currentSubStatus === "playDice") {
-      if (playerId !== BOT_USER_ID) {
-        console.log("tttttttttttttttttttttttttttttttt");
-      }
       return ctx.send({
         type: "game.error",
         payload: onErrorSocketResponse("You still have legal moves available!"),
