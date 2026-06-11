@@ -91,40 +91,43 @@ export async function handleJoin(
               console.error(`Failed to create bot game for user ${userId}`);
               return;
             }
-            await sleep(200); // تأخیر برای اطمینان از ثبت کامل رویدادها
 
-            let game = await loadGameState(gameIdForBot);
-            if (!game) return;
-
-            // بررسی کامل بودن state (هر دو بازیکن)
-            if (game.players.length !== 2) {
-              console.error(
-                `[BotGame] Game ${gameIdForBot} has only ${game.players.length} players, retrying...`,
-              );
-              await new Promise((resolve) => setTimeout(resolve, 200));
+            // منتظر بمان تا state کامل شود (حداکثر ۱ ثانیه)
+            let game = null;
+            for (let i = 0; i < 5; i++) {
+              await sleep(200);
               game = await loadGameState(gameIdForBot);
-              if (!game || game.players.length !== 2) {
-                console.error(
-                  `[BotGame] Failed to get full state for game ${gameIdForBot}`,
-                );
-                return;
-              }
+              if (game && game.players.length === 2) break;
+            }
+            if (!game || game.players.length !== 2) {
+              console.error(
+                `Bot game ${gameIdForBot} has only ${game?.players.length} players, abort`,
+              );
+              return;
             }
 
-            await applyTimerSettingsToGame(game);
+            // 1. اول بات را به بازی اضافه کن (اتاق و ready)
+            await addBotToGame(gameIdForBot, 1, rooms);
+
+            // 2. حالا کاربر را به اتاق اضافه کن
             rooms.join(gameIdForBot, ctx, "player");
+
+            // 3. وضعیت بازی را به روز کن
             game.status = "ready";
             game.subStatus = "gameReady";
             saveGame(game);
 
+            // 4. حالا state کامل را بفرست
             ctx.send({
               type: "game.state",
               payload: onOkSocketResponse(game, "Bot joined as opponent"),
             });
 
-            await addBotToGame(gameIdForBot, 1, rooms);
+            // 5. (اختیاری) اگر می‌خواهید بازی بلافاصله شروع شود، handleReady کاربر را هم صدا بزنید
+            // const { handleReady } = await import("./ready");
+            // await handleReady(ctx, { gameId: gameIdForBot }, rooms);
           }
-        }, 10000); // 10 seconds
+        }, 10000);
 
         waitingTimers.set(userId, timer);
         return;
