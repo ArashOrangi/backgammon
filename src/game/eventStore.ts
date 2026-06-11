@@ -541,13 +541,13 @@ export function calculateSubStatus(state: GameState): SubStatus | undefined {
     return undefined;
   }
 
-  if (!state.dice || state.dice.length === 0) {
-    return "mustEndTurn";
+  if (!state.dice?.length) {
+    return undefined;
   }
 
   const legalMoves = generateMoveSequences(state, state.turn);
 
-  return legalMoves.length > 0 ? "playDice" : "mustEndTurn";
+  return legalMoves.length > 0 ? "playDice" : undefined;
 }
 
 export async function undoLastMove(gameId: number, playerId: PlayerId) {

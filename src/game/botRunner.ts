@@ -1,5 +1,3 @@
-// botRunner.ts (نسخه اصلاح شده نهایی با ارسال game.turn)
-
 import {
   loadGameState,
   appendGameEvent,
@@ -17,6 +15,7 @@ import { isGameOver, calculateWinType } from "./engine";
 
 const BOT_ACTION_DELAY_MS = 50;
 
+// تابع کمکی برای broadcast state عادی (با calculateSubStatus)
 function broadcastGameState(
   gameId: number,
   game: any,
@@ -24,37 +23,43 @@ function broadcastGameState(
   message?: string,
 ) {
   let legalMoves: any[] = [];
-
-  if (game.turn !== null && game.dice && game.dice.length > 0) {
+  if (game.turn !== null && game.dice?.length > 0) {
     legalMoves = flattenMoveSequences(generateMoveSequences(game, game.turn));
   }
-
   const subStatus = calculateSubStatus(game);
-
   rooms.broadcast(gameId, {
     type: "game.state",
-    payload: onOkSocketResponse(
-      {
-        ...game,
-        subStatus,
-        legalMoves,
-      },
-      message,
-    ),
+    payload: onOkSocketResponse({ ...game, subStatus, legalMoves }, message),
   });
 }
 
+// تابع برای broadcast نوبت جدید (game.turn)
 function broadcastTurnChange(gameId: number, game: any, rooms: RoomManager) {
   const nextPlayer = game.players.find((p: any) => p.id === game.turn);
-
   if (!nextPlayer) return;
-
   rooms.broadcast(gameId, {
     type: "game.turn",
     payload: onOkSocketResponse({
       playerId: nextPlayer.id,
       color: nextPlayer.color,
     }),
+  });
+}
+
+// تابع برای broadcast پایان نوبت (mustEndTurn)
+function broadcastTurnEnd(
+  gameId: number,
+  game: any,
+  rooms: RoomManager,
+  message?: string,
+) {
+  const legalMoves: any[] = []; // در پایان نوبت هیچ حرکت قانونی نیست
+  rooms.broadcast(gameId, {
+    type: "game.state",
+    payload: onOkSocketResponse(
+      { ...game, subStatus: "mustEndTurn", legalMoves },
+      message,
+    ),
   });
 }
 
@@ -84,7 +89,6 @@ export async function runBotIfNeeded(
       type: "DICE_ROLLED",
       payload: { playerId, dice },
     });
-
     await new Promise((resolve) => setTimeout(resolve, BOT_ACTION_DELAY_MS));
 
     state = await loadGameState(gameId);
@@ -110,7 +114,6 @@ export async function runBotIfNeeded(
     const moves = flattenMoveSequences(sequences);
 
     if (moves.length === 0) {
-      // هیچ حرکت قانونی وجود ندارد → پایان نوبت
       await appendGameEvent(gameId, {
         type: "TURN_PASSED",
         payload: { playerId, reason: "NO_LEGAL_MOVES" },
@@ -119,7 +122,14 @@ export async function runBotIfNeeded(
       if (state) {
         saveGame(state);
         broadcastTurnChange(gameId, state, rooms);
-        broadcastGameState(gameId, state, rooms, "Bot turn passed (no moves)");
+        // ارسال state با subStatus: "mustEndTurn"
+        rooms.broadcast(gameId, {
+          type: "game.state",
+          payload: onOkSocketResponse(
+            { ...state, subStatus: "mustEndTurn", legalMoves: [] },
+            "Bot turn passed (no moves)",
+          ),
+        });
       }
       break;
     }
@@ -132,28 +142,28 @@ export async function runBotIfNeeded(
     ]);
 
     if (!validation.isValid) {
-      console.error(
-        `[Bot] Invalid move: ${validation.message}. move=${JSON.stringify(move)}`,
-      );
+      console.error(`[Bot] Invalid move: ${validation.message}`);
       await appendGameEvent(gameId, {
         type: "TURN_PASSED",
         payload: { playerId, reason: "NO_LEGAL_MOVES" },
       });
-      state = await loadGameState(gameId);
-      if (state) {
-        saveGame(state);
-        broadcastTurnChange(gameId, state, rooms);
-
-        broadcastGameState(
-          gameId,
-          state,
-          rooms,
-          "Bot turn passed (invalid move)",
-        );
+      const newState = await loadGameState(gameId);
+      if (newState) {
+        saveGame(newState);
+        broadcastTurnChange(gameId, newState, rooms);
+        // ارسال مستقیم state با subStatus: "mustEndTurn"
+        rooms.broadcast(gameId, {
+          type: "game.state",
+          payload: onOkSocketResponse(
+            { ...newState, subStatus: "mustEndTurn", legalMoves: [] },
+            "Bot turn passed (invalid move)",
+          ),
+        });
       }
       break;
     }
 
+    // ثبت حرکت
     const movePayload: any = {
       playerId,
       from: move.from,
@@ -164,18 +174,17 @@ export async function runBotIfNeeded(
       movePayload.hitOpponentId = opponentId;
       movePayload.hitFromPoint = move.to;
     }
-
     await appendGameEvent(gameId, {
       type: "MOVE_APPLIED",
       payload: movePayload,
     });
-
     await new Promise((resolve) => setTimeout(resolve, BOT_ACTION_DELAY_MS));
 
     state = await loadGameState(gameId);
     if (!state) break;
     saveGame(state);
 
+    // پخش حرکت
     const broadcastMoves = [
       {
         playerId,
@@ -199,6 +208,7 @@ export async function runBotIfNeeded(
       payload: onOkSocketResponse(broadcastMoves),
     });
 
+    // بررسی پایان بازی
     if (isGameOver(state)) {
       const winType = calculateWinType(state, playerId);
       await appendGameEvent(gameId, {
@@ -228,22 +238,15 @@ export async function runBotIfNeeded(
       return;
     }
 
+    // بعد از حرکت، state جدید را broadcast کن (subStatus توسط calculateSubStatus تعیین می‌شود)
     broadcastGameState(gameId, state, rooms);
   }
 
   // ---------------------------------------------
-  // 3️⃣ تاس تمام شده → تعویض نوبت
+  // 3️⃣ تاس تمام شده (یا حرکت باقی نمانده) → تعویض نوبت (MANUAL_END)
   // ---------------------------------------------
   const finalState = await loadGameState(gameId);
-  const finalSubStatus = finalState
-    ? calculateSubStatus(finalState)
-    : undefined;
-
-  if (
-    finalState &&
-    finalState.turn === playerId &&
-    finalSubStatus === "mustEndTurn"
-  ) {
+  if (finalState && finalState.turn === playerId) {
     await appendGameEvent(gameId, {
       type: "TURN_PASSED",
       payload: { playerId, reason: "MANUAL_END" },
@@ -251,14 +254,14 @@ export async function runBotIfNeeded(
     const afterPass = await loadGameState(gameId);
     if (afterPass) {
       saveGame(afterPass);
-      broadcastTurnChange(gameId, afterPass, rooms); // ✅ اضافه شد
-
-      broadcastGameState(
-        gameId,
-        afterPass,
-        rooms,
-        "Bot turn ended (no dice left)",
-      );
+      broadcastTurnChange(gameId, afterPass, rooms);
+      rooms.broadcast(gameId, {
+        type: "game.state",
+        payload: onOkSocketResponse(
+          { ...afterPass, subStatus: "mustEndTurn", legalMoves: [] },
+          "Bot turn ended (no dice left)",
+        ),
+      });
     }
   }
 }
