@@ -92,8 +92,8 @@ export async function handleJoin(
               return;
             }
 
-            // منتظر بمان تا state کامل شود (حداکثر ۱ ثانیه)
-            let game = null;
+            //  منتظر بمان تا بازی واقعاً ۲ بازیکن داشته باشد (حداکثر ۱ ثانیه)
+            let game: GameState | null = null;
             for (let i = 0; i < 5; i++) {
               await sleep(200);
               game = await loadGameState(gameIdForBot);
@@ -106,26 +106,23 @@ export async function handleJoin(
               return;
             }
 
-            // 1. اول بات را به بازی اضافه کن (اتاق و ready)
+            //  ابتدا بات را به طور کامل اضافه کن (اتاق و آماده‌سازی)
             await addBotToGame(gameIdForBot, 1, rooms);
 
-            // 2. حالا کاربر را به اتاق اضافه کن
+            //  سپس کاربر را به اتاق اضافه کن
             rooms.join(gameIdForBot, ctx, "player");
 
-            // 3. وضعیت بازی را به روز کن
+            //  وضعیت بازی را به ready تغییر بده
             game.status = "ready";
             game.subStatus = "gameReady";
             saveGame(game);
+            await forceSnapshot(game.id, game); // snapshot بگیر
 
-            // 4. حالا state کامل را بفرست
+            // حالا state کامل را بفرست (حتماً ۲ بازیکن دارد)
             ctx.send({
               type: "game.state",
               payload: onOkSocketResponse(game, "Bot joined as opponent"),
             });
-
-            // 5. (اختیاری) اگر می‌خواهید بازی بلافاصله شروع شود، handleReady کاربر را هم صدا بزنید
-            // const { handleReady } = await import("./ready");
-            // await handleReady(ctx, { gameId: gameIdForBot }, rooms);
           }
         }, 10000);
 
@@ -138,6 +135,20 @@ export async function handleJoin(
           return ctx.send({
             type: "game.error",
             payload: onErrorSocketResponse("Game not found"),
+          });
+        }
+
+        // بررسی یکسان نبودن بازیکنان
+        if (
+          game.players.length === 2 &&
+          game.players[0].id === game.players[1].id
+        ) {
+          console.error(
+            `[Matchmaking] Game ${matchedGameId} has duplicate player ID ${game.players[0].id}`,
+          );
+          return ctx.send({
+            type: "game.error",
+            payload: onErrorSocketResponse("Invalid game state"),
           });
         }
 
@@ -179,6 +190,19 @@ export async function handleJoin(
       await applyTimerSettingsToGame(game);
     } else {
       await applyTimerSettingsToGame(game);
+    }
+
+    if (
+      game.players.length === 2 &&
+      game.players[0].id === game.players[1].id
+    ) {
+      // وضعیت خراب – پاکش کن و دوباره بساز
+      console.error(
+        `[Join] Game ${gameId} has duplicate players. Resetting...`,
+      );
+      game = await createInitialGameState(gameId);
+      game.players = [];
+      saveGame(game);
     }
 
     const alreadyInGame = game.players.find((p) => p.id === userId);
@@ -235,6 +259,13 @@ async function createGameWithBot(
   whiteId: number,
   botId: number,
 ): Promise<number | null> {
+  if (whiteId === botId) {
+    console.error(
+      `[createGameWithBot] whiteId equals botId (${whiteId}), cannot create game`,
+    );
+    return null;
+  }
+
   const game = await prismaGameCreate(whiteId);
   if (!game || game === OrmState.Error) return null;
   await prisma.games.update({
@@ -269,6 +300,7 @@ async function addBotToGame(gameId: number, botId: number, rooms: RoomManager) {
   rooms.join(gameId, fakeCtx, "player");
   const { handleReady } = await import("./ready");
   await handleReady(fakeCtx, { gameId }, rooms);
+  await sleep(50);
 }
 
 export function clearWaitingUser(userId: number) {
@@ -276,4 +308,14 @@ export function clearWaitingUser(userId: number) {
   if (timer) clearTimeout(timer);
   waitingTimers.delete(userId);
   waitingSockets.delete(userId);
+}
+
+function ensureUniquePlayers(game: GameState): boolean {
+  if (game.players.length === 2 && game.players[0].id === game.players[1].id) {
+    console.error(
+      `Duplicate player ID ${game.players[0].id} in game ${game.id}`,
+    );
+    return false;
+  }
+  return true;
 }
