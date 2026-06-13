@@ -1,8 +1,11 @@
 import { Type, Static } from "@sinclair/typebox";
 
+import { RoomType } from "@/models/matchmaking";
+
 export const JoinPayload = Type.Object({
   gameId: Type.Number(),
   userId: Type.Number(),
+  roomType: Type.Optional(Type.Enum(RoomType)),
 });
 
 export const RollPayload = Type.Object({

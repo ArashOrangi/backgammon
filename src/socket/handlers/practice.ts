@@ -6,7 +6,7 @@ import {
   onOkSocketResponse,
 } from "@/responses/response-builder";
 import { GameQueue } from "@/game/gameQueue";
-import { GameState } from "@/game/types"; // اضافه شد
+import { GameState } from "@/game/types";
 
 const gameQueue = new GameQueue();
 

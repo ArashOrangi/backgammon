@@ -23,6 +23,11 @@ model Users {
   level      Int?
   password   String?
   profile Profile?  @relation("USER_PROFILE")
+  mmr               Int      @default(1000)
+  winStreak         Int      @default(0)
+  lossStreak        Int      @default(0)
+  recentResults     Json     @default("[]")     // آرایه‌ای از true/false (win/loss) برای ۲۰ بازی آخر
+  recentOpponents   Json     @default("[]")     // آرایه‌ای از اشیاء { opponentId, timestamp }
   whiteGames Games[]  @relation("WhitePlayerRelation")
   blackGames Games[]  @relation("BlackPlayerRelation")
 }

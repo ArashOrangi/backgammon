@@ -5,6 +5,11 @@ export interface User {
   id: number;
   userName: string;
   winRate: number;
+  mmr: number;
+  winStreak: number;
+  lossStreak: number;
+  recentResults: boolean[];
+  recentOpponents: any[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -13,26 +18,27 @@ const prismaSelectUser = {
   id: true,
   userName: true,
   winRate: true,
+  mmr: true,
+  winStreak: true,
+  lossStreak: true,
+  recentResults: true,
+  recentOpponents: true,
   createdAt: true,
   updatedAt: true,
 };
 
 export async function prismaUserGetOrCreate(userName: string) {
   try {
-    // ۱. اول سعی می‌کنیم پیدا کنیم
     const existingUser = await prisma.users.findUnique({
       where: { userName },
       select: prismaSelectUser,
     });
-
     if (existingUser) return existingUser;
 
-    // ۲. اگه نبود، می‌سازیم
     const newUser = await prisma.users.create({
       data: { userName },
       select: prismaSelectUser,
     });
-
     return newUser;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
@@ -45,7 +51,6 @@ export async function prismaUserGetById(id: number) {
       where: { id },
       select: prismaSelectUser,
     });
-
     return user;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
@@ -58,7 +63,6 @@ export async function prismaUserGetByUserName(userName: string) {
       where: { userName },
       select: prismaSelectUser,
     });
-
     return user;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
@@ -75,12 +79,9 @@ export async function prismaUserUpdateWinRate({
   try {
     const user = await prisma.users.update({
       where: { id: userId },
-      data: {
-        winRate,
-      },
+      data: { winRate },
       select: prismaSelectUser,
     });
-
     return user;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
@@ -113,19 +114,18 @@ export async function createUserWithProfile(data: {
 }) {
   const { userName, fullName, provinceId, cityId, image, mobile, gender } =
     data;
-
   const finalUserName = userName || (await generateGuestUsername());
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      // 1. ایجاد کاربر
       const user = await tx.users.create({
         data: {
           userName: finalUserName,
           gender: gender || "MAN",
+          // فیلدهای mmr و غیره مقدار پیش‌فرض می‌گیرند
         },
+        select: prismaSelectUser,
       });
-      // 2. ایجاد پروفایل با همان id
       const profile = await tx.profile.create({
         data: {
           id: user.id,

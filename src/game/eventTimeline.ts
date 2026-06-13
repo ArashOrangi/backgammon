@@ -19,7 +19,7 @@ export function eventToTimeline(event: any) {
       };
     case "GAME_STARTING":
       return { ...base, initiator: null, event: "RoomReady", details: null };
-    case "STARTING_ROLLED": // اضافه شد
+    case "STARTING_ROLLED":
       return {
         ...base,
         initiator: event.payload.playerId,

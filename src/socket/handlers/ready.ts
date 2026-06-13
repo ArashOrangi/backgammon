@@ -16,7 +16,7 @@ import {
   generateMoveSequences,
   flattenMoveSequences,
 } from "@/game/moveGenerator";
-import { runBotIfNeeded } from "@/game/botRunner"; // اضافه شده
+import { runBotIfNeeded } from "@/game/botRunner";
 
 // ذخیره وضعیت آمادگی هر بازی (در حافظه، نه در state بازی)
 const readyStates = new Map<number, Set<number>>();

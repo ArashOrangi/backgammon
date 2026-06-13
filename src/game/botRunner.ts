@@ -12,8 +12,9 @@ import { onOkSocketResponse } from "@/responses/response-builder";
 import { BOT_USER_ID } from "@/static/statics";
 import { saveGame } from "./gameStore";
 import { isGameOver, calculateWinType } from "./engine";
+import { updatePlayerStatsAfterGame } from "@/models/matchmaking"; // <-- اضافه شده
 
-const BOT_ACTION_DELAY_MS = 900;
+const BOT_ACTION_DELAY_MS = 1500;
 
 // تابع کمکی برای broadcast state عادی (با calculateSubStatus)
 function broadcastGameState(
@@ -211,10 +212,18 @@ export async function runBotIfNeeded(
     // بررسی پایان بازی
     if (isGameOver(state)) {
       const winType = calculateWinType(state, playerId);
+      const loserId = state.players.find((p) => p.id !== playerId)?.id;
+
       await appendGameEvent(gameId, {
         type: "GAME_FINISHED",
         payload: { winner: playerId, winType, reason: "REGULAR" },
       });
+
+      // به‌روزرسانی آمار بازیکنان
+      if (loserId) {
+        await updatePlayerStatsAfterGame(playerId, loserId, gameId);
+      }
+
       const final = await loadGameState(gameId);
       if (final) {
         saveGame(final);
@@ -238,7 +247,7 @@ export async function runBotIfNeeded(
       return;
     }
 
-    // بعد از حرکت، state جدید را broadcast کن (subStatus توسط calculateSubStatus تعیین می‌شود)
+    // بعد از حرکت، state جدید را broadcast کن
     broadcastGameState(gameId, state, rooms);
   }
 

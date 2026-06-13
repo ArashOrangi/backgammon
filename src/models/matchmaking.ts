@@ -1,91 +1,417 @@
-import { prismaGameCreate } from "./game";
-import { OrmState } from "./enums";
-import {
-  appendGameEvent,
-  loadGameState,
-  forceSnapshot,
-} from "@/game/eventStore"; // حذف rebuildGameStateFromScratch
-import { saveGame } from "@/game/gameStore";
-import { getDefaultTimerPreset } from "./timerPreset";
 import { prisma } from "@/components/prisma";
+import { prismaGameCreate } from "./game";
+import { appendGameEvent, forceSnapshot } from "@/game/eventStore";
+import { getDefaultTimerPreset } from "./timerPreset";
+import { OrmState } from "./enums";
+import { BOT_USER_ID } from "@/static/statics";
+import type { GameState } from "@/game/types";
 
-const waitingPlayers: number[] = [];
+// -------------------- تعریف اتاق‌ها (Room) --------------------
+export enum RoomType {
+  CASUAL_1 = 1,
+  CASUAL_2 = 2,
+  COMPETITIVE_1 = 3,
+  COMPETITIVE_2 = 4,
+}
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+export interface RoomConfig {
+  id: RoomType;
+  name: string;
+  initialRange: number; // ±
+  maxRange: number; // ±
+  botTimeoutSeconds: number;
+}
 
-export async function addToMatchmaking(userId: number): Promise<number> {
-  waitingPlayers.push(userId);
-  console.log(`[Matchmaking] waitingPlayers: ${waitingPlayers}`);
+export const ROOM_CONFIGS: Record<RoomType, RoomConfig> = {
+  [RoomType.CASUAL_1]: {
+    id: RoomType.CASUAL_1,
+    name: "Casual 1",
+    initialRange: 150,
+    maxRange: 300,
+    botTimeoutSeconds: 6,
+  },
+  [RoomType.CASUAL_2]: {
+    id: RoomType.CASUAL_2,
+    name: "Casual 2",
+    initialRange: 120,
+    maxRange: 280,
+    botTimeoutSeconds: 8,
+  },
+  [RoomType.COMPETITIVE_1]: {
+    id: RoomType.COMPETITIVE_1,
+    name: "Competitive 1",
+    initialRange: 100,
+    maxRange: 250,
+    botTimeoutSeconds: 10,
+  },
+  [RoomType.COMPETITIVE_2]: {
+    id: RoomType.COMPETITIVE_2,
+    name: "Competitive 2",
+    initialRange: 80,
+    maxRange: 220,
+    botTimeoutSeconds: 12,
+  },
+};
 
-  if (waitingPlayers.length >= 2) {
-    const whiteId = waitingPlayers.shift()!;
-    const blackId = waitingPlayers.shift()!;
-    console.log(`[Matchmaking] Pairing white=${whiteId}, black=${blackId}`);
+// -------------------- ساختار بازیکن در صف --------------------
+interface QueuedPlayer {
+  userId: number;
+  queueEnterTime: number; // timestamp ms
+  room: RoomType;
+}
 
-    // بررسی یکسان نبودن بازیکنان
-    if (whiteId === blackId) {
-      console.error(
-        `[Matchmaking] whiteId equals blackId (${whiteId}), cannot create game`,
-      );
-      return 0;
-    }
+// صف‌های جداگانه برای هر اتاق (در حافظه)
+const queues = new Map<RoomType, QueuedPlayer[]>();
 
-    const game = await prismaGameCreate(whiteId);
-    if (!game || game === OrmState.Error) {
-      console.error("[Matchmaking] Failed to create game");
-      throw new Error("Failed to create game");
-    }
-    console.log(`[Matchmaking] Game created with id=${game.id}`);
+// -------------------- توابع کمکی داخلی --------------------
 
-    await prisma.games.update({
-      where: { id: game.id },
-      data: { blackPlayerId: blackId },
-    });
+/** محاسبه محدوده مجاز MMR بر اساس زمان انتظار */
+function getAllowedRange(queued: QueuedPlayer, config: RoomConfig): number {
+  const waitSeconds = (Date.now() - queued.queueEnterTime) / 1000;
+  const range = config.initialRange + Math.floor(waitSeconds / 3) * 50;
+  return Math.min(range, config.maxRange);
+}
 
-    await appendGameEvent(game.id, {
-      type: "PLAYER_JOINED",
-      payload: { playerId: whiteId, color: "white" },
-    });
-    await appendGameEvent(game.id, {
-      type: "PLAYER_JOINED",
-      payload: { playerId: blackId, color: "black" },
-    });
+/** بررسی قوانین جلوگیری از تکرار حریف (۳ بازی در ۳۰ دقیقه، دو بازی پشت سر هم ممنوع) */
+function canMatchAgain(
+  playerId: number,
+  opponentId: number,
+  recentOpponents: any[],
+): boolean {
+  // قانون ۱: دو بازی پشت سر هم با یک حریف ممنوع
+  const lastOpponent = recentOpponents[recentOpponents.length - 1]?.opponentId;
+  if (lastOpponent === opponentId) return false;
 
-    // ✅ منتظر بمان تا state کامل شود (حداکثر ۱ ثانیه)
-    let state = null;
-    for (let i = 0; i < 5; i++) {
-      await sleep(200);
-      state = await loadGameState(game.id);
-      if (state && state.players.length === 2) break;
-    }
+  // قانون ۲: حداکثر ۳ بازی در ۳۰ دقیقه
+  const now = Date.now();
+  const matchesInLast30min = recentOpponents.filter(
+    (entry: any) =>
+      entry.opponentId === opponentId && now - entry.timestamp < 30 * 60 * 1000,
+  ).length;
+  if (matchesInLast30min >= 3) return false;
 
-    if (!state || state.players.length !== 2) {
-      console.error(
-        `[Matchmaking] Failed to get full state for game ${game.id} after retries`,
-      );
-      // پاک کردن بازی خراب
-      await prisma.gameEvents
-        .deleteMany({ where: { gameId: game.id } })
-        .catch(() => {});
-      await prisma.gameSnapshots
-        .deleteMany({ where: { gameId: game.id } })
-        .catch(() => {});
-      await prisma.games.delete({ where: { id: game.id } }).catch(() => {});
-      return 0;
-    }
+  return true;
+}
 
-    // تنظیم تایمر و ذخیره
-    const preset = await getDefaultTimerPreset();
+/** اعمال قوانین Streak (برد/باخت پشت سر هم) */
+function isStreakValid(player: any, opponent: any): boolean {
+  // Loss Streak
+  if (player.lossStreak >= 3 && player.lossStreak <= 4) {
+    if (opponent.mmr > player.mmr + 100) return false;
+  }
+  if (player.lossStreak >= 5) {
+    if (opponent.mmr > player.mmr + 50 || opponent.mmr > player.mmr)
+      return false;
+  }
+
+  // Win Streak
+  if (player.winStreak >= 4 && player.winStreak <= 5) {
+    if (opponent.mmr < player.mmr - 100) return false;
+  }
+  if (player.winStreak >= 6) {
+    if (opponent.mmr < player.mmr - 50) return false;
+  }
+  return true;
+}
+
+/** اولویت نرم Win Rate (ترجیح حریف با MMR بیشتر یا کمتر) */
+function getWinRatePreference(player: any, opponent: any): number {
+  const wins = (player.recentResults as boolean[]).filter(
+    (r) => r === true,
+  ).length;
+  const winRate = wins / 20;
+  if (winRate > 0.6) {
+    // ترجیح حریف با MMR >= خودش
+    return opponent.mmr >= player.mmr ? 0 : 1;
+  }
+  if (winRate < 0.4) {
+    // ترجیح حریف با MMR <= خودش
+    return opponent.mmr <= player.mmr ? 0 : 1;
+  }
+  return 0;
+}
+
+/** جستجوی بهترین حریف در صف یک اتاق */
+async function findOpponent(
+  queuedPlayer: QueuedPlayer,
+  config: RoomConfig,
+): Promise<QueuedPlayer | null> {
+  const queue = queues.get(queuedPlayer.room) || [];
+  const currentPlayer = await prisma.users.findUnique({
+    where: { id: queuedPlayer.userId },
+  });
+  if (!currentPlayer) return null;
+
+  const allowedRange = getAllowedRange(queuedPlayer, config);
+  const minMmr = currentPlayer.mmr - allowedRange;
+  const maxMmr = currentPlayer.mmr + allowedRange;
+
+  // حذف خودش از لیست کاندیداها
+  let candidates = queue.filter((q) => q.userId !== queuedPlayer.userId);
+  if (candidates.length === 0) return null;
+
+  const candidateIds = candidates.map((c) => c.userId);
+  const candidateUsers = await prisma.users.findMany({
+    where: { id: { in: candidateIds } },
+  });
+  const userMap = new Map(candidateUsers.map((u) => [u.id, u]));
+
+  // مرحله ۲: فیلتر MMR
+  let filtered = candidates.filter((c) => {
+    const u = userMap.get(c.userId);
+    return u && u.mmr >= minMmr && u.mmr <= maxMmr;
+  });
+  if (filtered.length === 0) return null;
+
+  // مرحله ۳: جلوگیری از تکرار حریف
+  const recentOpponents = (currentPlayer.recentOpponents as any[]) || [];
+  filtered = filtered.filter((c) =>
+    canMatchAgain(queuedPlayer.userId, c.userId, recentOpponents),
+  );
+  if (filtered.length === 0) return null;
+
+  // مرحله ۴: اعمال قوانین Streak
+  filtered = filtered.filter((c) =>
+    isStreakValid(currentPlayer, userMap.get(c.userId)!),
+  );
+  if (filtered.length === 0) return null;
+
+  // مرحله ۵: اولویت Win Rate و سپس نزدیک‌ترین MMR
+  filtered.sort((a, b) => {
+    const oppA = userMap.get(a.userId)!;
+    const oppB = userMap.get(b.userId)!;
+    const prefA = getWinRatePreference(currentPlayer, oppA);
+    const prefB = getWinRatePreference(currentPlayer, oppB);
+    if (prefA !== prefB) return prefA - prefB;
+    const diffA = Math.abs(currentPlayer.mmr - oppA.mmr);
+    const diffB = Math.abs(currentPlayer.mmr - oppB.mmr);
+    return diffA - diffB;
+  });
+
+  return filtered[0];
+}
+
+/** ساخت بازی بین دو بازیکن (و اعمال تنظیمات تایمر) */
+async function createGameBetween(
+  whiteId: number,
+  blackId: number,
+  room: RoomType,
+): Promise<number> {
+  if (whiteId === blackId)
+    throw new Error("Cannot create game with same player");
+
+  const game = await prismaGameCreate(whiteId);
+  if (!game || game === OrmState.Error)
+    throw new Error("Failed to create game");
+
+  await prisma.games.update({
+    where: { id: game.id },
+    data: { blackPlayerId: blackId },
+  });
+
+  await appendGameEvent(game.id, {
+    type: "PLAYER_JOINED",
+    payload: { playerId: whiteId, color: "white" },
+  });
+  await appendGameEvent(game.id, {
+    type: "PLAYER_JOINED",
+    payload: { playerId: blackId, color: "black" },
+  });
+
+  // تنظیم تایمرهای پیش‌فرض (بعداً در ready اعمال می‌شوند)
+  const preset = await getDefaultTimerPreset();
+  let state = await import("@/game/eventStore").then((m) =>
+    m.loadGameState(game.id),
+  );
+  if (state) {
     state.primaryTimePerTurn = preset.primarySeconds;
     state.secondaryTimeBank = {
       [whiteId]: preset.secondarySeconds,
       [blackId]: preset.secondarySeconds,
     };
-
-    saveGame(state);
+    await import("@/game/gameStore").then((m) => m.saveGame(state));
     await forceSnapshot(game.id, state);
-
-    return game.id;
   }
+  return game.id;
+}
+
+/** زمان انتظار و ساخت بات در صورت عدم پیدا شدن حریف */
+function scheduleBotCheck(
+  userId: number,
+  room: RoomType,
+  enterTime: number,
+  timeoutSec: number,
+) {
+  setTimeout(async () => {
+    const queue = queues.get(room) || [];
+    const stillInQueue = queue.some(
+      (p) => p.userId === userId && p.queueEnterTime === enterTime,
+    );
+    if (!stillInQueue) return;
+
+    // حذف از صف
+    const updatedQueue = queue.filter((p) => p.userId !== userId);
+    queues.set(room, updatedQueue);
+
+    // ساخت بازی با بات
+    try {
+      const botId = BOT_USER_ID;
+      const gameId = await createGameBetween(userId, botId, room);
+      if (!gameId) {
+        console.error(
+          `[Matchmaking] Failed to create bot game for user ${userId}`,
+        );
+        return;
+      }
+      // اطلاع‌رسانی به کاربر از طریق WebSocket بعداً در join.ts انجام می‌شود
+      // (نیاز به دسترسی به SocketContext داریم، بنابراین در join.ts پس از برگشت gameId پیام ارسال می‌شود)
+      console.log(
+        `[Matchmaking] Bot game created: ${gameId} for user ${userId}`,
+      );
+      // در اینجا نمی‌توانیم به کلاینت پیام بدهیم؛ join.ts خودش بعد از دریافت gameId(!==0) مراحل را طی می‌کند
+    } catch (err) {
+      console.error(`[Matchmaking] Bot creation error:`, err);
+    }
+  }, timeoutSec * 1000);
+}
+
+// -------------------- توابع عمومی (همان API قبلی) --------------------
+
+/**
+ * افزودن کاربر به صف مچ‌میکینگ
+ * @param userId شناسه کاربر
+ * @param roomType نوع اتاق (پیش‌فرض CASUAL_1)
+ * @returns 0 اگر در صف قرار گرفت، otherwise gameId حریف پیدا شده
+ */
+export async function addToMatchmaking(
+  userId: number,
+  roomType: RoomType = RoomType.CASUAL_1,
+): Promise<number> {
+  // حذف کاربر از هر صف دیگری (در صورت وجود)
+  for (const [room, q] of queues.entries()) {
+    const index = q.findIndex((p) => p.userId === userId);
+    if (index !== -1) q.splice(index, 1);
+  }
+
+  const config = ROOM_CONFIGS[roomType];
+  const queuedPlayer: QueuedPlayer = {
+    userId,
+    queueEnterTime: Date.now(),
+    room: roomType,
+  };
+  let queue = queues.get(roomType) || [];
+  queue.push(queuedPlayer);
+  queues.set(roomType, queue);
+
+  // تلاش برای پیدا کردن حریف
+  const opponent = await findOpponent(queuedPlayer, config);
+  if (opponent) {
+    // حذف هر دو از صف
+    const updatedQueue = queues
+      .get(roomType)!
+      .filter((p) => p.userId !== userId && p.userId !== opponent.userId);
+    queues.set(roomType, updatedQueue);
+    const gameId = await createGameBetween(userId, opponent.userId, roomType);
+    return gameId;
+  }
+
+  // در صف ماند و تایم‌اوت برای بات
+  scheduleBotCheck(
+    userId,
+    roomType,
+    queuedPlayer.queueEnterTime,
+    config.botTimeoutSeconds,
+  );
   return 0;
+}
+
+/** حذف کاربر از صف مچ‌میکینگ (در صورت خروج داوطلبانه) */
+export function removeFromMatchmaking(userId: number): void {
+  for (const [room, q] of queues.entries()) {
+    const index = q.findIndex((p) => p.userId === userId);
+    if (index !== -1) {
+      q.splice(index, 1);
+      if (q.length === 0) queues.delete(room);
+      break;
+    }
+  }
+}
+
+// -------------------- بروزرسانی آمار پس از پایان بازی --------------------
+/**
+ * این تابع بعد از پایان هر بازی صدا زده شود
+ * @param winnerId برنده
+ * @param loserId بازنده
+ * @param gameId (اختیاری، برای لاگ)
+ */
+export async function updatePlayerStatsAfterGame(
+  winnerId: number,
+  loserId: number,
+  gameId?: number,
+): Promise<void> {
+  const winner = await prisma.users.findUnique({ where: { id: winnerId } });
+  const loser = await prisma.users.findUnique({ where: { id: loserId } });
+  if (!winner || !loser) return;
+
+  // به‌روزرسانی MMR
+  const newWinnerMmr = Math.max(0, winner.mmr + 25);
+  const newLoserMmr = Math.max(0, loser.mmr - 25);
+
+  // به‌روزرسانی استریک‌ها
+  const winnerWinStreak = winner.winStreak + 1;
+  const winnerLossStreak = 0;
+  const loserLossStreak = loser.lossStreak + 1;
+  const loserWinStreak = 0;
+
+  // به‌روزرسانی recentResults (آخرین ۲۰ بازی)
+  const winnerResults = (winner.recentResults as boolean[]) || [];
+  winnerResults.unshift(true);
+  if (winnerResults.length > 20) winnerResults.pop();
+  const loserResults = (loser.recentResults as boolean[]) || [];
+  loserResults.unshift(false);
+  if (loserResults.length > 20) loserResults.pop();
+
+  // به‌روزرسانی recentOpponents (حداکثر ۱۰ رکورد)
+  const now = Date.now();
+  const winnerOpponents = (winner.recentOpponents as any[]) || [];
+  winnerOpponents.unshift({ opponentId: loserId, timestamp: now });
+  if (winnerOpponents.length > 10) winnerOpponents.pop();
+  const loserOpponents = (loser.recentOpponents as any[]) || [];
+  loserOpponents.unshift({ opponentId: winnerId, timestamp: now });
+  if (loserOpponents.length > 10) loserOpponents.pop();
+
+  await prisma.users.update({
+    where: { id: winnerId },
+    data: {
+      mmr: newWinnerMmr,
+      winStreak: winnerWinStreak,
+      lossStreak: winnerLossStreak,
+      recentResults: winnerResults,
+      recentOpponents: winnerOpponents,
+    },
+  });
+  await prisma.users.update({
+    where: { id: loserId },
+    data: {
+      mmr: newLoserMmr,
+      winStreak: loserWinStreak,
+      lossStreak: loserLossStreak,
+      recentResults: loserResults,
+      recentOpponents: loserOpponents,
+    },
+  });
+}
+
+// -------------------- تعیین سطح بات بر اساس استریک بازیکن --------------------
+export function getBotDifficulty(player: any): {
+  level: string;
+  botMmr: number;
+} {
+  const lossStreak = player.lossStreak;
+  const winStreak = player.winStreak;
+  if (lossStreak >= 4) return { level: "Easy", botMmr: player.mmr - 80 };
+  if (lossStreak >= 2) return { level: "Normal-Easy", botMmr: player.mmr - 40 };
+  if (winStreak >= 6) return { level: "Hard", botMmr: player.mmr + 80 };
+  if (winStreak >= 4) return { level: "Normal-Hard", botMmr: player.mmr + 40 };
+  return { level: "Normal", botMmr: player.mmr };
 }

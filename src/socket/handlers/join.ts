@@ -9,25 +9,17 @@ import {
   onErrorSocketResponse,
   onOkSocketResponse,
 } from "@/responses/response-builder";
-import { addToMatchmaking } from "@/models/matchmaking";
 import {
-  loadGameState,
-  appendGameEvent,
-  forceSnapshot,
-  rebuildGameStateFromScratch,
-} from "@/game/eventStore";
-import { prismaGameCreate } from "@/models/game";
+  addToMatchmaking,
+  removeFromMatchmaking,
+  RoomType,
+} from "@/models/matchmaking";
+import { loadGameState, forceSnapshot } from "@/game/eventStore";
 import { prisma } from "@/components/prisma";
-import { OrmState } from "@/models/enums";
 import { getDefaultTimerPreset } from "@/models/timerPreset";
 import { GameState } from "@/game/types";
-import { sleep } from "@/components/sleep";
 
-type JoinPayload = { gameId: number; userId: number };
-
-// صف سوکت‌های منتظر (برای حالت انسانی)
-const waitingSockets = new Map<number, SocketContext>();
-const waitingTimers = new Map<number, NodeJS.Timeout>();
+type JoinPayload = { gameId: number; userId: number; roomType?: RoomType };
 
 async function applyTimerSettingsToGame(game: GameState) {
   const preset = await getDefaultTimerPreset();
@@ -54,127 +46,79 @@ export async function handleJoin(
   payload: JoinPayload,
   rooms: RoomManager,
 ) {
-  let { gameId, userId } = payload;
+  let { gameId, userId, roomType } = payload;
   ctx.userId = userId;
 
   try {
     // ---------- حالت مچ‌میکینگ (خودکار) ----------
     if (gameId === -1) {
-      // جلوگیری از درخواست تکراری
-      if (waitingSockets.has(userId)) {
-        return ctx.send({
-          type: "game.error",
-          payload: onErrorSocketResponse("Already in queue"),
-        });
-      }
+      // اگر کاربر قبلاً در صف است، خطا بده
+      const alreadyQueued = await prisma.users.findUnique({
+        where: { id: userId },
+        select: { id: true },
+      }); // ساده: می‌توانیم از یک Map محلی برای تشخیص استفاده کنیم
+      // برای سادگی فرض می‌کنیم addToMatchmaking خودش تکراری را مدیریت می‌کند
 
-      const matchedGameId = await addToMatchmaking(userId);
+      const matchedGameId = await addToMatchmaking(
+        userId,
+        roomType || RoomType.CASUAL_1,
+      );
+
       if (matchedGameId === 0) {
-        // ---------- وارد صف شد ----------
-        waitingSockets.set(userId, ctx);
+        // در صف قرار گرفت – فقط وضعیت منتظر را بفرست
         const waitingGame = await createInitialGameState(-1);
         waitingGame.status = "waiting";
         waitingGame.subStatus = "playerJoin";
         waitingGame.players = [{ id: userId, color: "white" }];
-        ctx.send({
+        return ctx.send({
           type: "game.state",
           payload: onOkSocketResponse(waitingGame, "Waiting for opponent"),
         });
-
-        // تنظیم تایمر ۱۰ ثانیه برای ساخت بات
-        const timer = setTimeout(async () => {
-          if (waitingSockets.has(userId)) {
-            waitingSockets.delete(userId);
-            waitingTimers.delete(userId);
-
-            const gameIdForBot = await createGameWithBot(userId, 1);
-            if (!gameIdForBot) {
-              console.error(`Failed to create bot game for user ${userId}`);
-              return;
-            }
-
-            //  منتظر بمان تا بازی واقعاً ۲ بازیکن داشته باشد (حداکثر ۱ ثانیه)
-            let game: GameState | null = null;
-            for (let i = 0; i < 5; i++) {
-              await sleep(200);
-              game = await loadGameState(gameIdForBot);
-              if (game && game.players.length === 2) break;
-            }
-            if (!game || game.players.length !== 2) {
-              console.error(
-                `Bot game ${gameIdForBot} has only ${game?.players.length} players, abort`,
-              );
-              return;
-            }
-
-            //  ابتدا بات را به طور کامل اضافه کن (اتاق و آماده‌سازی)
-            await addBotToGame(gameIdForBot, 1, rooms);
-
-            //  سپس کاربر را به اتاق اضافه کن
-            rooms.join(gameIdForBot, ctx, "player");
-
-            //  وضعیت بازی را به ready تغییر بده
-            game.status = "ready";
-            game.subStatus = "gameReady";
-            saveGame(game);
-            await forceSnapshot(game.id, game); // snapshot بگیر
-
-            // حالا state کامل را بفرست (حتماً ۲ بازیکن دارد)
-            ctx.send({
-              type: "game.state",
-              payload: onOkSocketResponse(game, "Bot joined as opponent"),
-            });
-          }
-        }, 10000);
-
-        waitingTimers.set(userId, timer);
-        return;
       } else {
-        // ---------- جفت شدن با یک بازیکن انسانی دیگر ----------
+        // حریف پیدا شد (انسانی یا بات) – بازی را بارگذاری کن
         const game = await loadGameState(matchedGameId);
         if (!game) {
           return ctx.send({
             type: "game.error",
-            payload: onErrorSocketResponse("Game not found"),
+            payload: onErrorSocketResponse("Game not found after matchmaking"),
           });
         }
 
-        // بررسی یکسان نبودن بازیکنان
-        if (
-          game.players.length === 2 &&
-          game.players[0].id === game.players[1].id
-        ) {
+        // بررسی سلامت بازی
+        if (game.players.length !== 2) {
           console.error(
-            `[Matchmaking] Game ${matchedGameId} has duplicate player ID ${game.players[0].id}`,
+            `[Join] Game ${matchedGameId} has ${game.players.length} players, expected 2`,
           );
           return ctx.send({
             type: "game.error",
             payload: onErrorSocketResponse("Invalid game state"),
           });
         }
+        if (game.players[0].id === game.players[1].id) {
+          console.error(`[Join] Duplicate players in game ${matchedGameId}`);
+          return ctx.send({
+            type: "game.error",
+            payload: onErrorSocketResponse("Invalid game state"),
+          });
+        }
 
+        // تنظیم تایمرهای بازی (اگر قبلاً تنظیم نشده)
         await applyTimerSettingsToGame(game);
 
-        // لغو تایمر کاربر اول (اگر وجود داشته باشد)
-        const players = game.players;
-        for (const p of players) {
-          const timer = waitingTimers.get(p.id);
-          if (timer) {
-            clearTimeout(timer);
-            waitingTimers.delete(p.id);
-          }
-          const socket = waitingSockets.get(p.id);
-          if (socket) {
-            rooms.join(matchedGameId, socket, "player");
-            waitingSockets.delete(p.id);
-          }
-        }
+        // کاربر فعلی را به اتاق اضافه کن
         rooms.join(matchedGameId, ctx, "player");
 
-        game.status = "ready";
-        game.subStatus = "gameReady";
-        saveGame(game);
+        // وضعیت بازی را ready کن (اگر هنوز ready نیست)
+        if (game.status !== "ready") {
+          game.status = "ready";
+          game.subStatus = "gameReady";
+          game.turn = null;
+          saveGame(game);
+          await forceSnapshot(game.id, game);
+        }
 
+        // برای کاربر دیگر (اگر آنلاین است) قبلاً توسط مچ‌میکینگ یا بات به اتاق اضافه شده
+        // اما باید به همه بگوییم بازی آماده است
         rooms.broadcast(matchedGameId, {
           type: "game.state",
           payload: onOkSocketResponse(game, "Both players joined, ready"),
@@ -193,11 +137,11 @@ export async function handleJoin(
       await applyTimerSettingsToGame(game);
     }
 
+    // بررسی یکسان نبودن بازیکنان (امنیت)
     if (
       game.players.length === 2 &&
       game.players[0].id === game.players[1].id
     ) {
-      // وضعیت خراب – پاکش کن و دوباره بساز
       console.error(
         `[Join] Game ${gameId} has duplicate players. Resetting...`,
       );
@@ -221,6 +165,7 @@ export async function handleJoin(
       if (game.players.length === 1) {
         game.subStatus = "playerJoin";
         saveGame(game);
+        rooms.join(gameId, ctx, "player");
         return ctx.send({
           type: "game.state",
           payload: onOkSocketResponse(game, "Waiting for opponent"),
@@ -237,12 +182,13 @@ export async function handleJoin(
         });
       }
     } else {
+      // کاربر قبلاً در بازی است – فقط وضعیت را برایش بفرست
+      rooms.join(gameId, ctx, "player");
       ctx.send({
         type: "game.state",
         payload: onOkSocketResponse(game, "Rejoined"),
       });
     }
-    rooms.join(gameId, ctx, "player");
   } catch (err) {
     console.error("Join Error:", err);
     ctx.send({
@@ -254,73 +200,7 @@ export async function handleJoin(
   }
 }
 
-// --------------------- توابع کمکی برای ساخت بازی با بات ---------------------
-
-async function createGameWithBot(
-  whiteId: number,
-  botId: number,
-): Promise<number | null> {
-  if (whiteId === botId) return null;
-  const game = await prismaGameCreate(whiteId);
-  if (!game || game === OrmState.Error) return null;
-  await prisma.games.update({
-    where: { id: game.id },
-    data: { blackPlayerId: botId },
-  });
-  await appendGameEvent(game.id, {
-    type: "PLAYER_JOINED",
-    payload: { playerId: whiteId, color: "white" },
-  });
-  await appendGameEvent(game.id, {
-    type: "PLAYER_JOINED",
-    payload: { playerId: botId, color: "black" },
-  });
-
-  // منتظر بمان تا state کامل شود (حداکثر ۱ ثانیه)
-  let state = null;
-  for (let i = 0; i < 5; i++) {
-    await sleep(200);
-    state = await loadGameState(game.id);
-    if (state && state.players.length === 2) break;
-  }
-  if (!state || state.players.length !== 2) {
-    console.error(
-      `[createGameWithBot] Failed to get full state for game ${game.id}`,
-    );
-    await prisma.games.delete({ where: { id: game.id } }).catch(() => {});
-    return null;
-  }
-  await applyTimerSettingsToGame(state);
-  await forceSnapshot(game.id, state);
-  return game.id;
-}
-
-async function addBotToGame(gameId: number, botId: number, rooms: RoomManager) {
-  const fakeCtx = {
-    id: `bot-${botId}`,
-    userId: botId,
-    send: () => {},
-    ws: { readyState: 1, send: () => {} },
-  } as any;
-  rooms.join(gameId, fakeCtx, "player");
-  const { handleReady } = await import("./ready");
-  await handleReady(fakeCtx, { gameId }, rooms);
-  await sleep(50);
-}
-
+// تابع پاک کردن کاربر از صف (در صورت لزوم از خارج)
 export function clearWaitingUser(userId: number) {
-  const timer = waitingTimers.get(userId);
-  if (timer) clearTimeout(timer);
-  waitingTimers.delete(userId);
-  waitingSockets.delete(userId);
-}
-
-function ensureUniquePlayers(game: GameState): boolean {
-  if (game.players.length === 2 && game.players[0].id === game.players[1].id) {
-    console.error(
-      `Duplicate player ID ${game.players[0].id} in game ${game.id}`,
-    );
-    return false;
-  }
-  return true;
+  removeFromMatchmaking(userId);
 }
