@@ -5,14 +5,7 @@ import { getDefaultTimerPreset } from "./timerPreset";
 import { OrmState } from "./enums";
 import { BOT_USER_ID } from "@/static/statics";
 import type { GameState } from "@/game/types";
-
-// -------------------- تعریف اتاق‌ها (Room) --------------------
-export enum RoomType {
-  CASUAL_1 = 1,
-  CASUAL_2 = 2,
-  COMPETITIVE_1 = 3,
-  COMPETITIVE_2 = 4,
-}
+import { RoomType } from "@prisma/client";
 
 export interface RoomConfig {
   id: RoomType;

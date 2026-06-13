@@ -5,7 +5,8 @@ import {
   onErrorRestResponse,
 } from "@/responses/response-builder";
 import { OrmState } from "@/models/enums";
-import { addToMatchmaking, RoomType } from "@/models/matchmaking";
+import { addToMatchmaking } from "@/models/matchmaking";
+import { RoomType } from "@prisma/client";
 
 export const gameRoutes = new Hono();
 

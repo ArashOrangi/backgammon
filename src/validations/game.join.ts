@@ -1,5 +1,5 @@
+import { RoomType } from "@prisma/client";
 import { Type } from "@sinclair/typebox";
-import { RoomType } from "@/models/matchmaking";
 
 export const JoinGameSchema = Type.Object({
   gameId: Type.Number({ minimum: 1 }),

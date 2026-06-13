@@ -20,7 +20,10 @@ import { isGameOver, calculateWinType } from "../../game/engine";
 import { saveGame } from "../../game/gameStore";
 import { SPECIAL_POSITIONS } from "@/game/types";
 import { runBotIfNeeded } from "@/game/botRunner";
-import { updatePlayerStatsAfterGame } from "@/models/matchmaking"; // <-- اضافه شده
+import { updatePlayerStatsAfterGame } from "@/models/matchmaking";
+import { prismaGameGetInfo } from "@/models/game";
+import { updateLeaderboardAfterGame } from "@/services/leaderboardService";
+import { OrmState } from "@/models/enums";
 
 type MoveItem = {
   gameId: number;
@@ -250,9 +253,25 @@ export async function handleMove(
           },
         });
 
-        // به‌روزرسانی آمار بازیکنان (MMR، استریک و تاریخچه)
         if (loserId) {
           await updatePlayerStatsAfterGame(playerId, loserId, gameId);
+
+          const gameInfo = await prismaGameGetInfo(gameId);
+          if (
+            gameInfo !== OrmState.Error &&
+            gameInfo !== null &&
+            gameInfo.roomType &&
+            gameInfo.createdAt
+          ) {
+            await updateLeaderboardAfterGame(
+              gameId,
+              playerId,
+              loserId,
+              gameInfo.roomType,
+              winType,
+              gameInfo.createdAt,
+            );
+          }
         }
 
         const finishedGame = await loadGameState(gameId);

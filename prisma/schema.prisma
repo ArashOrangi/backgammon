@@ -11,97 +11,18 @@ datasource db {
 }
 
 // ----------------------
-//  User Table
+//  Enums
 // ----------------------
-model Users {
-  id         Int      @id @default(autoincrement())
-  userName   String   @unique
-  winRate    Float    @default(0)
-  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime?      @updatedAt @db.Timestamptz(3)
-  gender     GENDER   @default(MAN)
-  level      Int?
-  password   String?
-  profile Profile?  @relation("USER_PROFILE")
-  mmr               Int      @default(1000)
-  winStreak         Int      @default(0)
-  lossStreak        Int      @default(0)
-  recentResults     Json     @default("[]")     // آرایه‌ای از true/false (win/loss) برای ۲۰ بازی آخر
-  recentOpponents   Json     @default("[]")     // آرایه‌ای از اشیاء { opponentId, timestamp }
-  whiteGames Games[]  @relation("WhitePlayerRelation")
-  blackGames Games[]  @relation("BlackPlayerRelation")
-}
-
-model Profile {
-  id     Int      @id @default(autoincrement())
-  createdAt   DateTime       @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime?      @updatedAt @db.Timestamptz(3)
-  fullName    String         @db.VarChar(70)
-  provinceId  Int?
-  province    Provinces?     @relation("USER_PROVINCE", fields: [provinceId], references: [id])
-  cityId      Int?
-  city        Cities?        @relation("USER_CITY", fields: [cityId],references: [id])
-  image       String?
-  mobile      String?
-  userId Int?    @unique
-  user   Users?  @relation("USER_PROFILE",fields: [userId], references: [id])
-  @@index([id])
-  @@index([id,cityId])
-}
-
 enum GENDER {
   MAN
   WOMAN
   OTHER
 }
 
-// ----------------------
-//  Game Table
-// ----------------------
-model Games {
-  id          Int      @id @default(autoincrement())
-  status      GAMESTATUS    @default(PENDING)
-  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime?      @updatedAt @db.Timestamptz(3)
-
-  // players
-  whitePlayerId Int?     
-  blackPlayerId Int?
-
-  whitePlayer   Users?       @relation("WhitePlayerRelation", fields: [whitePlayerId], references: [id])
-  blackPlayer   Users?       @relation("BlackPlayerRelation", fields: [blackPlayerId], references: [id])
-
-  // relations
-  events     GameEvents[]
-  snapshots  GameSnapshots[]
-  //index
-  @@index([whitePlayerId])
-  @@index([blackPlayerId])
-}
-
 enum GAMESTATUS {
   PENDING
   ACTIVE
   FINISHED
-}
-
-// ----------------------
-//  GameEvent Table
-// ----------------------
-model GameEvents {
-  id         Int      @id @default(autoincrement())
-  gameId    Int
-  sequence  Int         // event order (0,1,2,3,...)
-  type      EVENTTYPE
-  payload   Json
-  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime?      @updatedAt @db.Timestamptz(3)
-  isUndo    Boolean      @default(false)
-  game      Games        @relation(fields: [gameId], references: [id])
-
-  // @@index([gameId])
-  @@index([gameId, sequence])
-  @@unique([gameId, sequence]) // no duplicate events
 }
 
 enum EVENTTYPE {
@@ -116,66 +37,178 @@ enum EVENTTYPE {
   GAME_FINISHED
   TURN_TIMEOUT
   NETWORK_TIMEOUT
-  MANUAL_END 
+  MANUAL_END
 }
 
+enum RoomType {
+  CASUAL_1
+  CASUAL_2
+  COMPETITIVE_1
+  COMPETITIVE_2
+}
+
+// ----------------------
+//  User Table
+// ----------------------
+model Users {
+  id               Int       @id @default(autoincrement())
+  userName         String    @unique
+  winRate          Float     @default(0)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime? @updatedAt @db.Timestamptz(3)
+  gender           GENDER    @default(MAN)
+  level            Int?
+  password         String?
+  mmr              Int       @default(1000)
+  winStreak        Int       @default(0)
+  lossStreak       Int       @default(0)
+  recentResults    Json      @default("[]")     // boolean[] last 20 results
+  recentOpponents  Json      @default("[]")     // { opponentId, timestamp }[]
+  profile          Profile?  @relation("USER_PROFILE")
+  whiteGames       Games[]   @relation("WhitePlayerRelation")
+  blackGames       Games[]   @relation("BlackPlayerRelation")
+  lbRecords        MatchLBRecord[]
+}
+
+model Profile {
+  id         Int       @id @default(autoincrement())
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime? @updatedAt @db.Timestamptz(3)
+  fullName   String    @db.VarChar(70)
+  provinceId Int?
+  province   Provinces? @relation("USER_PROVINCE", fields: [provinceId], references: [id])
+  cityId     Int?
+  city       Cities?    @relation("USER_CITY", fields: [cityId], references: [id])
+  image      String?
+  mobile     String?
+  userId     Int?       @unique
+  user       Users?     @relation("USER_PROFILE", fields: [userId], references: [id])
+
+  @@index([id])
+  @@index([id, cityId])
+}
+
+// ----------------------
+//  Game Table
+// ----------------------
+model Games {
+  id            Int         @id @default(autoincrement())
+  status        GAMESTATUS  @default(PENDING)
+  roomType      RoomType?                //  اتاق بازی (برای لیدربورد)
+  createdAt     DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime?   @updatedAt @db.Timestamptz(3)
+
+  whitePlayerId Int?
+  blackPlayerId Int?
+
+  whitePlayer   Users?      @relation("WhitePlayerRelation", fields: [whitePlayerId], references: [id])
+  blackPlayer   Users?      @relation("BlackPlayerRelation", fields: [blackPlayerId], references: [id])
+
+  events        GameEvents[]
+  snapshots     GameSnapshots[]
+  lbRecords     MatchLBRecord[]
+
+  @@index([whitePlayerId])
+  @@index([blackPlayerId])
+}
+
+// ----------------------
+//  GameEvent Table
+// ----------------------
+model GameEvents {
+  id         Int        @id @default(autoincrement())
+  gameId     Int
+  sequence   Int
+  type       EVENTTYPE
+  payload    Json
+  createdAt  DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime?  @updatedAt @db.Timestamptz(3)
+  isUndo     Boolean    @default(false)
+  game       Games      @relation(fields: [gameId], references: [id])
+
+  @@index([gameId, sequence])
+  @@unique([gameId, sequence])
+}
 
 // ----------------------
 //  GameSnapshot Table
 // ----------------------
 model GameSnapshots {
-  id         Int      @id @default(autoincrement())
-  gameId    Int
-  sequence  Int       // event sequence at the moment of snapshot
-  state     Json      // full board state
-  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
-  lastSequence  Int?
-  game      Games     @relation(fields: [gameId], references: [id])
+  id           Int        @id @default(autoincrement())
+  gameId       Int
+  sequence     Int
+  state        Json
+  createdAt    DateTime   @default(now()) @db.Timestamptz(3)
+  lastSequence Int?
+  game         Games      @relation(fields: [gameId], references: [id])
 
-  // @@index([gameId])
   @@unique([gameId, sequence])
 }
 
+// ----------------------
+//  Leaderboard: ذخیره امتیاز هر مسابقه
+// ----------------------
+model MatchLBRecord {
+  id                   Int        @id @default(autoincrement())
+  userId               Int
+  opponentId           Int
+  gameId               Int
+  roomType             RoomType
+  isWin                Boolean
+  winType              String?    // "normal", "mars", "backgammon"
+  repetitionMultiplier Float
+  basePoints           Int
+  bonusPoints          Int
+  totalLBPoints        Int
+  createdAt            DateTime   @default(now()) @db.Timestamptz(3)
+
+  user   Users @relation(fields: [userId], references: [id])
+  game   Games @relation(fields: [gameId], references: [id])
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([gameId])
+}
 
 // ----------------------
-//  times Table
+//  Timer Presets
 // ----------------------
 model TimerPreset {
-  id               Int      @id @default(autoincrement())
-  name             String   @unique
+  id               Int       @id @default(autoincrement())
+  name             String    @unique
   primarySeconds   Int
   secondarySeconds Int
-  leagueLevel      Int?     
-  gameType         String?  // "casual", "tournament"
-  isDefault        Boolean  @default(false)
-  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime?      @updatedAt @db.Timestamptz(3)
+  leagueLevel      Int?
+  gameType         String?   // "casual", "tournament"
+  isDefault        Boolean   @default(false)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime? @updatedAt @db.Timestamptz(3)
 
   @@map("timer_presets")
 }
 
 // ----------------------
-//  mini static chat 
+//  Mini Static Chat
 // ----------------------
 model MessagesCategory {
-  id         Int      @id @default(autoincrement())
-  createdAt  DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
-  isActive  Boolean  @default(true)
-  nameFa     String   @unique
+  id         Int              @id @default(autoincrement())
+  createdAt  DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime?        @updatedAt @db.Timestamptz(3)
+  isActive   Boolean          @default(true)
+  nameFa     String           @unique
   nameEn     String?
-  isFree     Boolean  @default(false)
-  buyCount   Int?            // در صورت نیاز بعداً مقداردهی می‌شود
-  conditions Json?    @db.Json
-  lock       Boolean  @default(false)
+  isFree     Boolean          @default(false)
+  buyCount   Int?
+  conditions Json?            @db.Json
+  lock       Boolean          @default(false)
   messages   StaticMessages[] @relation("MSG_CATEGORY")
 }
 
 model StaticMessages {
-  id         Int      @id @default(autoincrement())
-  createdAt  DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
-  isActive   Boolean  @default(true)
+  id         Int             @id @default(autoincrement())
+  createdAt  DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime?       @updatedAt @db.Timestamptz(3)
+  isActive   Boolean         @default(true)
   message    String
   order      Int?
   categoryId Int
@@ -185,32 +218,35 @@ model StaticMessages {
   @@index([isActive])
 }
 
+// ----------------------
+//  Location Tables
+// ----------------------
 model Provinces {
-  id        Int       @id @default(autoincrement())
-  isActive Boolean   @default(true)
-  createdAt DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt DateTime? @updatedAt @db.Timestamptz(3)
-  faName    String    @unique @db.VarChar(99)
-  isCapital Boolean   @default(false)
-  enName    String?   @unique @db.VarChar(99)
+  id        Int        @id @default(autoincrement())
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime?  @updatedAt @db.Timestamptz(3)
+  faName    String     @unique @db.VarChar(99)
+  isCapital Boolean    @default(false)
+  enName    String?    @unique @db.VarChar(99)
   about     String?
-  cities    Cities[]  @relation("PROVINCE_CITIES")
+  cities    Cities[]   @relation("PROVINCE_CITIES")
   person    Profile[]  @relation("USER_PROVINCE")
 }
 
 model Cities {
-  id         Int           @id @default(autoincrement())
-  isActive  Boolean       @default(true)
-  createdAt  DateTime      @default(now()) @db.Timestamptz(3)
-  updatedAt  DateTime?     @updatedAt @db.Timestamptz(3)
-  faName     String        @db.VarChar(99)
-  isCapital  Boolean       @default(false)
-  enName     String?       @db.VarChar(99)
+  id         Int        @id @default(autoincrement())
+  isActive   Boolean    @default(true)
+  createdAt  DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime?  @updatedAt @db.Timestamptz(3)
+  faName     String     @db.VarChar(99)
+  isCapital  Boolean    @default(false)
+  enName     String?    @db.VarChar(99)
   about      String?
   latitude   Float?
   longitude  Float?
   population Int?
   provinceId Int
-  province   Provinces     @relation("PROVINCE_CITIES", fields: [provinceId], references: [id])
-  person     Profile[]     @relation("USER_CITY")
+  province   Provinces  @relation("PROVINCE_CITIES", fields: [provinceId], references: [id])
+  person     Profile[]  @relation("USER_CITY")
 }

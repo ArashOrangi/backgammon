@@ -9,15 +9,12 @@ import {
   onErrorSocketResponse,
   onOkSocketResponse,
 } from "@/responses/response-builder";
-import {
-  addToMatchmaking,
-  removeFromMatchmaking,
-  RoomType,
-} from "@/models/matchmaking";
+import { addToMatchmaking, removeFromMatchmaking } from "@/models/matchmaking";
 import { loadGameState, forceSnapshot } from "@/game/eventStore";
 import { prisma } from "@/components/prisma";
 import { getDefaultTimerPreset } from "@/models/timerPreset";
 import { GameState } from "@/game/types";
+import { RoomType } from "@prisma/client";
 
 type JoinPayload = { gameId: number; userId: number; roomType?: RoomType };
 
