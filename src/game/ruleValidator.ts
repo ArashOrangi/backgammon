@@ -113,17 +113,18 @@ function findHigherDieForBearOff(
   // بررسی وجود مهره‌ای عقب‌تر (نسبت به مهره‌ی فعلی)
   let hasCheckerBehind = false;
 
+  // ruleValidator.ts – inside findHigherDieForBearOff
   if (dir === -1) {
-    // سفید: حرکت به سمت چپ (کاهش ایندکس) → عقب‌تر = ایندکس‌های کوچک‌تر
-    for (let i = from - 1; i >= start; i--) {
+    // White: farther points have higher indices (closer to the bear-off edge)
+    for (let i = from + 1; i <= end; i++) {
       if (points[i].owner === playerId && points[i].count > 0) {
         hasCheckerBehind = true;
         break;
       }
     }
   } else {
-    // سیاه: حرکت به سمت راست (افزایش ایندکس) → عقب‌تر = ایندکس‌های بزرگ‌تر
-    for (let i = from + 1; i <= end; i++) {
+    // Black: farther points have lower indices
+    for (let i = start; i < from; i++) {
       if (points[i].owner === playerId && points[i].count > 0) {
         hasCheckerBehind = true;
         break;
@@ -188,6 +189,12 @@ export function validateMove(
 
   // حرکت از نقاط تخته (غیر BAR)
   const src = board.points[from];
+  if (from < 0 || from > 23) {
+    return {
+      isValid: false,
+      message: "Invalid source position",
+    };
+  }
   if (!src || src.owner !== playerId || src.count <= 0) {
     return { isValid: false, message: "Invalid source point" };
   }

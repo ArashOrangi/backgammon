@@ -1,5 +1,5 @@
 import { GameState, PlayerId, SPECIAL_POSITIONS } from "../types";
-import { canBearOff } from "../ruleValidator";
+import { canBearOff, getHomeRange } from "../ruleValidator";
 
 function consumeDie(game: GameState, die: number) {
   if (!game.dice || game.dice.length === 0) {
@@ -230,6 +230,12 @@ function resolveDieForMove(
     if (dieUsed < distance) {
       throw new Error("Die is too small for bear off");
     }
+    if (
+      dieUsed > distance &&
+      hasCheckerBehindForBearOff(game, playerId, from, dieUsed)
+    ) {
+      throw new Error("Cannot use a larger die when a checker is farther away");
+    }
 
     return dieUsed;
   }
@@ -429,4 +435,30 @@ export function undoMove(game: GameState, dieUsed: number) {
    *
    * این تابع فقط die را به لیست dice برمی‌گرداند، اگر جایی در flow لازم باشد.
    */
+}
+
+function hasCheckerBehindForBearOff(
+  game: GameState,
+  playerId: PlayerId,
+  from: number,
+  die: number,
+): boolean {
+  const dir = getDirection(game, playerId);
+  const [start, end] = getHomeRange(game, playerId);
+  const { points } = game.board;
+
+  if (dir === -1) {
+    for (let i = from + 1; i <= end; i++) {
+      if (points[i].owner === playerId && points[i].count > 0) {
+        return true;
+      }
+    }
+  } else {
+    for (let i = start; i < from; i++) {
+      if (points[i].owner === playerId && points[i].count > 0) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
