@@ -3,9 +3,13 @@ import {
   appendGameEvent,
   calculateSubStatus,
 } from "./eventStore";
-import { generateMoveSequences, flattenMoveSequences } from "./moveGenerator";
+import {
+  generateMoveSequences,
+  flattenMoveSequences,
+  MoveSequence,
+} from "./moveGenerator";
 import { rollDice as rollDiceUtil } from "@/utils/dice";
-import { validateMove } from "./ruleValidator";
+import { validateMove, getHomeRange, canBearOff } from "./ruleValidator";
 import { PlayerId, SPECIAL_POSITIONS } from "./types";
 import { RoomManager } from "@/socket/room-manager";
 import { onOkSocketResponse } from "@/responses/response-builder";
@@ -13,7 +17,7 @@ import { BOT_USER_ID } from "@/static/statics";
 import { saveGame } from "./gameStore";
 import { isGameOver, calculateWinType } from "./engine";
 
-const BOT_ACTION_DELAY_MS = 1500;
+const BOT_ACTION_DELAY_MS = 900;
 
 // تابع کمکی برای broadcast state عادی (با calculateSubStatus)
 function broadcastGameState(
@@ -33,7 +37,6 @@ function broadcastGameState(
   });
 }
 
-// تابع برای broadcast نوبت جدید (game.turn)
 function broadcastTurnChange(gameId: number, game: any, rooms: RoomManager) {
   const nextPlayer = game.players.find((p: any) => p.id === game.turn);
   if (!nextPlayer) return;
@@ -46,21 +49,54 @@ function broadcastTurnChange(gameId: number, game: any, rooms: RoomManager) {
   });
 }
 
-// تابع برای broadcast پایان نوبت (mustEndTurn)
-function broadcastTurnEnd(
-  gameId: number,
+// ========== تابع بررسی اضافی برای bear-off با تاس بزرگتر ==========
+function isHigherDieBearOffLegal(
   game: any,
-  rooms: RoomManager,
-  message?: string,
-) {
-  const legalMoves: any[] = []; // در پایان نوبت هیچ حرکت قانونی نیست
-  rooms.broadcast(gameId, {
-    type: "game.state",
-    payload: onOkSocketResponse(
-      { ...game, subStatus: "mustEndTurn", legalMoves },
-      message,
-    ),
-  });
+  playerId: PlayerId,
+  from: number,
+  to: number,
+  die: number,
+): boolean {
+  // فقط برای bear-off چک کن
+  if (
+    to !== SPECIAL_POSITIONS.BEAR_OFF_WHITE &&
+    to !== SPECIAL_POSITIONS.BEAR_OFF_BLACK
+  ) {
+    return true;
+  }
+  const dir =
+    game.players.find((p: any) => p.id === playerId)?.color === "white"
+      ? -1
+      : 1;
+  const distance = dir === -1 ? from + 1 : 24 - from;
+  if (die <= distance) return true; // تاس دقیق یا کوچک‌تر (کوچک‌تر مجاز نیست ولی اینجا نمی‌رسد)
+
+  // die > distance : باید بررسی کنیم مهره عقب‌تر وجود نداشته باشد
+  const [start, end] = getHomeRange(game, playerId);
+  const points = game.board.points;
+
+  if (dir === -1) {
+    // سفید
+    for (let i = from + 1; i <= end; i++) {
+      if (points[i].owner === playerId && points[i].count > 0) {
+        console.log(
+          `[BOT] Higher die bear-off REJECTED: checker behind at ${i}`,
+        );
+        return false;
+      }
+    }
+  } else {
+    // سیاه
+    for (let i = start; i < from; i++) {
+      if (points[i].owner === playerId && points[i].count > 0) {
+        console.log(
+          `[BOT] Higher die bear-off REJECTED: checker behind at ${i}`,
+        );
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 export async function runBotIfNeeded(
@@ -102,7 +138,7 @@ export async function runBotIfNeeded(
   }
 
   // ---------------------------------------------
-  // 2️⃣ حلقه‌ی اجرای حرکت
+  // 2️⃣ حلقه‌ی اجرای حرکت - به جای حرکت تکی، بهترین دنباله را انتخاب کن
   // ---------------------------------------------
   while (
     state &&
@@ -111,9 +147,8 @@ export async function runBotIfNeeded(
     state.dice.length > 0
   ) {
     const sequences = generateMoveSequences(state, playerId);
-    const moves = flattenMoveSequences(sequences);
 
-    if (moves.length === 0) {
+    if (sequences.length === 0) {
       await appendGameEvent(gameId, {
         type: "TURN_PASSED",
         payload: { playerId, reason: "NO_LEGAL_MOVES" },
@@ -122,7 +157,6 @@ export async function runBotIfNeeded(
       if (state) {
         saveGame(state);
         broadcastTurnChange(gameId, state, rooms);
-        // ارسال state با subStatus: "mustEndTurn"
         rooms.broadcast(gameId, {
           type: "game.state",
           payload: onOkSocketResponse(
@@ -134,116 +168,141 @@ export async function runBotIfNeeded(
       break;
     }
 
-    const move = moves[0];
-    const opponentId = state.players.find((p) => p.id !== playerId)?.id;
-
-    const validation = validateMove(state, playerId, move.from, move.to, [
-      move.die,
-    ]);
-
-    if (!validation.isValid) {
-      console.error(`[Bot] Invalid move: ${validation.message}`);
-      await appendGameEvent(gameId, {
-        type: "TURN_PASSED",
-        payload: { playerId, reason: "NO_LEGAL_MOVES" },
-      });
-      const newState = await loadGameState(gameId);
-      if (newState) {
-        saveGame(newState);
-        broadcastTurnChange(gameId, newState, rooms);
-        // ارسال مستقیم state با subStatus: "mustEndTurn"
-        rooms.broadcast(gameId, {
-          type: "game.state",
-          payload: onOkSocketResponse(
-            { ...newState, subStatus: "mustEndTurn", legalMoves: [] },
-            "Bot turn passed (invalid move)",
-          ),
-        });
+    // انتخاب بهترین دنباله: اولویت با بیشترین تعداد حرکت
+    let bestSequence: MoveSequence = sequences[0];
+    for (const seq of sequences) {
+      if (seq.moves.length > bestSequence.moves.length) {
+        bestSequence = seq;
       }
-      break;
     }
+    const movesToApply = bestSequence.moves;
+    console.log(`[BOT] Selected sequence with ${movesToApply.length} moves`);
 
-    // ثبت حرکت
-    const movePayload: any = {
-      playerId,
-      from: move.from,
-      to: move.to,
-      die: move.die,
-    };
-    if (validation.isHit && opponentId) {
-      movePayload.hitOpponentId = opponentId;
-      movePayload.hitFromPoint = move.to;
-    }
-    await appendGameEvent(gameId, {
-      type: "MOVE_APPLIED",
-      payload: movePayload,
-    });
-    await new Promise((resolve) => setTimeout(resolve, BOT_ACTION_DELAY_MS));
+    let moveIndex = 0;
+    let success = true;
+    for (const move of movesToApply) {
+      // قبل از هر حرکت، state را دوباره لود کن (ممکن است بین حرکات تغییر کند)
+      state = await loadGameState(gameId);
+      if (!state || state.turn !== playerId) {
+        success = false;
+        break;
+      }
 
-    state = await loadGameState(gameId);
-    if (!state) break;
-    saveGame(state);
+      const opponentId = state.players.find((p) => p.id !== playerId)?.id;
 
-    // پخش حرکت
-    const broadcastMoves = [
-      {
+      // اعتبارسنجی اضافی برای bear-off با تاس بزرگتر
+      if (
+        !isHigherDieBearOffLegal(state, playerId, move.from, move.to, move.die)
+      ) {
+        console.log(
+          `[BOT] Skipping illegal higher-die bear-off move: from=${move.from} to=${move.to} die=${move.die}`,
+        );
+        success = false;
+        break;
+      }
+
+      const validation = validateMove(state, playerId, move.from, move.to, [
+        move.die,
+      ]);
+      if (!validation.isValid) {
+        console.error(`[BOT] Invalid move in sequence: ${validation.message}`);
+        success = false;
+        break;
+      }
+
+      // ثبت حرکت
+      const movePayload: any = {
         playerId,
         from: move.from,
         to: move.to,
         die: move.die,
-        ownerId: playerId,
-      },
-    ];
-    if (validation.isHit && opponentId) {
-      broadcastMoves.push({
-        playerId: opponentId,
-        from: move.to,
-        to: SPECIAL_POSITIONS.BAR,
-        die: 0,
-        ownerId: opponentId,
-      });
-    }
-    rooms.broadcast(gameId, {
-      type: "player.move",
-      payload: onOkSocketResponse(broadcastMoves),
-    });
-
-    // بررسی پایان بازی
-    if (isGameOver(state)) {
-      const winType = calculateWinType(state, playerId);
+      };
+      if (validation.isHit && opponentId) {
+        movePayload.hitOpponentId = opponentId;
+        movePayload.hitFromPoint = move.to;
+      }
       await appendGameEvent(gameId, {
-        type: "GAME_FINISHED",
-        payload: { winner: playerId, winType, reason: "REGULAR" },
+        type: "MOVE_APPLIED",
+        payload: movePayload,
       });
-      const final = await loadGameState(gameId);
-      if (final) {
-        saveGame(final);
-        rooms.broadcast(gameId, {
-          type: "game.result",
-          payload: onOkSocketResponse({
-            winner: playerId,
-            winType,
-            reason: "REGULAR",
-          }),
-        });
-        rooms.broadcast(gameId, {
-          type: "game.state",
-          payload: onOkSocketResponse({
-            ...final,
-            subStatus: calculateSubStatus(final),
-            legalMoves: [],
-          }),
+      await new Promise((resolve) => setTimeout(resolve, BOT_ACTION_DELAY_MS));
+
+      state = await loadGameState(gameId);
+      if (!state) {
+        success = false;
+        break;
+      }
+      saveGame(state);
+
+      // پخش حرکت
+      const broadcastMoves = [
+        {
+          playerId,
+          from: move.from,
+          to: move.to,
+          die: move.die,
+          ownerId: playerId,
+        },
+      ];
+      if (validation.isHit && opponentId) {
+        broadcastMoves.push({
+          playerId: opponentId,
+          from: move.to,
+          to: SPECIAL_POSITIONS.BAR,
+          die: 0,
+          ownerId: opponentId,
         });
       }
-      return;
+      rooms.broadcast(gameId, {
+        type: "player.move",
+        payload: onOkSocketResponse(broadcastMoves),
+      });
+
+      // بررسی پایان بازی بعد از هر حرکت
+      if (isGameOver(state)) {
+        const winType = calculateWinType(state, playerId);
+        await appendGameEvent(gameId, {
+          type: "GAME_FINISHED",
+          payload: { winner: playerId, winType, reason: "REGULAR" },
+        });
+        const final = await loadGameState(gameId);
+        if (final) {
+          saveGame(final);
+          rooms.broadcast(gameId, {
+            type: "game.result",
+            payload: onOkSocketResponse({
+              winner: playerId,
+              winType,
+              reason: "REGULAR",
+            }),
+          });
+          rooms.broadcast(gameId, {
+            type: "game.state",
+            payload: onOkSocketResponse({
+              ...final,
+              subStatus: calculateSubStatus(final),
+              legalMoves: [],
+            }),
+          });
+        }
+        return;
+      }
+
+      broadcastGameState(gameId, state, rooms);
+      moveIndex++;
     }
 
-    // بعد از حرکت، state جدید را broadcast کن (subStatus توسط calculateSubStatus تعیین می‌شود)
-    broadcastGameState(gameId, state, rooms);
+    if (!success) {
+      // اگر دنباله ناقص اجرا شد، کل نوبت را بپرس (یا می‌توان ادامه داد)
+      console.log(
+        `[BOT] Sequence interrupted after ${moveIndex} moves. Ending turn.`,
+      );
+      break;
+    }
   }
 
   // ---------------------------------------------
-  // 3️⃣ تاس تمام شده (یا حرکت باقی نمانده) → تعویض نوبت (MANUAL_END)
+  // 3️⃣ تاس تمام شده یا حرکت باقی نمانده → تعویض نوبت
   // ---------------------------------------------
   const finalState = await loadGameState(gameId);
   if (finalState && finalState.turn === playerId) {

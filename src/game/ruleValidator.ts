@@ -14,9 +14,11 @@ export function getHomeRange(
   return dir === -1 ? [0, 5] : [18, 23];
 }
 
+// ruleValidator.ts
 export function canBearOff(game: GameState, playerId: PlayerId): boolean {
   const [start, end] = getHomeRange(game, playerId);
   const { points, bar } = game.board;
+  // اگر مهره روی BAR باشد، نمی‌توان خارج کرد
   if ((bar[playerId] ?? 0) > 0) return false;
   for (let i = 0; i < 24; i++) {
     const p = points[i];
@@ -110,11 +112,10 @@ function findHigherDieForBearOff(
   const dir = getDirection(game, playerId);
   const [start, end] = getHomeRange(game, playerId);
 
-  // بررسی وجود مهره‌ای عقب‌تر (نسبت به مهره‌ی فعلی)
+  // بررسی وجود مهره عقب‌تر (نسبت به مهره فعلی)
   let hasCheckerBehind = false;
-
   if (dir === -1) {
-    // سفید: مهره‌های دورتر اندیس بزرگ‌تر دارند (نزدیک‌تر به لبه خروج)
+    // سفید
     for (let i = from + 1; i <= end; i++) {
       if (points[i].owner === playerId && points[i].count > 0) {
         hasCheckerBehind = true;
@@ -122,7 +123,7 @@ function findHigherDieForBearOff(
       }
     }
   } else {
-    // سیاه: مهره‌های دورتر اندیس کوچک‌تر دارند
+    // سیاه
     for (let i = start; i < from; i++) {
       if (points[i].owner === playerId && points[i].count > 0) {
         hasCheckerBehind = true;
@@ -133,7 +134,7 @@ function findHigherDieForBearOff(
 
   if (hasCheckerBehind) return null;
 
-  // پیدا کردن کوچکترین تاس بزرگتر از distance
+  // کوچک‌ترین تاس بزرگتر از distance
   const bigger = dice.filter((d) => d > distance).sort((a, b) => a - b)[0];
   return bigger ?? null;
 }
