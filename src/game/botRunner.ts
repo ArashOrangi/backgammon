@@ -61,7 +61,12 @@ function scoreMove(
   if (!player) return 0;
   const dir = player.color === "white" ? -1 : 1;
 
-  // 1. خوردن مهره حریف (hit)
+  // ---------- 1. ENTER FROM BAR (high priority) ----------
+  if (from === SPECIAL_POSITIONS.BAR) {
+    score += 200; // critical: get off bar immediately
+  }
+
+  // ---------- 2. HIT OPPONENT ----------
   if (
     to !== SPECIAL_POSITIONS.BAR &&
     game.board.points[to]?.owner &&
@@ -71,27 +76,68 @@ function scoreMove(
     score += 100;
   }
 
-  // 2. bear off
-  if (
+  // ---------- 3. BEAR OFF ----------
+  const isBearOff =
     to === SPECIAL_POSITIONS.BEAR_OFF_WHITE ||
-    to === SPECIAL_POSITIONS.BEAR_OFF_BLACK
-  ) {
-    score += 50;
+    to === SPECIAL_POSITIONS.BEAR_OFF_BLACK;
+  if (isBearOff) {
+    let bearOffScore = 80; // base
     const distance = dir === -1 ? from + 1 : 24 - from;
-    score += (7 - distance) * 2; // مهره دورتر اولویت بیشتری برای خروج دارد
+    bearOffScore += (7 - distance) * 3; // farther pieces get even more priority
+    // bonus when most checkers are already home
+    const [homeStart, homeEnd] = getHomeRange(game, playerId);
+    let homeCount = 0;
+    let totalCheckers = 0;
+    for (let i = 0; i < 24; i++) {
+      const p = game.board.points[i];
+      if (p.owner === playerId) {
+        totalCheckers += p.count;
+        if (i >= homeStart && i <= homeEnd) homeCount += p.count;
+      }
+    }
+    if (totalCheckers > 0 && homeCount / totalCheckers > 0.8) {
+      bearOffScore += 40; // almost all at home, finish quickly
+    }
+    score += bearOffScore;
   }
 
-  // 3. حرکت به سمت خانه خودی
+  // ---------- 4. MOVE TOWARD HOME (pip reduction) ----------
+  if (!isBearOff && to >= 0 && to <= 23) {
+    let pipReduction = 0;
+    if (dir === -1) {
+      // white: from > to
+      pipReduction = from - to;
+    } else {
+      // black: to > from
+      pipReduction = to - from;
+    }
+    // reward moving far checkers (higher reduction)
+    score += pipReduction * 6;
+  }
+
+  // ---------- 5. ENTER OWN HOME BOARD ----------
   const [homeStart, homeEnd] = getHomeRange(game, playerId);
-  if (to >= homeStart && to <= homeEnd) {
-    score += 10;
+  if (!isBearOff && to >= homeStart && to <= homeEnd) {
+    score += 20;
   }
 
-  // 4. ساختن بلاک (حداقل ۲ مهره)
+  // ---------- 6. BUILD A BLOCK (≥2 checkers) ----------
   const targetPoint = game.board.points[to];
   if (targetPoint && targetPoint.owner === playerId) {
     const newCount = (targetPoint.count || 0) + 1;
     if (newCount >= 2) score += 15;
+  }
+
+  // ---------- 7. PENALTY for leaving a blot (single checker) ----------
+  if (from !== SPECIAL_POSITIONS.BAR) {
+    const sourcePoint = game.board.points[from];
+    if (
+      sourcePoint &&
+      sourcePoint.owner === playerId &&
+      sourcePoint.count === 1
+    ) {
+      score -= 10; // risk of being hit
+    }
   }
 
   return score;
