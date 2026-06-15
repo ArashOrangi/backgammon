@@ -17,7 +17,7 @@ import { BOT_USER_ID } from "@/static/statics";
 import { saveGame } from "./gameStore";
 import { isGameOver, calculateWinType } from "./engine";
 
-const BOT_ACTION_DELAY_MS = 1500;
+const BOT_ACTION_DELAY_MS = 2000;
 
 function broadcastGameState(
   gameId: number,
@@ -177,7 +177,9 @@ export async function runBotIfNeeded(
     state.dice.length > 0
   ) {
     const sequences = generateMoveSequences(state, playerId);
+
     if (sequences.length === 0) {
+      await new Promise((resolve) => setTimeout(resolve, BOT_ACTION_DELAY_MS));
       await appendGameEvent(gameId, {
         type: "TURN_PASSED",
         payload: { playerId, reason: "NO_LEGAL_MOVES" },
@@ -299,6 +301,9 @@ export async function runBotIfNeeded(
           type: "GAME_FINISHED",
           payload: { winner: playerId, winType, reason: "REGULAR" },
         });
+        await new Promise((resolve) =>
+          setTimeout(resolve, BOT_ACTION_DELAY_MS),
+        );
         const final = await loadGameState(gameId);
         if (final) {
           saveGame(final);
@@ -329,6 +334,7 @@ export async function runBotIfNeeded(
   // پایان نوبت
   const finalState = await loadGameState(gameId);
   if (finalState && finalState.turn === playerId) {
+    await new Promise((resolve) => setTimeout(resolve, BOT_ACTION_DELAY_MS));
     await appendGameEvent(gameId, {
       type: "TURN_PASSED",
       payload: { playerId, reason: "MANUAL_END" },
