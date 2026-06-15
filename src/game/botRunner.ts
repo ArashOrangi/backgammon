@@ -9,7 +9,7 @@ import {
   MoveSequence,
 } from "./moveGenerator";
 import { rollDice as rollDiceUtil } from "@/utils/dice";
-import { validateMove, getHomeRange, canBearOff } from "./ruleValidator";
+import { validateMove, getHomeRange } from "./ruleValidator";
 import { PlayerId, SPECIAL_POSITIONS } from "./types";
 import { RoomManager } from "@/socket/room-manager";
 import { onOkSocketResponse } from "@/responses/response-builder";
@@ -19,7 +19,6 @@ import { isGameOver, calculateWinType } from "./engine";
 
 const BOT_ACTION_DELAY_MS = 900;
 
-// تابع کمکی برای broadcast state عادی (با calculateSubStatus)
 function broadcastGameState(
   gameId: number,
   game: any,
@@ -49,7 +48,56 @@ function broadcastTurnChange(gameId: number, game: any, rooms: RoomManager) {
   });
 }
 
-// ========== تابع بررسی اضافی برای bear-off با تاس بزرگتر ==========
+// ========== تابع امتیازدهی ساده برای انتخاب بهترین حرکت ==========
+function scoreMove(
+  game: any,
+  playerId: number,
+  from: number,
+  to: number,
+  die: number,
+): number {
+  let score = 0;
+  const player = game.players.find((p: any) => p.id === playerId);
+  if (!player) return 0;
+  const dir = player.color === "white" ? -1 : 1;
+
+  // 1. خوردن مهره حریف (hit)
+  if (
+    to !== SPECIAL_POSITIONS.BAR &&
+    game.board.points[to]?.owner &&
+    game.board.points[to].owner !== playerId &&
+    game.board.points[to].count === 1
+  ) {
+    score += 100;
+  }
+
+  // 2. bear off
+  if (
+    to === SPECIAL_POSITIONS.BEAR_OFF_WHITE ||
+    to === SPECIAL_POSITIONS.BEAR_OFF_BLACK
+  ) {
+    score += 50;
+    const distance = dir === -1 ? from + 1 : 24 - from;
+    score += (7 - distance) * 2; // مهره دورتر اولویت بیشتری برای خروج دارد
+  }
+
+  // 3. حرکت به سمت خانه خودی
+  const [homeStart, homeEnd] = getHomeRange(game, playerId);
+  if (to >= homeStart && to <= homeEnd) {
+    score += 10;
+  }
+
+  // 4. ساختن بلاک (حداقل ۲ مهره)
+  const targetPoint = game.board.points[to];
+  if (targetPoint && targetPoint.owner === playerId) {
+    const newCount = (targetPoint.count || 0) + 1;
+    if (newCount >= 2) score += 15;
+  }
+
+  return score;
+}
+
+// ========== اعتبارسنجی اضافی برای bear off با تاس بزرگتر ==========
 function isHigherDieBearOffLegal(
   game: any,
   playerId: PlayerId,
@@ -57,43 +105,29 @@ function isHigherDieBearOffLegal(
   to: number,
   die: number,
 ): boolean {
-  // فقط برای bear-off چک کن
   if (
     to !== SPECIAL_POSITIONS.BEAR_OFF_WHITE &&
     to !== SPECIAL_POSITIONS.BEAR_OFF_BLACK
-  ) {
+  )
     return true;
-  }
-  const dir =
-    game.players.find((p: any) => p.id === playerId)?.color === "white"
-      ? -1
-      : 1;
+  const player = game.players.find((p: any) => p.id === playerId);
+  if (!player) return false;
+  const dir = player.color === "white" ? -1 : 1;
   const distance = dir === -1 ? from + 1 : 24 - from;
-  if (die <= distance) return true; // تاس دقیق یا کوچک‌تر (کوچک‌تر مجاز نیست ولی اینجا نمی‌رسد)
+  if (die <= distance) return true;
 
-  // die > distance : باید بررسی کنیم مهره عقب‌تر وجود نداشته باشد
   const [start, end] = getHomeRange(game, playerId);
   const points = game.board.points;
 
   if (dir === -1) {
     // سفید
     for (let i = from + 1; i <= end; i++) {
-      if (points[i].owner === playerId && points[i].count > 0) {
-        console.log(
-          `[BOT] Higher die bear-off REJECTED: checker behind at ${i}`,
-        );
-        return false;
-      }
+      if (points[i].owner === playerId && points[i].count > 0) return false;
     }
   } else {
     // سیاه
     for (let i = start; i < from; i++) {
-      if (points[i].owner === playerId && points[i].count > 0) {
-        console.log(
-          `[BOT] Higher die bear-off REJECTED: checker behind at ${i}`,
-        );
-        return false;
-      }
+      if (points[i].owner === playerId && points[i].count > 0) return false;
     }
   }
   return true;
@@ -116,9 +150,7 @@ export async function runBotIfNeeded(
   let state = await getValidState();
   if (!state) return;
 
-  // ---------------------------------------------
-  // 1️⃣ ریختن تاس در صورت نیاز
-  // ---------------------------------------------
+  // ریختن تاس در صورت نیاز
   if (!state.dice || state.dice.length === 0) {
     const dice = rollDiceUtil();
     await appendGameEvent(gameId, {
@@ -137,9 +169,7 @@ export async function runBotIfNeeded(
     broadcastGameState(gameId, state, rooms);
   }
 
-  // ---------------------------------------------
-  // 2️⃣ حلقه‌ی اجرای حرکت - به جای حرکت تکی، بهترین دنباله را انتخاب کن
-  // ---------------------------------------------
+  // حلقه اجرای حرکت
   while (
     state &&
     state.turn === playerId &&
@@ -147,7 +177,6 @@ export async function runBotIfNeeded(
     state.dice.length > 0
   ) {
     const sequences = generateMoveSequences(state, playerId);
-
     if (sequences.length === 0) {
       await appendGameEvent(gameId, {
         type: "TURN_PASSED",
@@ -168,49 +197,56 @@ export async function runBotIfNeeded(
       break;
     }
 
-    // انتخاب بهترین دنباله: اولویت با بیشترین تعداد حرکت
-    let bestSequence: MoveSequence = sequences[0];
+    // انتخاب بهترین دنباله بر اساس مجموع امتیاز حرکات
+    let bestSequence: MoveSequence | null = null;
+    let bestScore = -Infinity;
     for (const seq of sequences) {
-      if (seq.moves.length > bestSequence.moves.length) {
+      let totalScore = 0;
+      let valid = true;
+      for (const move of seq.moves) {
+        if (
+          !isHigherDieBearOffLegal(
+            state,
+            playerId,
+            move.from,
+            move.to,
+            move.die,
+          )
+        ) {
+          valid = false;
+          break;
+        }
+        totalScore += scoreMove(state, playerId, move.from, move.to, move.die);
+      }
+      if (valid && totalScore > bestScore) {
+        bestScore = totalScore;
         bestSequence = seq;
       }
     }
+    if (!bestSequence) bestSequence = sequences[0];
     const movesToApply = bestSequence.moves;
-    console.log(`[BOT] Selected sequence with ${movesToApply.length} moves`);
 
-    let moveIndex = 0;
-    let success = true;
+    let moveSuccess = true;
     for (const move of movesToApply) {
-      // قبل از هر حرکت، state را دوباره لود کن (ممکن است بین حرکات تغییر کند)
       state = await loadGameState(gameId);
       if (!state || state.turn !== playerId) {
-        success = false;
+        moveSuccess = false;
         break;
       }
 
       const opponentId = state.players.find((p) => p.id !== playerId)?.id;
-
-      // اعتبارسنجی اضافی برای bear-off با تاس بزرگتر
-      if (
-        !isHigherDieBearOffLegal(state, playerId, move.from, move.to, move.die)
-      ) {
-        console.log(
-          `[BOT] Skipping illegal higher-die bear-off move: from=${move.from} to=${move.to} die=${move.die}`,
-        );
-        success = false;
-        break;
-      }
-
       const validation = validateMove(state, playerId, move.from, move.to, [
         move.die,
       ]);
-      if (!validation.isValid) {
-        console.error(`[BOT] Invalid move in sequence: ${validation.message}`);
-        success = false;
+      if (
+        !validation.isValid ||
+        !isHigherDieBearOffLegal(state, playerId, move.from, move.to, move.die)
+      ) {
+        console.error(`[Bot] Invalid move: ${validation.message}`);
+        moveSuccess = false;
         break;
       }
 
-      // ثبت حرکت
       const movePayload: any = {
         playerId,
         from: move.from,
@@ -229,12 +265,11 @@ export async function runBotIfNeeded(
 
       state = await loadGameState(gameId);
       if (!state) {
-        success = false;
+        moveSuccess = false;
         break;
       }
       saveGame(state);
 
-      // پخش حرکت
       const broadcastMoves = [
         {
           playerId,
@@ -258,7 +293,6 @@ export async function runBotIfNeeded(
         payload: onOkSocketResponse(broadcastMoves),
       });
 
-      // بررسی پایان بازی بعد از هر حرکت
       if (isGameOver(state)) {
         const winType = calculateWinType(state, playerId);
         await appendGameEvent(gameId, {
@@ -287,23 +321,12 @@ export async function runBotIfNeeded(
         }
         return;
       }
-
       broadcastGameState(gameId, state, rooms);
-      moveIndex++;
     }
-
-    if (!success) {
-      // اگر دنباله ناقص اجرا شد، کل نوبت را بپرس (یا می‌توان ادامه داد)
-      console.log(
-        `[BOT] Sequence interrupted after ${moveIndex} moves. Ending turn.`,
-      );
-      break;
-    }
+    if (!moveSuccess) break; // اگر دنباله ناقص ماند، نوبت را تمام کن
   }
 
-  // ---------------------------------------------
-  // 3️⃣ تاس تمام شده یا حرکت باقی نمانده → تعویض نوبت
-  // ---------------------------------------------
+  // پایان نوبت
   const finalState = await loadGameState(gameId);
   if (finalState && finalState.turn === playerId) {
     await appendGameEvent(gameId, {
@@ -318,7 +341,7 @@ export async function runBotIfNeeded(
         type: "game.state",
         payload: onOkSocketResponse(
           { ...afterPass, subStatus: "mustEndTurn", legalMoves: [] },
-          "Bot turn ended (no dice left)",
+          "Bot turn ended",
         ),
       });
     }

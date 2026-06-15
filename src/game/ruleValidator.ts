@@ -99,6 +99,7 @@ function findMatchingDie(
   return exact ?? null;
 }
 
+// ruleValidator.ts - بخش bear off
 function findHigherDieForBearOff(
   game: GameState,
   playerId: PlayerId,
@@ -112,10 +113,10 @@ function findHigherDieForBearOff(
   const dir = getDirection(game, playerId);
   const [start, end] = getHomeRange(game, playerId);
 
-  // بررسی وجود مهره عقب‌تر (نسبت به مهره فعلی)
   let hasCheckerBehind = false;
+
   if (dir === -1) {
-    // سفید
+    // سفید: خانه‌ها 0 تا 5، مهره‌های عقب‌تر اندیس بزرگ‌تر دارند
     for (let i = from + 1; i <= end; i++) {
       if (points[i].owner === playerId && points[i].count > 0) {
         hasCheckerBehind = true;
@@ -123,7 +124,7 @@ function findHigherDieForBearOff(
       }
     }
   } else {
-    // سیاه
+    // سیاه: خانه‌ها 18 تا 23، مهره‌های عقب‌تر اندیس کوچک‌تر دارند
     for (let i = start; i < from; i++) {
       if (points[i].owner === playerId && points[i].count > 0) {
         hasCheckerBehind = true;
@@ -134,7 +135,6 @@ function findHigherDieForBearOff(
 
   if (hasCheckerBehind) return null;
 
-  // کوچک‌ترین تاس بزرگتر از distance
   const bigger = dice.filter((d) => d > distance).sort((a, b) => a - b)[0];
   return bigger ?? null;
 }
