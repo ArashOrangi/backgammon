@@ -19,7 +19,7 @@ export class SocketContext {
         if (this.ws.readyState === this.ws.OPEN) {
           this.ws.send(JSON.stringify(message));
         }
-      }, 500);
+      }, 250);
     }
   }
 }
