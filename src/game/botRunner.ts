@@ -13,7 +13,7 @@ import { BOT_USER_ID } from "@/static/statics";
 import { saveGame } from "./gameStore";
 import { isGameOver, calculateWinType } from "./engine";
 
-const BOT_ACTION_DELAY_MS = 900;
+const BOT_ACTION_DELAY_MS = 1500;
 
 // تابع کمکی برای broadcast state عادی (با calculateSubStatus)
 function broadcastGameState(
