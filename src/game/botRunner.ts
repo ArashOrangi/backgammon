@@ -17,7 +17,7 @@ import { BOT_USER_ID } from "@/static/statics";
 import { saveGame } from "./gameStore";
 import { isGameOver, calculateWinType } from "./engine";
 
-const BOT_ACTION_DELAY_MS = 2000;
+const BOT_ACTION_DELAY_MS = 1650;
 
 function broadcastGameState(
   gameId: number,
