@@ -113,9 +113,8 @@ function findHigherDieForBearOff(
   // بررسی وجود مهره‌ای عقب‌تر (نسبت به مهره‌ی فعلی)
   let hasCheckerBehind = false;
 
-  // ruleValidator.ts – inside findHigherDieForBearOff
   if (dir === -1) {
-    // White: farther points have higher indices (closer to the bear-off edge)
+    // سفید: مهره‌های دورتر اندیس بزرگ‌تر دارند (نزدیک‌تر به لبه خروج)
     for (let i = from + 1; i <= end; i++) {
       if (points[i].owner === playerId && points[i].count > 0) {
         hasCheckerBehind = true;
@@ -123,7 +122,7 @@ function findHigherDieForBearOff(
       }
     }
   } else {
-    // Black: farther points have lower indices
+    // سیاه: مهره‌های دورتر اندیس کوچک‌تر دارند
     for (let i = start; i < from; i++) {
       if (points[i].owner === playerId && points[i].count > 0) {
         hasCheckerBehind = true;

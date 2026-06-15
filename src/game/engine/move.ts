@@ -232,7 +232,7 @@ function resolveDieForMove(
     }
     if (
       dieUsed > distance &&
-      hasCheckerBehindForBearOff(game, playerId, from, dieUsed)
+      hasCheckerBehindForBearOff(game, playerId, from)
     ) {
       throw new Error("Cannot use a larger die when a checker is farther away");
     }
@@ -437,11 +437,11 @@ export function undoMove(game: GameState, dieUsed: number) {
    */
 }
 
+// move.ts - اضافه کردن helper
 function hasCheckerBehindForBearOff(
   game: GameState,
   playerId: PlayerId,
   from: number,
-  die: number,
 ): boolean {
   const dir = getDirection(game, playerId);
   const [start, end] = getHomeRange(game, playerId);
@@ -449,15 +449,11 @@ function hasCheckerBehindForBearOff(
 
   if (dir === -1) {
     for (let i = from + 1; i <= end; i++) {
-      if (points[i].owner === playerId && points[i].count > 0) {
-        return true;
-      }
+      if (points[i].owner === playerId && points[i].count > 0) return true;
     }
   } else {
     for (let i = start; i < from; i++) {
-      if (points[i].owner === playerId && points[i].count > 0) {
-        return true;
-      }
+      if (points[i].owner === playerId && points[i].count > 0) return true;
     }
   }
   return false;
