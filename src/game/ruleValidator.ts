@@ -1,3 +1,4 @@
+import { computeTargetFromBar } from "./moveGenerator";
 import { GameState, PlayerId, SPECIAL_POSITIONS } from "./types";
 
 function getDirection(game: GameState, playerId: PlayerId): 1 | -1 {
@@ -286,6 +287,27 @@ export function hasLegalMoves(game: GameState, playerId: PlayerId): boolean {
       }
       if (validateMove(game, playerId, i, bearOffPos).isValid) return true;
     }
+  }
+  return false;
+}
+
+export function hasLegalBarEntry(game: GameState, playerId: PlayerId): boolean {
+  const barCount = game.board.bar[playerId] ?? 0;
+  if (barCount === 0) return true; // اگر مهره‌ای روی BAR نیست، نیازی به ورود نیست
+
+  const dice = game.dice;
+  if (!dice || dice.length === 0) return false;
+
+  for (const die of dice) {
+    const to = computeTargetFromBar(game, playerId, die);
+    const result = validateMove(
+      game,
+      playerId,
+      SPECIAL_POSITIONS.BAR,
+      to,
+      dice,
+    );
+    if (result.isValid) return true;
   }
   return false;
 }

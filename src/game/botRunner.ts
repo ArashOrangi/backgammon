@@ -179,6 +179,27 @@ function isHigherDieBearOffLegal(
   return true;
 }
 
+// ========== تابع بررسی وجود حرکت ورودی از BAR با هر تاس ==========
+function canEnterFromBarWithAnyDie(game: any, playerId: number): boolean {
+  const barCount = game.board.bar[playerId] ?? 0;
+  if (barCount === 0) return true; // اگر روی BAR نیست، نیازی به ورود نیست
+
+  const player = game.players.find((p: any) => p.id === playerId);
+  if (!player) return false;
+
+  const isWhite = player.color === "white";
+  for (let die = 1; die <= 6; die++) {
+    const to = isWhite ? 24 - die : die - 1;
+    const point = game.board.points[to];
+    if (!point) continue;
+    // اگر نقطه خالی باشد یا مال خود بازیکن باشد یا یک مهره حریف داشته باشد (قابل زدن)
+    if (point.owner === null || point.owner === playerId) return true;
+    if (point.owner !== playerId && point.count === 1) return true;
+    // در غیر این صورت بلاک است (۲ یا بیشتر)
+  }
+  return false;
+}
+
 export async function runBotIfNeeded(
   gameId: number,
   playerId: PlayerId,
@@ -198,6 +219,29 @@ export async function runBotIfNeeded(
 
   // ریختن تاس در صورت نیاز
   if (!state.dice || state.dice.length === 0) {
+    // ✅ بررسی کنید که آیا بازیکن روی BAR است و هیچ حرکت ورودی با هیچ تاسی ممکن نیست
+    if (!canEnterFromBarWithAnyDie(state, playerId)) {
+      // بدون ریختن تاس، نوبت را بگذران
+      await appendGameEvent(gameId, {
+        type: "TURN_PASSED",
+        payload: { playerId, reason: "NO_LEGAL_MOVES" },
+      });
+      const afterPass = await loadGameState(gameId);
+      if (afterPass) {
+        saveGame(afterPass);
+        broadcastTurnChange(gameId, afterPass, rooms);
+        rooms.broadcast(gameId, {
+          type: "game.state",
+          payload: onOkSocketResponse(
+            { ...afterPass, subStatus: "mustEndTurn", legalMoves: [] },
+            "Bot turn passed (no bar entry)",
+          ),
+        });
+      }
+      return;
+    }
+
+    // در غیر این صورت، تاس ریخته شود
     const dice = rollDiceUtil();
     await appendGameEvent(gameId, {
       type: "DICE_ROLLED",

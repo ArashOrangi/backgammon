@@ -27,6 +27,25 @@ const gameQueue = new GameQueue();
 
 type RollPayload = { gameId: number };
 
+// تابع کمکی برای بررسی وجود حداقل یک حرکت ورودی از BAR با هر تاس ممکن (۱ تا ۶)
+function canEnterFromBarWithAnyDie(game: any, playerId: number): boolean {
+  const barCount = game.board.bar[playerId] ?? 0;
+  if (barCount === 0) return true; // اگر روی BAR نیست، نیازی به ورود نیست
+  const player = game.players.find((p: any) => p.id === playerId);
+  if (!player) return false;
+  const isWhite = player.color === "white";
+  for (let die = 1; die <= 6; die++) {
+    const to = isWhite ? 24 - die : die - 1;
+    const point = game.board.points[to];
+    if (!point) continue;
+    // اگر نقطه خالی باشد یا مال خود بازیکن باشد یا یک مهره حریف داشته باشد (قابل زدن)
+    if (point.owner === null || point.owner === playerId) return true;
+    if (point.owner !== playerId && point.count === 1) return true;
+    // در غیر این صورت بلاک است (۲ یا بیشتر)
+  }
+  return false;
+}
+
 export async function handleRoll(
   ctx: SocketContext,
   payload: RollPayload,
@@ -144,9 +163,6 @@ export async function handleRoll(
           subStatus,
           legalMoves: flatLegalMoves,
         };
-        // if (subStatus === "playDice") {
-        //   stateToSend.subStatus = "playDice";
-        // }
         rooms.broadcast(gameId, {
           type: "game.state",
           payload: onOkSocketResponse(stateToSend),
@@ -166,6 +182,46 @@ export async function handleRoll(
         });
       }
 
+      // ✅ بررسی کنید که آیا بازیکن روی BAR است و هیچ حرکت ورودی با هیچ تاسی ممکن نیست
+      if (!canEnterFromBarWithAnyDie(game, playerId)) {
+        // نوبت را بدون ریختن تاس بگذران
+        await appendGameEvent(game.id, {
+          type: "TURN_PASSED",
+          payload: { playerId, reason: "NO_LEGAL_MOVES" },
+        });
+        const afterPass = await loadGameState(gameId);
+        if (afterPass) {
+          // از afterPass مستقیماً استفاده کن، نه انتساب به game
+          saveGame(afterPass);
+          // broadcast turn change
+          const nextPlayer = afterPass.players.find(
+            (p) => p.id === afterPass.turn,
+          );
+          if (nextPlayer) {
+            rooms.broadcast(gameId, {
+              type: "game.turn",
+              payload: onOkSocketResponse({
+                playerId: nextPlayer.id,
+                color: nextPlayer.color,
+              }),
+            });
+          }
+          rooms.broadcast(gameId, {
+            type: "game.state",
+            payload: onOkSocketResponse(
+              {
+                ...afterPass,
+                subStatus: "mustEndTurn",
+                legalMoves: [],
+              },
+              "Turn passed (no bar entry)",
+            ),
+          });
+        }
+        return;
+      }
+
+      // ریختن تاس
       const dice = rollDice(game);
 
       await appendGameEvent(game.id, {
@@ -198,7 +254,8 @@ export async function handleRoll(
         });
         const afterTurnPass = await loadGameState(gameId);
         if (afterTurnPass) {
-          game = afterTurnPass;
+          // از afterTurnPass استفاده کن
+          game = afterTurnPass; // اما اینجا برای ادامه به game نیاز داریم، پس انتساب مجاز است ولی برای امنیت می‌توانیم game را به‌روز کنیم
           saveGame(game);
         }
       }
@@ -209,9 +266,6 @@ export async function handleRoll(
         subStatus,
         legalMoves: flatLegalMoves,
       };
-      // if (subStatus === "playDice") {
-      //   stateToSend.subStatus = "playDice";
-      // }
       rooms.broadcast(gameId, {
         type: "game.state",
         payload: onOkSocketResponse(stateToSend),
