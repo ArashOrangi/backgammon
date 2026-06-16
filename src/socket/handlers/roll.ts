@@ -27,7 +27,7 @@ import { BOT_USER_ID } from "@/static/statics";
 const gameQueue = new GameQueue();
 
 // ثابت دیلی برای auto-pass
-const AUTO_PASS_DELAY_MS = 2500;
+const AUTO_PASS_DELAY_MS = 500;
 
 // ذخیره‌ی تایمرهای در انتظار برای هر بازی (برای cancel کردن در صورت دریافت endTurn)
 const pendingEndTurnTimeouts = new Map<number, NodeJS.Timeout>();

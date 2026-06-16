@@ -20,7 +20,7 @@ import { BOT_USER_ID } from "@/static/statics";
 import { clearEndTurnTimeout } from "./roll";
 
 const gameQueue = new GameQueue();
-const AUTO_PASS_DELAY_MS = 2500;
+const AUTO_PASS_DELAY_MS = 500;
 
 export async function handleEndTurn(
   ctx: SocketContext,
