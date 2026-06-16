@@ -22,9 +22,12 @@ import {
 } from "@/game/eventStore";
 import { getTimerPresetByLeagueAndType } from "@/models/timerPreset";
 import { runBotIfNeeded } from "@/game/botRunner";
-import { BOT_USER_ID } from "@/static/statics"; // ← اضافه شد
+import { BOT_USER_ID } from "@/static/statics";
 
 const gameQueue = new GameQueue();
+
+// ذخیره‌ی تایمرهای در انتظار برای هر بازی (برای cancel کردن در صورت دریافت endTurn)
+const pendingEndTurnTimeouts = new Map<number, NodeJS.Timeout>();
 
 type RollPayload = { gameId: number };
 
@@ -181,7 +184,7 @@ export async function handleRoll(
         });
       }
 
-      // بررسی کنید که آیا بازیکن روی BAR است و هیچ حرکت ورودی با هیچ تاسی ممکن نیست
+      // ✅ بررسی کنید که آیا بازیکن روی BAR است و هیچ حرکت ورودی با هیچ تاسی ممکن نیست
       if (!canEnterFromBarWithAnyDie(game, playerId)) {
         // نوبت را بدون ریختن تاس بگذران
         await appendGameEvent(game.id, {
@@ -231,23 +234,21 @@ export async function handleRoll(
       game = afterRoll;
       saveGame(game);
 
-      // پخش تاس‌های ریخته‌شده
       rooms.broadcast(gameId, {
         type: "dice.result",
         payload: onOkSocketResponse({ dice, playerId, type: "inGame" }),
       });
 
+      //  اضافه کردن تأخیر 100 میلی‌ثانیه
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // محاسبه حرکت‌های قانونی
       const legalMovesSequences = generateMoveSequences(game, playerId);
       const flatLegalMoves = flattenMoveSequences(legalMovesSequences);
       console.log(`[ROLL] legalMoves count = ${legalMovesSequences.length}`);
 
-      // تشخیص بازیکن ربات
       const isBot = playerId === BOT_USER_ID;
 
-      // اگر حرکت قانونی وجود ندارد
+      // اگر هیچ حرکت قانونی وجود نداشت
       if (legalMovesSequences.length === 0) {
         if (isBot) {
           // ربات: auto-pass انجام بده
@@ -288,7 +289,61 @@ export async function handleRoll(
               "No legal moves, please end turn",
             ),
           });
-          // هیچ auto-pass انجام نده و از تابع خارج شو
+
+          // تایم‌اوت ۳ ثانیه‌ای برای auto-pass در صورت عدم دریافت endTurn از کلاینت
+          // ابتدا تایمر قبلی را پاک کن (اگر وجود داشته باشد)
+          if (pendingEndTurnTimeouts.has(gameId)) {
+            clearTimeout(pendingEndTurnTimeouts.get(gameId)!);
+            pendingEndTurnTimeouts.delete(gameId);
+          }
+
+          const timeoutId = setTimeout(async () => {
+            pendingEndTurnTimeouts.delete(gameId);
+            // دوباره وضعیت را بررسی کن
+            const currentState = await loadGameState(gameId);
+            // ✅ بررسی صحیح با استفاده از nullish coalescing برای جلوگیری از خطای undefined
+            if (
+              currentState &&
+              currentState.turn === playerId &&
+              (currentState.dice?.length ?? 0) > 0
+            ) {
+              // هنوز نوبت همان بازیکن است و تاس دارد → auto-pass
+              await appendGameEvent(gameId, {
+                type: "TURN_PASSED",
+                payload: { playerId, reason: "NO_LEGAL_MOVES" },
+              });
+              const afterPass = await loadGameState(gameId);
+              if (afterPass) {
+                saveGame(afterPass);
+                const nextPlayer = afterPass.players.find(
+                  (p) => p.id === afterPass.turn,
+                );
+                if (nextPlayer) {
+                  rooms.broadcast(gameId, {
+                    type: "game.turn",
+                    payload: onOkSocketResponse({
+                      playerId: nextPlayer.id,
+                      color: nextPlayer.color,
+                    }),
+                  });
+                }
+                rooms.broadcast(gameId, {
+                  type: "game.state",
+                  payload: onOkSocketResponse(
+                    { ...afterPass, subStatus: "mustEndTurn", legalMoves: [] },
+                    "Auto-pass after timeout",
+                  ),
+                });
+                if (afterPass.status === "in-progress") {
+                  await runBotIfNeeded(gameId, afterPass.turn!, rooms);
+                }
+              }
+            }
+          }, 3000); // ۳ ثانیه مهلت
+
+          pendingEndTurnTimeouts.set(gameId, timeoutId);
+
+          // از تابع خارج شو (منتظر endTurn یا تایم‌اوت)
           return;
         }
       } else {
@@ -319,4 +374,12 @@ export async function handleRoll(
       });
     }
   });
+}
+
+// تابع برای پاک کردن تایمر در هنگام دریافت endTurn (در فایل endTurn.ts استفاده می‌شود)
+export function clearEndTurnTimeout(gameId: number) {
+  if (pendingEndTurnTimeouts.has(gameId)) {
+    clearTimeout(pendingEndTurnTimeouts.get(gameId)!);
+    pendingEndTurnTimeouts.delete(gameId);
+  }
 }
