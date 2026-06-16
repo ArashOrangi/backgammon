@@ -18,7 +18,9 @@ import { GameQueue } from "@/game/gameQueue";
 import { runBotIfNeeded } from "@/game/botRunner";
 import { BOT_USER_ID } from "@/static/statics";
 import { clearEndTurnTimeout } from "./roll";
+
 const gameQueue = new GameQueue();
+const AUTO_PASS_DELAY_MS = 2500;
 
 export async function handleEndTurn(
   ctx: SocketContext,
@@ -53,7 +55,6 @@ export async function handleEndTurn(
 
     const currentSubStatus = calculateSubStatus(game);
 
-    // فقط زمانی که حرکت قانونی وجود دارد (playDice) نباید اجازه endTurn بدهیم
     if (currentSubStatus === "playDice") {
       return ctx.send({
         type: "game.error",
@@ -67,12 +68,14 @@ export async function handleEndTurn(
         payload: { playerId, reason: "MANUAL_END" },
       });
 
+      // ✅ اضافه کردن دیلی قبل از broadcast
+      await new Promise((resolve) => setTimeout(resolve, AUTO_PASS_DELAY_MS));
+
       const updatedGame = await loadGameState(gameId);
       if (!updatedGame) throw new Error("Failed to reload game state");
 
       saveGame(updatedGame);
 
-      // ارسال رویداد game.turn برای اطلاع‌رسانی مستقیم نوبت جدید
       const nextPlayer = updatedGame.players.find(
         (p) => p.id === updatedGame.turn,
       );
@@ -95,7 +98,7 @@ export async function handleEndTurn(
       const flatLegalMoves = flattenMoveSequences(legalMoves);
       const stateToSend = {
         ...updatedGame,
-        subStatus: "mustEndTurn", // بعد از تعویض نوبت، برای حالت قبلی نیازی نیست، ولی فرستاده می‌شود
+        subStatus: "mustEndTurn",
         legalMoves: flatLegalMoves,
       };
 
@@ -104,10 +107,9 @@ export async function handleEndTurn(
         payload: onOkSocketResponse(stateToSend, "Turn passed successfully"),
       });
 
-      //  اضافه کردن تأخیر 100 میلی‌ثانیه
+      // ✅ اضافه کردن دیلی قبل از اجرای ربات
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // اگر نوبت بات است، بلافاصله اجرا کن
       if (updatedGame.status === "in-progress") {
         const opponentId = updatedGame.players.find(
           (p) => p.id !== playerId,

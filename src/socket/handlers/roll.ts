@@ -26,6 +26,9 @@ import { BOT_USER_ID } from "@/static/statics";
 
 const gameQueue = new GameQueue();
 
+// ثابت دیلی برای auto-pass
+const AUTO_PASS_DELAY_MS = 2500;
+
 // ذخیره‌ی تایمرهای در انتظار برای هر بازی (برای cancel کردن در صورت دریافت endTurn)
 const pendingEndTurnTimeouts = new Map<number, NodeJS.Timeout>();
 
@@ -191,6 +194,10 @@ export async function handleRoll(
           type: "TURN_PASSED",
           payload: { playerId, reason: "NO_LEGAL_MOVES" },
         });
+
+        // ✅ اضافه کردن دیلی قبل از broadcast
+        await new Promise((resolve) => setTimeout(resolve, AUTO_PASS_DELAY_MS));
+
         const afterPass = await loadGameState(gameId);
         if (afterPass) {
           saveGame(afterPass);
@@ -256,6 +263,12 @@ export async function handleRoll(
             type: "TURN_PASSED",
             payload: { playerId, reason: "NO_LEGAL_MOVES" },
           });
+
+          // ✅ اضافه کردن دیلی قبل از broadcast
+          await new Promise((resolve) =>
+            setTimeout(resolve, AUTO_PASS_DELAY_MS),
+          );
+
           const afterTurnPass = await loadGameState(gameId);
           if (afterTurnPass) {
             game = afterTurnPass;
@@ -301,12 +314,16 @@ export async function handleRoll(
             pendingEndTurnTimeouts.delete(gameId);
             // دوباره وضعیت را بررسی کن
             const currentState = await loadGameState(gameId);
-            // ✅ بررسی صحیح با استفاده از nullish coalescing برای جلوگیری از خطای undefined
             if (
               currentState &&
               currentState.turn === playerId &&
               (currentState.dice?.length ?? 0) > 0
             ) {
+              // ✅ اضافه کردن دیلی قبل از auto-pass
+              await new Promise((resolve) =>
+                setTimeout(resolve, AUTO_PASS_DELAY_MS),
+              );
+
               // هنوز نوبت همان بازیکن است و تاس دارد → auto-pass
               await appendGameEvent(gameId, {
                 type: "TURN_PASSED",
