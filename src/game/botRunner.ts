@@ -206,6 +206,7 @@ export async function runBotIfNeeded(
   rooms: RoomManager,
 ) {
   if (playerId !== BOT_USER_ID) return;
+  await new Promise((resolve) => setTimeout(resolve, 300));
 
   const getValidState = async () => {
     const state = await loadGameState(gameId);
