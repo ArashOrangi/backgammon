@@ -19,7 +19,7 @@ import { runBotIfNeeded } from "@/game/botRunner";
 import { BOT_USER_ID } from "@/static/statics";
 
 const gameQueue = new GameQueue();
-const AUTO_PASS_DELAY_MS = 500;
+const AUTO_PASS_DELAY_MS = 100;
 
 export async function handleEndTurn(
   ctx: SocketContext,
