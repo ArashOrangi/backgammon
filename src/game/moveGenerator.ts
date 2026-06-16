@@ -15,7 +15,12 @@ export function generateMoveSequences(
 ): MoveSequence[] {
   if (!game.dice || game.dice.length === 0) return [];
 
-  const dice = normalizeDice(game.dice);
+  // ✅ Deep clone the game to avoid mutating the original state
+  // This fixes the bug where dice were being consumed and not restored,
+  // causing the broadcast state to have empty dice.
+  const gameCopy: GameState = JSON.parse(JSON.stringify(game));
+  // `gameCopy.dice` is guaranteed to exist because we checked `game.dice`
+  const dice = normalizeDice(gameCopy.dice!);
 
   if (DEBUG_DOUBLE) {
     console.log(
@@ -25,8 +30,8 @@ export function generateMoveSequences(
 
   const results: MoveSequence[] = [];
 
-  // ✅ آرگومان ششم (hitSources) اضافه شد
-  recurse(game, playerId, dice, [], results, new Set<number>());
+  // Use the cloned game for all recursion
+  recurse(gameCopy, playerId, dice, [], results, new Set<number>());
 
   if (DEBUG_DOUBLE) {
     console.log(
