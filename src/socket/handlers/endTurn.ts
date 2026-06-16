@@ -78,6 +78,7 @@ export async function handleEndTurn(
       const nextPlayer = updatedGame.players.find(
         (p) => p.id === updatedGame.turn,
       );
+
       if (nextPlayer) {
         rooms.broadcast(gameId, {
           type: "game.turn",
