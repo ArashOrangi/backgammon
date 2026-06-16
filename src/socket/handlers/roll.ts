@@ -22,6 +22,7 @@ import {
 } from "@/game/eventStore";
 import { getTimerPresetByLeagueAndType } from "@/models/timerPreset";
 import { runBotIfNeeded } from "@/game/botRunner";
+import { BOT_USER_ID } from "@/static/statics"; // ← اضافه شد
 
 const gameQueue = new GameQueue();
 
@@ -38,10 +39,8 @@ function canEnterFromBarWithAnyDie(game: any, playerId: number): boolean {
     const to = isWhite ? 24 - die : die - 1;
     const point = game.board.points[to];
     if (!point) continue;
-    // اگر نقطه خالی باشد یا مال خود بازیکن باشد یا یک مهره حریف داشته باشد (قابل زدن)
     if (point.owner === null || point.owner === playerId) return true;
     if (point.owner !== playerId && point.count === 1) return true;
-    // در غیر این صورت بلاک است (۲ یا بیشتر)
   }
   return false;
 }
@@ -182,7 +181,7 @@ export async function handleRoll(
         });
       }
 
-      // ✅ بررسی کنید که آیا بازیکن روی BAR است و هیچ حرکت ورودی با هیچ تاسی ممکن نیست
+      // بررسی کنید که آیا بازیکن روی BAR است و هیچ حرکت ورودی با هیچ تاسی ممکن نیست
       if (!canEnterFromBarWithAnyDie(game, playerId)) {
         // نوبت را بدون ریختن تاس بگذران
         await appendGameEvent(game.id, {
@@ -191,9 +190,7 @@ export async function handleRoll(
         });
         const afterPass = await loadGameState(gameId);
         if (afterPass) {
-          // از afterPass مستقیماً استفاده کن، نه انتساب به game
           saveGame(afterPass);
-          // broadcast turn change
           const nextPlayer = afterPass.players.find(
             (p) => p.id === afterPass.turn,
           );
@@ -234,43 +231,81 @@ export async function handleRoll(
       game = afterRoll;
       saveGame(game);
 
+      // پخش تاس‌های ریخته‌شده
       rooms.broadcast(gameId, {
         type: "dice.result",
         payload: onOkSocketResponse({ dice, playerId, type: "inGame" }),
       });
 
-      //  اضافه کردن تأخیر 100 میلی‌ثانیه
       await new Promise((resolve) => setTimeout(resolve, 100));
 
+      // محاسبه حرکت‌های قانونی
       const legalMovesSequences = generateMoveSequences(game, playerId);
       const flatLegalMoves = flattenMoveSequences(legalMovesSequences);
       console.log(`[ROLL] legalMoves count = ${legalMovesSequences.length}`);
 
-      // اگر هیچ حرکت قانونی وجود نداشت، خودکار نوبت را تمام کن
+      // تشخیص بازیکن ربات
+      const isBot = playerId === BOT_USER_ID;
+
+      // اگر حرکت قانونی وجود ندارد
       if (legalMovesSequences.length === 0) {
-        await appendGameEvent(game.id, {
-          type: "TURN_PASSED",
-          payload: { playerId, reason: "NO_LEGAL_MOVES" },
-        });
-        const afterTurnPass = await loadGameState(gameId);
-        if (afterTurnPass) {
-          // از afterTurnPass استفاده کن
-          game = afterTurnPass; // اما اینجا برای ادامه به game نیاز داریم، پس انتساب مجاز است ولی برای امنیت می‌توانیم game را به‌روز کنیم
-          saveGame(game);
+        if (isBot) {
+          // ربات: auto-pass انجام بده
+          await appendGameEvent(game.id, {
+            type: "TURN_PASSED",
+            payload: { playerId, reason: "NO_LEGAL_MOVES" },
+          });
+          const afterTurnPass = await loadGameState(gameId);
+          if (afterTurnPass) {
+            game = afterTurnPass;
+            saveGame(game);
+          }
+          // بعد از auto-pass، state را با تاس‌های خالی broadcast کن
+          const subStatus = calculateSubStatus(game);
+          const stateToSend: any = {
+            ...game,
+            subStatus,
+            legalMoves: [],
+          };
+          rooms.broadcast(gameId, {
+            type: "game.state",
+            payload: onOkSocketResponse(
+              stateToSend,
+              "Bot auto-passed (no moves)",
+            ),
+          });
+        } else {
+          // انسان: auto-pass نکن، فقط state را با dice موجود و subStatus mustEndTurn بفرست
+          const stateToSend: any = {
+            ...game,
+            subStatus: "mustEndTurn",
+            legalMoves: [],
+          };
+          rooms.broadcast(gameId, {
+            type: "game.state",
+            payload: onOkSocketResponse(
+              stateToSend,
+              "No legal moves, please end turn",
+            ),
+          });
+          // هیچ auto-pass انجام نده و از تابع خارج شو
+          return;
         }
+      } else {
+        // حرکت قانونی وجود دارد: broadcast state با subStatus playDice
+        const subStatus = calculateSubStatus(game);
+        const stateToSend: any = {
+          ...game,
+          subStatus,
+          legalMoves: flatLegalMoves,
+        };
+        rooms.broadcast(gameId, {
+          type: "game.state",
+          payload: onOkSocketResponse(stateToSend),
+        });
       }
 
-      const subStatus = calculateSubStatus(game);
-      const stateToSend: any = {
-        ...game,
-        subStatus,
-        legalMoves: flatLegalMoves,
-      };
-      rooms.broadcast(gameId, {
-        type: "game.state",
-        payload: onOkSocketResponse(stateToSend),
-      });
-
+      // اگر بازی در جریان است و نوبت ربات است، ربات را اجرا کن
       if (game.status === "in-progress") {
         await runBotIfNeeded(gameId, game.turn!, rooms);
       }
