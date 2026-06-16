@@ -17,7 +17,6 @@ import {
 import { GameQueue } from "@/game/gameQueue";
 import { runBotIfNeeded } from "@/game/botRunner";
 import { BOT_USER_ID } from "@/static/statics";
-import { clearEndTurnTimeout } from "./roll";
 
 const gameQueue = new GameQueue();
 const AUTO_PASS_DELAY_MS = 500;
@@ -79,7 +78,6 @@ export async function handleEndTurn(
       const nextPlayer = updatedGame.players.find(
         (p) => p.id === updatedGame.turn,
       );
-      clearEndTurnTimeout(gameId);
       if (nextPlayer) {
         rooms.broadcast(gameId, {
           type: "game.turn",
