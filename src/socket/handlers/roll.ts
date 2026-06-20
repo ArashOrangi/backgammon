@@ -240,12 +240,10 @@ export async function handleRoll(
               "No bar entry, please end turn",
             ),
           });
-          // لاگ و ذخیره در pending map
           pendingEndTurnMap.set(gameId, { playerId, timestamp: Date.now() });
           console.log(
             `[ROLL] Human player ${playerId} in game ${gameId} has no bar entry. Waiting for endTurn.`,
           );
-          // تایم‌اوت برای لاگ هشدار (بدون auto-pass)
           setTimeout(() => {
             if (pendingEndTurnMap.has(gameId)) {
               console.warn(
@@ -258,9 +256,19 @@ export async function handleRoll(
       }
 
       await sleep(150);
-
-      // ریختن تاس
-      const dice = rollDice(game);
+      //TODO
+      // ---------- ریختن تاس (با هک موقت برای تست) ----------
+      let dice;
+      // هک موقت: اگر بازیکن انسان روی BAR مهره دارد، جفت ۶ بدهیم
+      const barCount = game.board.bar[playerId] ?? 0;
+      if (!isBot && barCount > 0) {
+        console.log(
+          `[ROLL] 🧪 TEMPORARY HACK: Human player ${playerId} has ${barCount} checkers on bar. Forcing double 6 for testing.`,
+        );
+        dice = [6, 6]; // اینجا تابع rollDice نرمال‌سازی می‌کند و به [6,6,6,6] تبدیل خواهد شد
+      } else {
+        dice = rollDice(game);
+      }
 
       await appendGameEvent(game.id, {
         type: "DICE_ROLLED",
@@ -334,7 +342,7 @@ export async function handleRoll(
               );
             }
           }, 5000);
-          return; // از تابع خارج شو
+          return;
         }
       } else {
         // حرکت قانونی وجود دارد
