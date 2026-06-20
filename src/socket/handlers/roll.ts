@@ -256,7 +256,7 @@ export async function handleRoll(
       }
 
       await sleep(150);
-      //TODO
+
       // ---------- ریختن تاس (با هک موقت برای تست) ----------
       let dice;
       // هک موقت: اگر بازیکن انسان روی BAR مهره دارد، جفت ۶ بدهیم
@@ -265,7 +265,7 @@ export async function handleRoll(
         console.log(
           `[ROLL] 🧪 TEMPORARY HACK: Human player ${playerId} has ${barCount} checkers on bar. Forcing double 6 for testing.`,
         );
-        dice = [6, 6, 6, 6];
+        dice = [6, 6]; // اینجا تابع rollDice نرمال‌سازی می‌کند و به [6,6,6,6] تبدیل خواهد شد
       } else {
         dice = rollDice(game);
       }
@@ -318,11 +318,12 @@ export async function handleRoll(
             ),
           });
         } else {
-          // انسان: auto-pass نکن، فقط state با mustEndTurn بفرست و منتظر endTurn باش
+          // ✅ انسان: به جای mustEndTurn، subStatus: "playDice" با legalMoves: [] بفرست تا کلاینت خودش endTurn بفرستد
+          // این کار باعث می‌شود کلاینت مانند حالت عادی که حرکت تمام می‌شود، endTurn بفرستد.
           const stateToSend: any = {
             ...game,
-            subStatus: "mustEndTurn",
-            legalMoves: [],
+            subStatus: "playDice", // ← تغییر کلیدی
+            legalMoves: [], // هیچ حرکتی وجود ندارد
           };
           rooms.broadcast(gameId, {
             type: "game.state",
@@ -333,7 +334,7 @@ export async function handleRoll(
           });
           pendingEndTurnMap.set(gameId, { playerId, timestamp: Date.now() });
           console.log(
-            `[ROLL] Human player ${playerId} in game ${gameId} has no legal moves. Waiting for endTurn.`,
+            `[ROLL] Human player ${playerId} in game ${gameId} has no legal moves. Sent playDice with empty legalMoves. Waiting for endTurn.`,
           );
           setTimeout(() => {
             if (pendingEndTurnMap.has(gameId)) {
@@ -342,7 +343,7 @@ export async function handleRoll(
               );
             }
           }, 5000);
-          return;
+          return; // از تابع خارج شو، منتظر endTurn از کلاینت
         }
       } else {
         // حرکت قانونی وجود دارد
