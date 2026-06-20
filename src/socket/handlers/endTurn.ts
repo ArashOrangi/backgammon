@@ -17,6 +17,7 @@ import {
 import { GameQueue } from "@/game/gameQueue";
 import { runBotIfNeeded } from "@/game/botRunner";
 import { BOT_USER_ID } from "@/static/statics";
+import { clearPendingEndTurn } from "./roll";
 
 const gameQueue = new GameQueue();
 
@@ -34,6 +35,9 @@ export async function handleEndTurn(
       payload: onErrorSocketResponse("Not authenticated"),
     });
   }
+  console.log(
+    `[ENDTURN] Received endTurn from player ${playerId} for game ${gameId}`,
+  );
 
   await gameQueue.enqueue(gameId, async () => {
     const game = await loadGameState(gameId);
@@ -60,7 +64,7 @@ export async function handleEndTurn(
         payload: onErrorSocketResponse("You still have legal moves available!"),
       });
     }
-
+    clearPendingEndTurn(gameId);
     try {
       await appendGameEvent(gameId, {
         type: "TURN_PASSED",

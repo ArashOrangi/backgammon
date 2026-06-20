@@ -22,15 +22,23 @@ import {
 } from "@/game/eventStore";
 import { getTimerPresetByLeagueAndType } from "@/models/timerPreset";
 import { runBotIfNeeded } from "@/game/botRunner";
+import { sleep } from "@/components/sleep";
+import { BOT_USER_ID } from "@/static/statics";
 
 const gameQueue = new GameQueue();
+
+// Map برای ردیابی بازی‌هایی که در انتظار endTurn از انسان هستند
+const pendingEndTurnMap = new Map<
+  number,
+  { playerId: number; timestamp: number }
+>();
 
 type RollPayload = { gameId: number };
 
 // تابع کمکی برای بررسی وجود حداقل یک حرکت ورودی از BAR با هر تاس ممکن (۱ تا ۶)
 function canEnterFromBarWithAnyDie(game: any, playerId: number): boolean {
   const barCount = game.board.bar[playerId] ?? 0;
-  if (barCount === 0) return true; // اگر روی BAR نیست، نیازی به ورود نیست
+  if (barCount === 0) return true;
   const player = game.players.find((p: any) => p.id === playerId);
   if (!player) return false;
   const isWhite = player.color === "white";
@@ -38,10 +46,8 @@ function canEnterFromBarWithAnyDie(game: any, playerId: number): boolean {
     const to = isWhite ? 24 - die : die - 1;
     const point = game.board.points[to];
     if (!point) continue;
-    // اگر نقطه خالی باشد یا مال خود بازیکن باشد یا یک مهره حریف داشته باشد (قابل زدن)
     if (point.owner === null || point.owner === playerId) return true;
     if (point.owner !== playerId && point.count === 1) return true;
-    // در غیر این صورت بلاک است (۲ یا بیشتر)
   }
   return false;
 }
@@ -182,44 +188,76 @@ export async function handleRoll(
         });
       }
 
+      const isBot = playerId === BOT_USER_ID;
+
       // ✅ بررسی کنید که آیا بازیکن روی BAR است و هیچ حرکت ورودی با هیچ تاسی ممکن نیست
       if (!canEnterFromBarWithAnyDie(game, playerId)) {
-        // نوبت را بدون ریختن تاس بگذران
-        await appendGameEvent(game.id, {
-          type: "TURN_PASSED",
-          payload: { playerId, reason: "NO_LEGAL_MOVES" },
-        });
-        const afterPass = await loadGameState(gameId);
-        if (afterPass) {
-          // از afterPass مستقیماً استفاده کن، نه انتساب به game
-          saveGame(afterPass);
-          // broadcast turn change
-          const nextPlayer = afterPass.players.find(
-            (p) => p.id === afterPass.turn,
-          );
-          if (nextPlayer) {
+        if (isBot) {
+          // ربات: auto-pass
+          await appendGameEvent(game.id, {
+            type: "TURN_PASSED",
+            payload: { playerId, reason: "NO_LEGAL_MOVES" },
+          });
+          const afterPass = await loadGameState(gameId);
+          if (afterPass) {
+            saveGame(afterPass);
+            const nextPlayer = afterPass.players.find(
+              (p) => p.id === afterPass.turn,
+            );
+            if (nextPlayer) {
+              rooms.broadcast(gameId, {
+                type: "game.turn",
+                payload: onOkSocketResponse({
+                  playerId: nextPlayer.id,
+                  color: nextPlayer.color,
+                }),
+              });
+            }
             rooms.broadcast(gameId, {
-              type: "game.turn",
-              payload: onOkSocketResponse({
-                playerId: nextPlayer.id,
-                color: nextPlayer.color,
-              }),
+              type: "game.state",
+              payload: onOkSocketResponse(
+                {
+                  ...afterPass,
+                  subStatus: "mustEndTurn",
+                  legalMoves: [],
+                },
+                "Bot auto-passed (no bar entry)",
+              ),
             });
           }
+          return;
+        } else {
+          // انسان: بدون ریختن تاس، فقط state با mustEndTurn بفرست و منتظر endTurn باش
+          const stateToSend: any = {
+            ...game,
+            subStatus: "mustEndTurn",
+            legalMoves: [],
+          };
           rooms.broadcast(gameId, {
             type: "game.state",
             payload: onOkSocketResponse(
-              {
-                ...afterPass,
-                subStatus: "mustEndTurn",
-                legalMoves: [],
-              },
-              "Turn passed (no bar entry)",
+              stateToSend,
+              "No bar entry, please end turn",
             ),
           });
+          // لاگ و ذخیره در pending map
+          pendingEndTurnMap.set(gameId, { playerId, timestamp: Date.now() });
+          console.log(
+            `[ROLL] Human player ${playerId} in game ${gameId} has no bar entry. Waiting for endTurn.`,
+          );
+          // تایم‌اوت برای لاگ هشدار (بدون auto-pass)
+          setTimeout(() => {
+            if (pendingEndTurnMap.has(gameId)) {
+              console.warn(
+                `[ROLL] ⚠️ Human player ${playerId} in game ${gameId} still has NOT sent endTurn after 5 seconds (no bar entry)`,
+              );
+            }
+          }, 5000);
+          return;
         }
-        return;
       }
+
+      await sleep(150);
 
       // ریختن تاس
       const dice = rollDice(game);
@@ -239,38 +277,80 @@ export async function handleRoll(
         payload: onOkSocketResponse({ dice, playerId, type: "inGame" }),
       });
 
-      //  اضافه کردن تأخیر 100 میلی‌ثانیه
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       const legalMovesSequences = generateMoveSequences(game, playerId);
       const flatLegalMoves = flattenMoveSequences(legalMovesSequences);
       console.log(`[ROLL] legalMoves count = ${legalMovesSequences.length}`);
 
-      // اگر هیچ حرکت قانونی وجود نداشت، خودکار نوبت را تمام کن
+      // اگر هیچ حرکت قانونی وجود نداشت
       if (legalMovesSequences.length === 0) {
-        await appendGameEvent(game.id, {
-          type: "TURN_PASSED",
-          payload: { playerId, reason: "NO_LEGAL_MOVES" },
-        });
-        const afterTurnPass = await loadGameState(gameId);
-        if (afterTurnPass) {
-          // از afterTurnPass استفاده کن
-          game = afterTurnPass; // اما اینجا برای ادامه به game نیاز داریم، پس انتساب مجاز است ولی برای امنیت می‌توانیم game را به‌روز کنیم
-          saveGame(game);
+        if (isBot) {
+          // ربات: auto-pass انجام بده
+          await appendGameEvent(game.id, {
+            type: "TURN_PASSED",
+            payload: { playerId, reason: "NO_LEGAL_MOVES" },
+          });
+          const afterTurnPass = await loadGameState(gameId);
+          if (afterTurnPass) {
+            game = afterTurnPass;
+            saveGame(game);
+          }
+          const subStatus = calculateSubStatus(game);
+          const stateToSend: any = {
+            ...game,
+            subStatus,
+            legalMoves: [],
+          };
+          rooms.broadcast(gameId, {
+            type: "game.state",
+            payload: onOkSocketResponse(
+              stateToSend,
+              "Bot auto-passed (no moves)",
+            ),
+          });
+        } else {
+          // انسان: auto-pass نکن، فقط state با mustEndTurn بفرست و منتظر endTurn باش
+          const stateToSend: any = {
+            ...game,
+            subStatus: "mustEndTurn",
+            legalMoves: [],
+          };
+          rooms.broadcast(gameId, {
+            type: "game.state",
+            payload: onOkSocketResponse(
+              stateToSend,
+              "No legal moves, please end turn",
+            ),
+          });
+          pendingEndTurnMap.set(gameId, { playerId, timestamp: Date.now() });
+          console.log(
+            `[ROLL] Human player ${playerId} in game ${gameId} has no legal moves. Waiting for endTurn.`,
+          );
+          setTimeout(() => {
+            if (pendingEndTurnMap.has(gameId)) {
+              console.warn(
+                `[ROLL] ⚠️ Human player ${playerId} in game ${gameId} still has NOT sent endTurn after 5 seconds (no legal moves)`,
+              );
+            }
+          }, 5000);
+          return; // از تابع خارج شو
         }
+      } else {
+        // حرکت قانونی وجود دارد
+        const subStatus = calculateSubStatus(game);
+        const stateToSend: any = {
+          ...game,
+          subStatus,
+          legalMoves: flatLegalMoves,
+        };
+        rooms.broadcast(gameId, {
+          type: "game.state",
+          payload: onOkSocketResponse(stateToSend),
+        });
       }
 
-      const subStatus = calculateSubStatus(game);
-      const stateToSend: any = {
-        ...game,
-        subStatus,
-        legalMoves: flatLegalMoves,
-      };
-      rooms.broadcast(gameId, {
-        type: "game.state",
-        payload: onOkSocketResponse(stateToSend),
-      });
-
+      // اگر بازی در جریان است و نوبت ربات است، ربات را اجرا کن
       if (game.status === "in-progress") {
         await runBotIfNeeded(gameId, game.turn!, rooms);
       }
@@ -284,4 +364,12 @@ export async function handleRoll(
       });
     }
   });
+}
+
+// تابع برای پاک کردن pending entry هنگام دریافت endTurn
+export function clearPendingEndTurn(gameId: number) {
+  if (pendingEndTurnMap.has(gameId)) {
+    pendingEndTurnMap.delete(gameId);
+    console.log(`[ROLL] Removed game ${gameId} from pending endTurn map`);
+  }
 }
