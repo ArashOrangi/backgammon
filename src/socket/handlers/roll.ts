@@ -265,7 +265,7 @@ export async function handleRoll(
         console.log(
           `[ROLL] 🧪 TEMPORARY HACK: Human player ${playerId} has ${barCount} checkers on bar. Forcing double 6 for testing.`,
         );
-        dice = [6, 6]; // اینجا تابع rollDice نرمال‌سازی می‌کند و به [6,6,6,6] تبدیل خواهد شد
+        dice = [6, 6, 6, 6]; // اینجا تابع rollDice نرمال‌سازی می‌کند و به [6,6,6,6] تبدیل خواهد شد
       } else {
         dice = rollDice(game);
       }
