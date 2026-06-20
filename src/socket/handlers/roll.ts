@@ -257,18 +257,8 @@ export async function handleRoll(
 
       await sleep(150);
 
-      // ---------- ریختن تاس (با هک موقت برای تست) ----------
-      let dice;
-      // هک موقت: اگر بازیکن انسان روی BAR مهره دارد، جفت ۶ بدهیم
-      const barCount = game.board.bar[playerId] ?? 0;
-      if (!isBot && barCount > 0) {
-        console.log(
-          `[ROLL] 🧪 TEMPORARY HACK: Human player ${playerId} has ${barCount} checkers on bar. Forcing double 6 for testing.`,
-        );
-        dice = [6, 6, 6, 6]; // اینجا تابع rollDice نرمال‌سازی می‌کند و به [6,6,6,6] تبدیل خواهد شد
-      } else {
-        dice = rollDice(game);
-      }
+      // ---------- ریختن تاس ----------
+      const dice = rollDice(game);
 
       await appendGameEvent(game.id, {
         type: "DICE_ROLLED",
