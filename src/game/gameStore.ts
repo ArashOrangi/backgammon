@@ -76,7 +76,7 @@ export async function createInitialGameState(
     createdAt: Date.now(),
     lastActionAt: Date.now(),
     turnStartedAt: undefined,
-    turnTimeLimit: 30, // ممکن است بعداً حذف شود
+    // turnTimeLimit: 30, // ممکن است بعداً حذف شود
     primaryTimePerTurn: preset.primarySeconds,
     rolledThisTurn: false,
     secondaryTimeBank: {}, // خالی بماند تا بعداً پر شود? اما بهتر است برای بازیکنان آینده مقداردهی نشود چون هنوز بازیکنی نیست
