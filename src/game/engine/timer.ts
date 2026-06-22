@@ -8,44 +8,22 @@ export async function checkGameTimeouts(rooms: RoomManager) {
   const now = Date.now();
 
   for (const game of games) {
-    // فقط بازی‌های در حال اجرا (in-progress) را چک می‌کنیم
     if (game.status !== "in-progress") continue;
 
-    const gameId = game.id;
     const currentPlayer = game.turn;
     if (!currentPlayer) continue;
 
-    // محاسبه زمان سپری شده از شروع نوبت (به ثانیه)
     const turnStarted = game.turnStartedAt ?? now;
     const elapsed = (now - turnStarted) / 1000;
     const primary = game.primaryTimePerTurn;
+    const secondary = game.secondaryTimeBank[currentPlayer] ?? 0;
+    const totalAllowed = primary + secondary;
 
-    if (elapsed > primary) {
-      const extra = elapsed - primary;
-      const bank = game.secondaryTimeBank[currentPlayer] ?? 0;
-
-      if (extra >= bank) {
-        // مخزن ثانویه تمام شده → بازیکن بازنده است
-        await handleTimeout(gameId, "TURN_TIMEOUT", currentPlayer, rooms);
-        continue;
-      } else {
-        // کسر زمان اضافی از مخزن ثانویه
-        game.secondaryTimeBank[currentPlayer] = bank - extra;
-        // زمان شروع نوبت را به روز می‌کنیم تا دوباره کسر نشود (اختیاری)
-        game.turnStartedAt = now;
-        saveGame(game);
-        // می‌توانیم پیام هشدار به کلاینت بفرستیم (اختیاری)
-        // rooms.broadcast(gameId, { type: "timer.warning", payload: { remaining: game.secondaryTimeBank[currentPlayer] } });
-      }
+    // اگر زمان کل مصرف‌شده از مجموع مجاز بیشتر شد → تایم‌اوت
+    if (elapsed > totalAllowed) {
+      await handleTimeout(game.id, "TURN_TIMEOUT", currentPlayer, rooms);
     }
-
-    // // تایم‌اوت شبکه (۶۰ ثانیه عدم فعالیت) - مستقل از تایمر نوبت
-    // if (game.lastActionAt && now - game.lastActionAt > 60000) {
-    //   const loserId = game.turn ?? game.players[0]?.id;
-    //   if (loserId) {
-    //     await handleTimeout(gameId, "NETWORK_TIMEOUT", loserId, rooms);
-    //   }
-    // }
+    // در غیر این صورت، هیچ کاری انجام نده (وضعیت را تغییر نده)
   }
 }
 
@@ -83,7 +61,6 @@ async function handleTimeout(
   if (finalGame) {
     saveGame(finalGame);
 
-    // پخش نتیجه برای همه
     rooms.broadcast(gameId, {
       type: "game.result",
       payload: onOkSocketResponse({
