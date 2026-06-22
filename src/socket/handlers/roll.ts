@@ -24,6 +24,7 @@ import { getTimerPresetByLeagueAndType } from "@/models/timerPreset";
 import { runBotIfNeeded } from "@/game/botRunner";
 import { sleep } from "@/components/sleep";
 import { BOT_USER_ID } from "@/static/statics";
+import { broadcastTimerStarted, resetWarningState } from "@/game/engine/timer";
 
 const gameQueue = new GameQueue();
 
@@ -149,14 +150,38 @@ export async function handleRoll(
           game = freshGame;
           saveGame(game);
 
+          // ریست وضعیت هشدار تایمر
+          resetWarningState(gameId);
+
+          // ارسال game.turn برای شروع بازی
+          if (!game || game === null) {
+            return ctx.send({
+              type: "game.error",
+              payload: onErrorSocketResponse("Game not found"),
+            });
+          }
+          // حالا game قطعاً non-null است
+          const startingPlayer = game!.players.find(
+            (p) => p.id === game!.turn,
+          )!;
+
           rooms.broadcast(gameId, {
             type: "game.turn",
             payload: onOkSocketResponse({
-              playerId: freshGame.turn!,
-              color: freshGame.players.find((p) => p.id === freshGame.turn)!
-                .color,
+              playerId: startingPlayer.id,
+              color: startingPlayer.color,
             }),
           });
+
+          // ارسال رویداد شروع تایمر
+          broadcastTimerStarted(
+            gameId,
+            game.turn!,
+            game.primaryTimePerTurn,
+            game.secondaryTimeBank[game.turn!] || 0,
+            game.turnStartedAt!,
+            rooms,
+          );
         }
 
         const subStatus = calculateSubStatus(game);
@@ -212,6 +237,15 @@ export async function handleRoll(
                   color: nextPlayer.color,
                 }),
               });
+              // ارسال timer.started برای نوبت جدید
+              broadcastTimerStarted(
+                gameId,
+                afterPass.turn!,
+                afterPass.primaryTimePerTurn,
+                afterPass.secondaryTimeBank[afterPass.turn!] || 0,
+                afterPass.turnStartedAt!,
+                rooms,
+              );
             }
             rooms.broadcast(gameId, {
               type: "game.state",
@@ -308,12 +342,11 @@ export async function handleRoll(
             ),
           });
         } else {
-          // ✅ انسان: به جای mustEndTurn، subStatus: "playDice" با legalMoves: [] بفرست تا کلاینت خودش endTurn بفرستد
-          // این کار باعث می‌شود کلاینت مانند حالت عادی که حرکت تمام می‌شود، endTurn بفرستد.
+          // ✅ انسان: subStatus: "playDice" با legalMoves: [] بفرست تا کلاینت خودش endTurn بفرستد
           const stateToSend: any = {
             ...game,
-            subStatus: "playDice", // ← تغییر کلیدی
-            legalMoves: [], // هیچ حرکتی وجود ندارد
+            subStatus: "playDice",
+            legalMoves: [],
           };
           rooms.broadcast(gameId, {
             type: "game.state",
@@ -333,7 +366,7 @@ export async function handleRoll(
               );
             }
           }, 5000);
-          return; // از تابع خارج شو، منتظر endTurn از کلاینت
+          return;
         }
       } else {
         // حرکت قانونی وجود دارد

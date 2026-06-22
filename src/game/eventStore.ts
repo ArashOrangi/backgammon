@@ -15,7 +15,7 @@ import {
 
 import { createInitialGameState } from "./gameStore";
 import { createInitialBoard } from "./board";
-import { applyMove, switchTurn } from "./engine";
+import { applyMove, resetWarningState, switchTurn } from "./engine";
 import { generateMoveSequences } from "./moveGenerator";
 import { OrmState } from "@/models/enums";
 import { prisma } from "@/components/prisma";
@@ -267,10 +267,9 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
 
     case "TURN_PASSED": {
       switchTurn(state);
+      resetWarningState(state.id); // اضافه شد
       state.dice = [];
-      state.turnStartedAt = Date.now();
       state.rolledThisTurn = false;
-
       return state;
     }
 

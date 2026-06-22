@@ -18,6 +18,8 @@ import { GameQueue } from "@/game/gameQueue";
 import { runBotIfNeeded } from "@/game/botRunner";
 import { BOT_USER_ID } from "@/static/statics";
 import { clearPendingEndTurn } from "./roll";
+// ایمپورت توابع تایمر
+import { resetWarningState, broadcastTimerStarted } from "@/game/engine/timer";
 
 const gameQueue = new GameQueue();
 
@@ -64,7 +66,10 @@ export async function handleEndTurn(
         payload: onErrorSocketResponse("You still have legal moves available!"),
       });
     }
+
+    // پاک کردن وضعیت pending endTurn
     clearPendingEndTurn(gameId);
+
     try {
       await appendGameEvent(gameId, {
         type: "TURN_PASSED",
@@ -75,6 +80,9 @@ export async function handleEndTurn(
       if (!updatedGame) throw new Error("Failed to reload game state");
 
       saveGame(updatedGame);
+
+      // ریست وضعیت هشدار تایمر (در صورت نیاز – قبلاً در eventStore انجام شده ولی برای اطمینان)
+      resetWarningState(gameId);
 
       // ارسال رویداد game.turn برای اطلاع‌رسانی مستقیم نوبت جدید
       const nextPlayer = updatedGame.players.find(
@@ -88,6 +96,16 @@ export async function handleEndTurn(
             color: nextPlayer.color,
           }),
         });
+
+        // ✅ ارسال رویداد شروع تایمر برای نوبت جدید
+        broadcastTimerStarted(
+          gameId,
+          updatedGame.turn!,
+          updatedGame.primaryTimePerTurn,
+          updatedGame.secondaryTimeBank[updatedGame.turn!] || 0,
+          updatedGame.turnStartedAt!,
+          rooms,
+        );
       }
 
       let legalMoves: any[] = [];
@@ -98,7 +116,7 @@ export async function handleEndTurn(
       const flatLegalMoves = flattenMoveSequences(legalMoves);
       const stateToSend = {
         ...updatedGame,
-        subStatus: "mustEndTurn", // بعد از تعویض نوبت، برای حالت قبلی نیازی نیست، ولی فرستاده می‌شود
+        subStatus: "mustEndTurn",
         legalMoves: flatLegalMoves,
       };
 
@@ -107,7 +125,7 @@ export async function handleEndTurn(
         payload: onOkSocketResponse(stateToSend, "Turn passed successfully"),
       });
 
-      //  اضافه کردن تأخیر 100 میلی‌ثانیه
+      // تأخیر ۱۰۰ میلی‌ثانیه قبل از اجرای ربات
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // اگر نوبت بات است، بلافاصله اجرا کن
