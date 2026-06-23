@@ -18,7 +18,6 @@ import { GameQueue } from "@/game/gameQueue";
 import { runBotIfNeeded } from "@/game/botRunner";
 import { BOT_USER_ID } from "@/static/statics";
 import { clearPendingEndTurn } from "./roll";
-// ایمپورت توابع تایمر
 import { resetWarningState, broadcastTimerStarted } from "@/game/engine/timer";
 
 const gameQueue = new GameQueue();
@@ -59,7 +58,6 @@ export async function handleEndTurn(
 
     const currentSubStatus = calculateSubStatus(game);
 
-    // فقط زمانی که حرکت قانونی وجود دارد (playDice) نباید اجازه endTurn بدهیم
     if (currentSubStatus === "playDice") {
       return ctx.send({
         type: "game.error",
@@ -67,7 +65,6 @@ export async function handleEndTurn(
       });
     }
 
-    // پاک کردن وضعیت pending endTurn
     clearPendingEndTurn(gameId);
 
     try {
@@ -80,11 +77,27 @@ export async function handleEndTurn(
       if (!updatedGame) throw new Error("Failed to reload game state");
 
       saveGame(updatedGame);
-
-      // ریست وضعیت هشدار تایمر (در صورت نیاز – قبلاً در eventStore انجام شده ولی برای اطمینان)
       resetWarningState(gameId);
 
-      // ارسال رویداد game.turn برای اطلاع‌رسانی مستقیم نوبت جدید
+      // 1. First send game.state with correct subStatus
+      let legalMoves: any[] = [];
+      if (updatedGame.turn !== null) {
+        legalMoves = generateMoveSequences(updatedGame, updatedGame.turn);
+      }
+      const flatLegalMoves = flattenMoveSequences(legalMoves);
+      const subStatus = calculateSubStatus(updatedGame);
+      const stateToSend = {
+        ...updatedGame,
+        subStatus,
+        legalMoves: flatLegalMoves,
+      };
+
+      rooms.broadcast(gameId, {
+        type: "game.state",
+        payload: onOkSocketResponse(stateToSend, "Turn passed successfully"),
+      });
+
+      // 2. Then send game.turn
       const nextPlayer = updatedGame.players.find(
         (p) => p.id === updatedGame.turn,
       );
@@ -97,38 +110,21 @@ export async function handleEndTurn(
           }),
         });
 
-        // ✅ ارسال رویداد شروع تایمر برای نوبت جدید
-        broadcastTimerStarted(
-          gameId,
-          updatedGame.turn!,
-          updatedGame.primaryTimePerTurn,
-          updatedGame.secondaryTimeBank[updatedGame.turn!] || 0,
-          updatedGame.turnStartedAt!,
-          rooms,
-        );
+        // 3. Send timer.started only if subStatus is playDice or waitForRoll
+        if (subStatus === "playDice" || subStatus === "waitForRoll") {
+          broadcastTimerStarted(
+            gameId,
+            updatedGame.turn!,
+            updatedGame.primaryTimePerTurn,
+            updatedGame.secondaryTimeBank[updatedGame.turn!] || 0,
+            updatedGame.turnStartedAt!,
+            rooms,
+          );
+        }
       }
 
-      let legalMoves: any[] = [];
-      if (updatedGame.turn !== null) {
-        legalMoves = generateMoveSequences(updatedGame, updatedGame.turn);
-      }
-
-      const flatLegalMoves = flattenMoveSequences(legalMoves);
-      const stateToSend = {
-        ...updatedGame,
-        subStatus: "mustEndTurn",
-        legalMoves: flatLegalMoves,
-      };
-
-      rooms.broadcast(gameId, {
-        type: "game.state",
-        payload: onOkSocketResponse(stateToSend, "Turn passed successfully"),
-      });
-
-      // تأخیر ۱۰۰ میلی‌ثانیه قبل از اجرای ربات
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // اگر نوبت بات است، بلافاصله اجرا کن
       if (updatedGame.status === "in-progress") {
         const opponentId = updatedGame.players.find(
           (p) => p.id !== playerId,

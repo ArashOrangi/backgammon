@@ -153,18 +153,26 @@ export async function handleRoll(
           // ریست وضعیت هشدار تایمر
           resetWarningState(gameId);
 
-          // ارسال game.turn برای شروع بازی
-          if (!game || game === null) {
-            return ctx.send({
-              type: "game.error",
-              payload: onErrorSocketResponse("Game not found"),
-            });
-          }
-          // حالا game قطعاً non-null است
+          // ۱. ابتدا game.state را با subStatus محاسبه‌شده ارسال کن
+          const subStatus = calculateSubStatus(game);
+          const legalMoves = game.turn
+            ? generateMoveSequences(game, game.turn)
+            : [];
+          const flatLegalMoves = flattenMoveSequences(legalMoves);
+          const stateToSend: any = {
+            ...game,
+            subStatus,
+            legalMoves: flatLegalMoves,
+          };
+          rooms.broadcast(gameId, {
+            type: "game.state",
+            payload: onOkSocketResponse(stateToSend),
+          });
+
+          // ۲. سپس game.turn را ارسال کن
           const startingPlayer = game!.players.find(
             (p) => p.id === game!.turn,
           )!;
-
           rooms.broadcast(gameId, {
             type: "game.turn",
             payload: onOkSocketResponse({
@@ -173,15 +181,17 @@ export async function handleRoll(
             }),
           });
 
-          // ارسال رویداد شروع تایمر
-          broadcastTimerStarted(
-            gameId,
-            game.turn!,
-            game.primaryTimePerTurn,
-            game.secondaryTimeBank[game.turn!] || 0,
-            game.turnStartedAt!,
-            rooms,
-          );
+          // ۳. اگر subStatus playDice یا waitForRoll است، timer.started را ارسال کن
+          if (subStatus === "playDice" || subStatus === "waitForRoll") {
+            broadcastTimerStarted(
+              gameId,
+              game!.turn!,
+              game!.primaryTimePerTurn,
+              game!.secondaryTimeBank[game!.turn!] || 0,
+              game!.turnStartedAt!,
+              rooms,
+            );
+          }
         }
 
         const subStatus = calculateSubStatus(game);
