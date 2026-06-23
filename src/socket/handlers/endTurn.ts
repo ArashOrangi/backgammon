@@ -133,6 +133,7 @@ export async function handleEndTurn(
           await runBotIfNeeded(gameId, opponentId, rooms);
         }
       }
+      console.log("just random");
     } catch (err) {
       console.error("EndTurn Error:", err);
       ctx.send({
