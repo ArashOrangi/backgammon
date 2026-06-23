@@ -15,7 +15,7 @@ build-app:
     - cicd
   script:
     - echo $PWD
-    - cmd /c "pm2 delete %SITE_NAME% 2>nul || exit /b 0"
+    - pm2 delete %SITE_NAME% -s
 
 deploy:
   stage: deploy
