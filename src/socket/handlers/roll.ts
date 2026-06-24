@@ -167,7 +167,6 @@ export async function handleRoll(
             payload: onOkSocketResponse(stateToSend),
           });
 
-          // game.turn
           const startingPlayer = game!.players.find(
             (p) => p.id === game!.turn!,
           )!;
@@ -179,7 +178,6 @@ export async function handleRoll(
             }),
           });
 
-          // timer.started
           if (game.turn) {
             broadcastTimerStarted(
               gameId,
@@ -399,8 +397,31 @@ export async function handleRoll(
         });
       }
 
+      // ===== پس از ارسال state و در صورت لزوم اجرای ربات =====
       if (game.status === "in-progress") {
+        const previousTurn = game.turn; // ذخیره نوبت فعلی قبل از اجرای ربات
+
         await runBotIfNeeded(gameId, game.turn!, rooms);
+
+        // اگر ربات نوبت را تغییر داد، برای بازیکن جدید تایمر استارت بزن
+        const updatedGame = await loadGameState(gameId);
+        if (updatedGame && updatedGame.status === "in-progress") {
+          if (updatedGame.turn && updatedGame.turn !== previousTurn) {
+            const newPlayer = updatedGame.players.find(
+              (p) => p.id === updatedGame.turn,
+            );
+            // اگر بازیکن جدید ربات نیست (انسان است) یا حتی اگر ربات است، باز هم تایمر استارت می‌خورد
+            // اما چون ربات خودش بعداً تاس می‌ریزد، نیازی نیست ولی برای اطمینان می‌فرستیم
+            broadcastTimerStarted(
+              gameId,
+              updatedGame.turn,
+              updatedGame.primaryTimePerTurn,
+              updatedGame.secondaryTimeBank[updatedGame.turn] || 0,
+              updatedGame.turnStartedAt!,
+              rooms,
+            );
+          }
+        }
       }
     } catch (err) {
       console.error("Roll Error:", err);
