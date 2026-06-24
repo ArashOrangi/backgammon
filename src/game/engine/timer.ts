@@ -6,10 +6,6 @@ import { onOkSocketResponse } from "@/responses/response-builder";
 // وضعیت هشدار برای هر بازی (برای جلوگیری از ارسال مکرر)
 const warningState = new Map<number, { level: "none" | "5s" }>();
 
-/**
- * تابع اصلی بررسی تایم‌اوت‌ها
- * این تابع هر TICK (مثلاً هر ۲ ثانیه) توسط سرور فراخوانی می‌شود
- */
 export async function checkGameTimeouts(rooms: RoomManager) {
   const games = getAllActiveGames();
   const now = Date.now();
@@ -29,7 +25,6 @@ export async function checkGameTimeouts(rooms: RoomManager) {
 
     // ۱. اگر زمان تمام شده → تایم‌اوت
     if (remaining <= 0) {
-      // ارسال رویداد timer.timeout قبل از پایان بازی
       rooms.broadcast(game.id, {
         type: "timer.timeout",
         payload: onOkSocketResponse({
@@ -57,29 +52,18 @@ export async function checkGameTimeouts(rooms: RoomManager) {
   }
 }
 
-/**
- * تابع برای ریست وضعیت هشدار (زمانی که بازیکن حرکت می‌کند یا نوبت عوض می‌شود)
- * این تابع باید در مکان‌های زیر فراخوانی شود:
- * - بعد از هر حرکت (MOVE_APPLIED)
- * - بعد از تعویض نوبت (TURN_PASSED)
- * - بعد از شروع بازی (GAME_STARTED)
- */
+// ریست وضعیت هشدار
 export function resetWarningState(gameId: number) {
   warningState.set(gameId, { level: "none" });
 }
 
-/**
- * تابع ارسال رویداد timer.started (شروع تایمر)
- * این تابع باید در مکان‌های زیر فراخوانی شود:
- * - بعد از تعویض نوبت (در handleEndTurn و roll و ...)
- * - بعد از شروع بازی
- * - بعد از هر حرکت (زمانی که turnStartedAt به‌روز می‌شود)
- */
+// ارسال رویداد شروع تایمر با secondaryTotal و secondaryRemaining
 export function broadcastTimerStarted(
   gameId: number,
   playerId: number,
   primaryTime: number,
-  secondaryTime: number,
+  secondaryTotal: number,
+  secondaryRemaining: number,
   turnStartedAt: number,
   rooms: RoomManager,
 ) {
@@ -88,15 +72,14 @@ export function broadcastTimerStarted(
     payload: onOkSocketResponse({
       playerId,
       primaryTime,
-      secondaryTime,
+      secondaryTotal,
+      secondaryRemaining,
       turnStartedAt,
     }),
   });
 }
 
-/**
- * مدیریت تایم‌اوت و پایان بازی
- */
+// مدیریت تایم‌اوت
 async function handleTimeout(
   gameId: number,
   type: "TURN_TIMEOUT" | "NETWORK_TIMEOUT",
@@ -111,13 +94,11 @@ async function handleTimeout(
   const winner = state.players.find((p) => p.id !== loserId);
   if (!winner) return;
 
-  // ثبت رویداد تایم‌اوت
   await appendGameEvent(gameId, {
     type: type === "TURN_TIMEOUT" ? "TURN_TIMEOUT" : "NETWORK_TIMEOUT",
     payload: { playerId: loserId },
   });
 
-  // ثبت رویداد پایان بازی
   await appendGameEvent(gameId, {
     type: "GAME_FINISHED",
     payload: {
@@ -145,6 +126,5 @@ async function handleTimeout(
     });
   }
 
-  // پاک کردن وضعیت هشدار پس از پایان بازی
   warningState.delete(gameId);
 }

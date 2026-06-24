@@ -75,7 +75,7 @@ export async function createInitialGameState(
     primaryTimePerTurn: preset.primarySeconds,
     rolledThisTurn: false,
     secondaryTimeBank: {},
-    secondaryTimeTotal: {}, // ← اضافه شد
+    secondaryTimeTotal: {},
   };
 }
 
