@@ -16,12 +16,11 @@ import { onOkSocketResponse } from "@/responses/response-builder";
 import { BOT_USER_ID } from "@/static/statics";
 import { saveGame } from "./gameStore";
 import { isGameOver, calculateWinType } from "./engine";
-// ایمپورت توابع تایمر
+// changesCode: ایمپورت توابع تایمر
 import { broadcastTimerStarted, resetWarningState } from "@/game/engine/timer";
 
 const BOT_ACTION_DELAY_MS = 1600;
 
-// ===== تابع کمکی برای ارسال game.state با legalMoves =====
 function broadcastGameState(
   gameId: number,
   game: any,
@@ -39,7 +38,7 @@ function broadcastGameState(
   });
 }
 
-// ===== تابع جدید برای ارسال game.turn و timer.started =====
+// changesCode: تابع جدید برای ارسال game.turn و timer.started
 function broadcastTurnAndTimer(gameId: number, game: any, rooms: RoomManager) {
   const nextPlayer = game.players.find((p: any) => p.id === game.turn);
   if (!nextPlayer) return;
@@ -65,9 +64,6 @@ function broadcastTurnAndTimer(gameId: number, game: any, rooms: RoomManager) {
     );
   }
 }
-
-// ===== تابع قبلی broadcastTurnChange را حذف یا تغییر می‌دهیم =====
-// (برای جلوگیری از خطا، آن را با تابع جدید جایگزین می‌کنیم)
 
 // ========== تابع امتیازدهی ساده برای انتخاب بهترین حرکت ==========
 function scoreMove(
@@ -213,8 +209,10 @@ function canEnterFromBarWithAnyDie(game: any, playerId: number): boolean {
     const to = isWhite ? 24 - die : die - 1;
     const point = game.board.points[to];
     if (!point) continue;
+    // اگر نقطه خالی باشد یا مال خود بازیکن باشد یا یک مهره حریف داشته باشد (قابل زدن)
     if (point.owner === null || point.owner === playerId) return true;
     if (point.owner !== playerId && point.count === 1) return true;
+    // در غیر این صورت بلاک است (۲ یا بیشتر)
   }
   return false;
 }
@@ -248,16 +246,17 @@ export async function runBotIfNeeded(
       const afterPass = await loadGameState(gameId);
       if (afterPass) {
         saveGame(afterPass);
-        // ریست هشدار تایمر
+        // changesCode: جایگزینی broadcastTurnChange با broadcastTurnAndTimer و اضافه کردن resetWarningState
         resetWarningState(gameId);
-        // ارسال game.state و game.turn و timer.started
-        broadcastGameState(
-          gameId,
-          afterPass,
-          rooms,
-          "Bot turn passed (no bar entry)",
-        );
         broadcastTurnAndTimer(gameId, afterPass, rooms);
+        // changesCode: ارسال game.state با همان subStatus دستی (تغییری در آن داده نشده)
+        rooms.broadcast(gameId, {
+          type: "game.state",
+          payload: onOkSocketResponse(
+            { ...afterPass, subStatus: "mustEndTurn", legalMoves: [] },
+            "Bot turn passed (no bar entry)",
+          ),
+        });
       }
       return;
     }
@@ -298,9 +297,17 @@ export async function runBotIfNeeded(
       state = await loadGameState(gameId);
       if (state) {
         saveGame(state);
+        // changesCode: جایگزینی broadcastTurnChange با broadcastTurnAndTimer و اضافه کردن resetWarningState
         resetWarningState(gameId);
-        broadcastGameState(gameId, state, rooms, "Bot turn passed (no moves)");
         broadcastTurnAndTimer(gameId, state, rooms);
+        // changesCode: ارسال game.state با همان subStatus دستی (تغییری در آن داده نشده)
+        rooms.broadcast(gameId, {
+          type: "game.state",
+          payload: onOkSocketResponse(
+            { ...state, subStatus: "mustEndTurn", legalMoves: [] },
+            "Bot turn passed (no moves)",
+          ),
+        });
       }
       break;
     }
@@ -432,13 +439,12 @@ export async function runBotIfNeeded(
         }
         return;
       }
-      // پس از هر حرکت، وضعیت را به‌روز ارسال کن (اما تایمر را دوباره استارت نزن چون نوبت عوض نشده)
       broadcastGameState(gameId, state, rooms);
     }
     if (!moveSuccess) break; // اگر دنباله ناقص ماند، نوبت را تمام کن
   }
 
-  // پایان نوبت (اگر هنوز نوبت ربات است)
+  // پایان نوبت
   const finalState = await loadGameState(gameId);
   if (finalState && finalState.turn === playerId) {
     await new Promise((resolve) => setTimeout(resolve, BOT_ACTION_DELAY_MS));
@@ -449,9 +455,17 @@ export async function runBotIfNeeded(
     const afterPass = await loadGameState(gameId);
     if (afterPass) {
       saveGame(afterPass);
+      // changesCode: جایگزینی broadcastTurnChange با broadcastTurnAndTimer و اضافه کردن resetWarningState
       resetWarningState(gameId);
-      broadcastGameState(gameId, afterPass, rooms, "Bot turn ended");
       broadcastTurnAndTimer(gameId, afterPass, rooms);
+      // changesCode: ارسال game.state با همان subStatus دستی (تغییری در آن داده نشده)
+      rooms.broadcast(gameId, {
+        type: "game.state",
+        payload: onOkSocketResponse(
+          { ...afterPass, subStatus: "mustEndTurn", legalMoves: [] },
+          "Bot turn ended",
+        ),
+      });
     }
   }
 }
