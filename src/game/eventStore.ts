@@ -242,6 +242,15 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       state.dice = dice;
       state.rolledThisTurn = true;
 
+      state.secondaryTimeBank = {
+        [whitePlayerId]: secondarySeconds,
+        [blackPlayerId]: secondarySeconds,
+      };
+      state.secondaryTimeTotal = {
+        [whitePlayerId]: secondarySeconds,
+        [blackPlayerId]: secondarySeconds,
+      };
+
       return state;
     }
 

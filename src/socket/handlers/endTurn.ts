@@ -116,8 +116,9 @@ export async function handleEndTurn(
             gameId,
             updatedGame.turn!,
             updatedGame.primaryTimePerTurn,
-            updatedGame.secondaryTimeBank[updatedGame.turn!] || 0,
-            updatedGame.turnStartedAt!,
+            updatedGame.secondaryTimeTotal[updatedGame.turn!] || 0, // مقدار کل
+            updatedGame.secondaryTimeBank[updatedGame.turn!] || 0, // مقدار باقی‌مانده
+            updatedGame.turnStartedAt!, // UTC timestamp
             rooms,
           );
         }

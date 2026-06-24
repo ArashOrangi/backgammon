@@ -66,7 +66,8 @@ export interface GameState {
   /** تایمر نوبت */
   turnStartedAt?: number;
   primaryTimePerTurn: number; // زمان تایمر اولیه برای هر نوبت (ثانیه)
-  secondaryTimeBank: Record<PlayerId, number>; // مخزن زمانی ثانویه هر بازیکن
+  secondaryTimeBank: Record<PlayerId, number>; //مقدار فعلی (باقی‌مانده)
+  secondaryTimeTotal: Record<PlayerId, number>; // مقدار اولیه (مجموع)
   lastActionAt?: number;
   //---
   readyPlayers?: number[];

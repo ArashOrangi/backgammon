@@ -185,10 +185,11 @@ export async function handleRoll(
           if (subStatus === "playDice" || subStatus === "waitForRoll") {
             broadcastTimerStarted(
               gameId,
-              game!.turn!,
-              game!.primaryTimePerTurn,
-              game!.secondaryTimeBank[game!.turn!] || 0,
-              game!.turnStartedAt!,
+              game.turn!,
+              game.primaryTimePerTurn,
+              game.secondaryTimeTotal[game.turn!] || 0, // مقدار کل
+              game.secondaryTimeBank[game.turn!] || 0, // مقدار باقی‌مانده
+              game.turnStartedAt!, // UTC timestamp
               rooms,
             );
           }
@@ -252,8 +253,9 @@ export async function handleRoll(
                 gameId,
                 afterPass.turn!,
                 afterPass.primaryTimePerTurn,
-                afterPass.secondaryTimeBank[afterPass.turn!] || 0,
-                afterPass.turnStartedAt!,
+                afterPass.secondaryTimeTotal[afterPass.turn!] || 0, // مقدار کل
+                afterPass.secondaryTimeBank[afterPass.turn!] || 0, // مقدار باقی‌مانده
+                afterPass.turnStartedAt!, // UTC timestamp
                 rooms,
               );
             }
