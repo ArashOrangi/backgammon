@@ -119,7 +119,7 @@ export async function handleRoll(
         });
 
         if (playerId === BOT_USER_ID) {
-          await sleep(1200);
+          await sleep(1500);
         }
 
         const didStart = tryResolveStartingRoll(game);
