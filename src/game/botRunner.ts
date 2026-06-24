@@ -279,7 +279,7 @@ export async function runBotIfNeeded(
     });
     broadcastGameState(gameId, state, rooms);
 
-    sleep(200);
+    await sleep(1500);
   }
 
   // حلقه اجرای حرکت
