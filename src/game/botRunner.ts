@@ -277,6 +277,8 @@ export async function runBotIfNeeded(
       payload: onOkSocketResponse({ dice, playerId, type: "inGame" }),
     });
     broadcastGameState(gameId, state, rooms);
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
   // حلقه اجرای حرکت
