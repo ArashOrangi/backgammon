@@ -29,7 +29,6 @@ export async function checkGameTimeouts(rooms: RoomManager) {
 
     // ۱. اگر زمان تمام شده → تایم‌اوت
     if (remaining <= 0) {
-      // ارسال رویداد timer.timeout قبل از پایان بازی
       rooms.broadcast(game.id, {
         type: "timer.timeout",
         payload: onOkSocketResponse({
@@ -111,13 +110,11 @@ async function handleTimeout(
   const winner = state.players.find((p) => p.id !== loserId);
   if (!winner) return;
 
-  // ثبت رویداد تایم‌اوت
   await appendGameEvent(gameId, {
     type: type === "TURN_TIMEOUT" ? "TURN_TIMEOUT" : "NETWORK_TIMEOUT",
     payload: { playerId: loserId },
   });
 
-  // ثبت رویداد پایان بازی
   await appendGameEvent(gameId, {
     type: "GAME_FINISHED",
     payload: {
@@ -145,6 +142,5 @@ async function handleTimeout(
     });
   }
 
-  // پاک کردن وضعیت هشدار پس از پایان بازی
   warningState.delete(gameId);
 }
