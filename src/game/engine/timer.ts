@@ -79,8 +79,7 @@ export function broadcastTimerStarted(
   gameId: number,
   playerId: number,
   primaryTime: number,
-  secondaryTotal: number,
-  secondaryRemaining: number,
+  secondaryTime: number,
   turnStartedAt: number,
   rooms: RoomManager,
 ) {
@@ -89,8 +88,7 @@ export function broadcastTimerStarted(
     payload: onOkSocketResponse({
       playerId,
       primaryTime,
-      secondaryTotal,
-      secondaryRemaining,
+      secondaryTime,
       turnStartedAt,
     }),
   });
