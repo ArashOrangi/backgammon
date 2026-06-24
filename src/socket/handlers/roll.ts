@@ -36,6 +36,7 @@ const pendingEndTurnMap = new Map<
 
 type RollPayload = { gameId: number };
 
+// تابع کمکی برای بررسی وجود حداقل یک حرکت ورودی از BAR با هر تاس ممکن (۱ تا ۶)
 function canEnterFromBarWithAnyDie(game: any, playerId: number): boolean {
   const barCount = game.board.bar[playerId] ?? 0;
   if (barCount === 0) return true;
@@ -149,12 +150,21 @@ export async function handleRoll(
           game = freshGame;
           saveGame(game);
 
+          // ریست وضعیت هشدار تایمر
           resetWarningState(gameId);
 
-          // 1. game.turn
+          // ارسال game.turn برای شروع بازی
+          if (!game || game === null) {
+            return ctx.send({
+              type: "game.error",
+              payload: onErrorSocketResponse("Game not found"),
+            });
+          }
+          // حالا game قطعاً non-null است
           const startingPlayer = game!.players.find(
             (p) => p.id === game!.turn,
           )!;
+
           rooms.broadcast(gameId, {
             type: "game.turn",
             payload: onOkSocketResponse({
@@ -163,19 +173,17 @@ export async function handleRoll(
             }),
           });
 
-          // 2. timer.started (همیشه)
+          // ارسال رویداد شروع تایمر
           broadcastTimerStarted(
             gameId,
-            game!.turn!,
-            game!.primaryTimePerTurn,
-            game!.secondaryTimeTotal[game!.turn!] || 0,
-            game!.secondaryTimeBank[game!.turn!] || 0,
-            game!.turnStartedAt!,
+            game.turn!,
+            game.primaryTimePerTurn,
+            game.secondaryTimeBank[game.turn!] || 0,
+            game.turnStartedAt!,
             rooms,
           );
         }
 
-        // 3. game.state (بعد از game.turn و timer.started)
         const subStatus = calculateSubStatus(game);
         const legalMoves = game.turn
           ? generateMoveSequences(game, game.turn)
@@ -207,7 +215,7 @@ export async function handleRoll(
 
       const isBot = playerId === BOT_USER_ID;
 
-      // بررسی BAR entry
+      // ✅ بررسی کنید که آیا بازیکن روی BAR است و هیچ حرکت ورودی با هیچ تاسی ممکن نیست
       if (!canEnterFromBarWithAnyDie(game, playerId)) {
         if (isBot) {
           // ربات: auto-pass
@@ -222,7 +230,6 @@ export async function handleRoll(
               (p) => p.id === afterPass.turn,
             );
             if (nextPlayer) {
-              // 1. game.turn
               rooms.broadcast(gameId, {
                 type: "game.turn",
                 payload: onOkSocketResponse({
@@ -230,18 +237,16 @@ export async function handleRoll(
                   color: nextPlayer.color,
                 }),
               });
-              // 2. timer.started
+              // ارسال timer.started برای نوبت جدید
               broadcastTimerStarted(
                 gameId,
                 afterPass.turn!,
                 afterPass.primaryTimePerTurn,
-                afterPass.secondaryTimeTotal[afterPass.turn!] || 0,
                 afterPass.secondaryTimeBank[afterPass.turn!] || 0,
                 afterPass.turnStartedAt!,
                 rooms,
               );
             }
-            // 3. game.state
             rooms.broadcast(gameId, {
               type: "game.state",
               payload: onOkSocketResponse(
@@ -256,7 +261,7 @@ export async function handleRoll(
           }
           return;
         } else {
-          // انسان: فقط state با mustEndTurn
+          // انسان: بدون ریختن تاس، فقط state با mustEndTurn بفرست و منتظر endTurn باش
           const stateToSend: any = {
             ...game,
             subStatus: "mustEndTurn",
@@ -286,8 +291,9 @@ export async function handleRoll(
 
       await sleep(150);
 
-      // ریختن تاس
+      // ---------- ریختن تاس ----------
       const dice = rollDice(game);
+
       await appendGameEvent(game.id, {
         type: "DICE_ROLLED",
         payload: { playerId, dice },
@@ -309,9 +315,10 @@ export async function handleRoll(
       const flatLegalMoves = flattenMoveSequences(legalMovesSequences);
       console.log(`[ROLL] legalMoves count = ${legalMovesSequences.length}`);
 
+      // اگر هیچ حرکت قانونی وجود نداشت
       if (legalMovesSequences.length === 0) {
         if (isBot) {
-          // ربات: auto-pass
+          // ربات: auto-pass انجام بده
           await appendGameEvent(game.id, {
             type: "TURN_PASSED",
             payload: { playerId, reason: "NO_LEGAL_MOVES" },
@@ -335,7 +342,7 @@ export async function handleRoll(
             ),
           });
         } else {
-          // انسان: state با playDice و legalMoves خالی
+          // ✅ انسان: subStatus: "playDice" با legalMoves: [] بفرست تا کلاینت خودش endTurn بفرستد
           const stateToSend: any = {
             ...game,
             subStatus: "playDice",
@@ -375,6 +382,7 @@ export async function handleRoll(
         });
       }
 
+      // اگر بازی در جریان است و نوبت ربات است، ربات را اجرا کن
       if (game.status === "in-progress") {
         await runBotIfNeeded(gameId, game.turn!, rooms);
       }
@@ -390,6 +398,7 @@ export async function handleRoll(
   });
 }
 
+// تابع برای پاک کردن pending entry هنگام دریافت endTurn
 export function clearPendingEndTurn(gameId: number) {
   if (pendingEndTurnMap.has(gameId)) {
     pendingEndTurnMap.delete(gameId);
