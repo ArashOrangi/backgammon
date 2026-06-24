@@ -118,6 +118,10 @@ export async function handleRoll(
           }),
         });
 
+        if (playerId === BOT_USER_ID) {
+          await sleep(200);
+        }
+
         const didStart = tryResolveStartingRoll(game);
 
         if (didStart) {

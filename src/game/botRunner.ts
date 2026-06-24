@@ -18,6 +18,7 @@ import { saveGame } from "./gameStore";
 import { isGameOver, calculateWinType } from "./engine";
 // changesCode: ایمپورت توابع تایمر
 import { broadcastTimerStarted, resetWarningState } from "@/game/engine/timer";
+import { sleep } from "@/components/sleep";
 
 const BOT_ACTION_DELAY_MS = 1600;
 
@@ -278,7 +279,7 @@ export async function runBotIfNeeded(
     });
     broadcastGameState(gameId, state, rooms);
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    sleep(200);
   }
 
   // حلقه اجرای حرکت
