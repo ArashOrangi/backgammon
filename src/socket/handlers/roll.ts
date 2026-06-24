@@ -189,9 +189,9 @@ export async function handleRoll(
             );
           }
 
-          if (game.status === "in-progress") {
-            await runBotIfNeeded(gameId, game.turn!, rooms);
-          }
+          // if (game.status === "in-progress") {
+          //   await runBotIfNeeded(gameId, game.turn!, rooms);
+          // }
           return;
         }
 
