@@ -1,7 +1,3 @@
-// ------------------------------------------------------
-//  Prisma Schema — Backgammon Event Sourcing Architecture
-// ------------------------------------------------------
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,19 +6,45 @@ datasource db {
   provider = "postgresql"
 }
 
-// ----------------------
-//  Enums
-// ----------------------
-enum GENDER {
-  MAN
-  WOMAN
-  OTHER
+// ============================================================
+//  مدل‌های ضروری گیم‌پلی (حفظ می‌شوند)
+// ============================================================
+
+model Games {
+  id          Int         @id @default(autoincrement())
+  status      GAMESTATUS  @default(PENDING)
+  createdAt   DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime?   @updatedAt @db.Timestamptz(3)
+  whitePlayerId Int?
+  blackPlayerId Int?
+  whitePlayer User? @relation("WhitePlayerRelation", fields: [whitePlayerId], references: [id])
+  blackPlayer User? @relation("BlackPlayerRelation", fields: [blackPlayerId], references: [id])
+  events      GameEvents[]
+  snapshots   GameSnapshots[]
+
+  @@index([whitePlayerId])
+  @@index([blackPlayerId])
 }
 
 enum GAMESTATUS {
   PENDING
   ACTIVE
   FINISHED
+}
+
+model GameEvents {
+  id         Int        @id @default(autoincrement())
+  gameId     Int
+  sequence   Int
+  type       EVENTTYPE
+  payload    Json
+  createdAt  DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime?  @updatedAt @db.Timestamptz(3)
+  isUndo     Boolean    @default(false)
+  game       Games      @relation(fields: [gameId], references: [id])
+
+  @@unique([gameId, sequence])
+  @@index([gameId, sequence])
 }
 
 enum EVENTTYPE {
@@ -40,6 +62,298 @@ enum EVENTTYPE {
   MANUAL_END
 }
 
+model GameSnapshots {
+  id            Int      @id @default(autoincrement())
+  gameId        Int
+  sequence      Int
+  state         Json
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  lastSequence  Int?
+  game          Games    @relation(fields: [gameId], references: [id])
+
+  @@unique([gameId, sequence])
+}
+
+model TimerPreset {
+  id               Int      @id @default(autoincrement())
+  name             String   @unique
+  primarySeconds   Int
+  secondarySeconds Int
+  leagueLevel      Int?
+  gameType         String?
+  isDefault        Boolean  @default(false)
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(3)
+
+  @@map("timer_presets")
+}
+
+// ============================================================
+//  جداول جدید (مطابق SQL مدیر فنی)
+// ============================================================
+
+model User {
+  id            Int      @id @default(autoincrement())
+  userName      String   @unique @map("Username")   // مطابق SQL
+  botPresetId   Int?     @map("BotPreset_Id")
+  joinDate      DateTime @default(now()) @db.Timestamptz(3) @map("JoinDate")
+  phoneNumber   String?  @map("PhoneNumber")
+  lastOnline    DateTime @default(now()) @db.Timestamptz(3) @map("LastOnline")
+  isLocked      Boolean  @default(false) @map("IsLocked")
+
+  // ===== فیلدهای اضافی ضروری (I NEED IT) =====
+  winRate       Float    @default(0)
+  mmr           Int      @default(0)
+  winStreak     Int      @default(0)
+  lossStreak    Int      @default(0)
+  recentResults Json?    // آرایه‌ای از boolean
+  recentOpponents Json?  // آرایه‌ای از id
+  gender        GENDER   @default(MAN)
+  level         Int?
+  password      String?
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+  // ============================================
+
+  // روابط (حذف شده‌های province, city چون در SQL نیستند)
+  botPreset     BotPreset? @relation(fields: [botPresetId], references: [id])
+  stats         UserStats?
+  additional    AdditionalStat[]
+  matchParticipants MatchParticipent[]
+  reportsAsReporter UserReport[]   @relation("Reporter")
+  reportsAsProfile  UserReport[]   @relation("ReportedProfile")
+  flags         UserFlag[]
+  inventory     UserInventoryItem[]
+
+  whiteGames    Games[] @relation("WhitePlayerRelation")
+  blackGames    Games[] @relation("BlackPlayerRelation")
+  cityId      Int?
+  city        Cities?    @relation("USER_CITY", fields: [cityId],references: [id])
+  provinceId  Int?
+  province    Provinces?     @relation("USER_PROVINCE", fields: [provinceId], references: [id])
+
+  @@map("User")
+}
+
+enum GENDER {
+  MAN
+  WOMAN
+  OTHER
+}
+
+model UserStats {
+  id        Int     @id @default(autoincrement())
+  userId    Int     @unique
+  user      User    @relation(fields: [userId], references: [id])
+  xp        Int?
+  level     Int?    @db.SmallInt
+  coin      Int?
+  gem       Int?
+
+  @@map("UserStats")
+}
+
+model AdditionalStat {
+  id      Int     @id @default(autoincrement())
+  userId  Int
+  user    User    @relation(fields: [userId], references: [id])
+  name    String  @db.VarChar(255)
+  amount  Int
+
+  @@map("AdditionalStat")
+}
+
+model RoomPreset {
+  id             Int     @id @default(autoincrement())
+  minXp          Int?    @map("minimum required XP")
+  matchmakingQueue Int?  @map("matchmaking queue")
+  coinBuyIn      Int?    @map("coin buy in")
+  coinReward     Int?    @map("coin reward")
+  timer          Int?
+  doublingCube   Int?    @map("doubling cube")
+  undo           Int?
+  rewardXp       Int?    @map("reward xp")
+  leaderboardPoint Int?  @map("leaderboard point")
+
+  matchRecords   MatchRecord[]
+
+  @@map("RoomPreset")
+}
+
+model MatchRecord {
+  id            Int           @id @default(autoincrement())
+  roomPresetId  Int?          @map("RoomStats id")
+  roomPreset    RoomPreset?   @relation(fields: [roomPresetId], references: [id])
+  diceRecord    Int?          @map("dice record")
+  startMatch    DateTime      @db.Timestamptz(3) @map("StartMatch")
+  endMatch      DateTime?     @db.Timestamptz(3) @map("EndMatch")
+  matchLength   Int?          @map("MatchLenght")
+
+  participants  MatchParticipent[]
+  timeline      MatchTimline[]
+
+  @@map("MatchRecord")
+}
+
+model MatchParticipent {
+  id                 Int                     @id @default(autoincrement())
+  matchRecordId      Int                     @map("MatchRecord_Id")
+  matchRecord        MatchRecord             @relation(fields: [matchRecordId], references: [id])
+  playerId           Int                     @map("Player_Id")
+  player             User                    @relation(fields: [playerId], references: [id])
+  side               Boolean?
+  result             Boolean?
+  resultType         MatchResultType?        @map("ResultType")
+  hits               Int                     @default(0)
+  minichatUsed       Boolean                 @default(false) @map("MinichatUsed")
+  stickersUsed       Boolean                 @default(false) @map("StickersUsed")
+  doublingCubeUseCount Int                   @default(0) @map("DoublingCubeUseCount")
+
+  disconnectRecords  MatchParticipentDisconnect[]
+  tournamentRecords  TournamentParticipentRecord[]
+
+  @@map("MatchParticipent")
+}
+
+enum MatchResultType {
+  normal
+  gammon
+  backgammon
+  timer
+  doublingcube
+  leave
+}
+
+model MatchTimline {
+  id            Int           @id @default(autoincrement())
+  matchRecordId Int?          @map("MatchRecord_Id")
+  matchRecord   MatchRecord?  @relation(fields: [matchRecordId], references: [id])
+  initiatorId   Int?          @map("Initiator_Id")
+  sequence      Int?          @map("Sequence")
+  time          DateTime      @db.Timestamptz(3) @map("Time")
+  event         String?       @db.VarChar(255) @map("Event")
+  revert        Boolean?      @map("Revert")
+  details       String?       @db.VarChar(255) @map("Details")
+
+  @@map("MatchTimline")
+}
+
+model MatchParticipentDisconnect {
+  matchParticipentId Int      @map("MatchParticipent_Id")
+  time               DateTime @db.Timestamptz(3) @map("Time")
+
+  matchParticipent MatchParticipent @relation(fields: [matchParticipentId], references: [id])
+
+  @@id([matchParticipentId, time])
+  @@map("MatchParticipentDisconnect")
+}
+
+model UserReport {
+  id          Int     @id @default(autoincrement())
+  reporterId  Int     @map("Reporter_Id")
+  reporter    User    @relation("Reporter", fields: [reporterId], references: [id])
+  profileId   Int     @map("Profile_Id")
+  profile     User    @relation("ReportedProfile", fields: [profileId], references: [id])
+  type        Bytes   @db.ByteA
+  info        String? @db.VarChar(255) @map("Info")
+
+  @@map("UserReport")
+}
+
+model UserFlag {
+  id                Int      @id @default(autoincrement())
+  userId            Int      @map("User_Id")
+  user              User     @relation(fields: [userId], references: [id])
+  type              Bytes    @db.ByteA
+  checked           Boolean
+  restrict          Boolean
+  gameRestrict      Boolean  @map("GameRestrict")
+  tournamentRestrict Boolean @map("TournamentRestrict")
+  chatRestrict      Boolean  @map("ChatRestrict")
+
+  @@map("UserFlag")
+}
+
+model InventoryItem {
+  id         Int     @id @default(autoincrement())
+  name       String  @db.VarChar(255)
+  visualCode String  @db.VarChar(255) @map("VisualCode")
+  usageType  Bytes   @db.ByteA @map("UsageType")
+
+  userItems  UserInventoryItem[]
+
+  @@map("InventoryItem")
+}
+
+model UserInventoryItem {
+  id               Int            @id @default(autoincrement())
+  userId           Int            @map("User_Id")
+  user             User           @relation(fields: [userId], references: [id])
+  inventoryItemId  Int            @map("InventoryItem_Id")
+  inventoryItem    InventoryItem  @relation(fields: [inventoryItemId], references: [id])
+  amount           Int
+  expirationDate   DateTime?      @db.Timestamptz(3) @map("ExpirationDate")
+
+  @@map("UserInventoryItem")
+}
+
+model PaymentRecord {
+  id        Int     @id @default(autoincrement())
+  clientId  Int?    @map("client_id")
+  amount    BigInt? @map("amount")
+  date      DateTime? @db.Date @map("date")
+
+  coinHistories UserCoinHistory[]
+
+  @@map("PaymentRecord")
+}
+
+model UserCoinHistory {
+  id          Int            @id @default(autoincrement())
+  clientId    Int?           @map("client_id")
+  amount      BigInt?        @map("amount")
+  date        DateTime?      @db.Date @map("date")
+  initiatorId Int?           @map("initiator_id")
+  initiator   PaymentRecord? @relation(fields: [initiatorId], references: [id])
+
+  @@map("UserCoinHistory")
+}
+
+model BotPreset {
+  id    Int    @id @default(autoincrement())
+  users User[] // رابطه‌ی یک‌به‌چند
+
+  @@map("BotPreset")
+}
+
+model LevelIntrepeter {
+  xp    Int     @id @default(autoincrement()) @map("XP")
+  level Int?    @map("Level")
+
+  @@map("LevelIntrepeter")
+}
+
+model TournamentPreset {
+  id                Int     @id @default(autoincrement())
+  tournamentType    Bytes   @db.ByteA @map("TournamentType")
+  groupCount        Int     @map("GroupCount")
+  gamePerGroup      Int     @map("GamePerGroup")
+
+  participations    TournamentParticipentRecord[]
+
+  @@map("TournamentPreset")
+}
+
+model TournamentParticipentRecord {
+  id                           Int               @id @default(autoincrement())
+  tournamentMatchParticipemntId Int              @map("TournamentMatchParticipemnt_Id")
+  matchParticipent             MatchParticipent  @relation(fields: [tournamentMatchParticipemntId], references: [id])
+  tournamentPresetId           Int               @map("TournamentPreset_Id")
+  tournamentPreset             TournamentPreset  @relation(fields: [tournamentPresetId], references: [id])
+
+  @@map("TournamentParticipentRecord")
+}
+
 enum RoomType {
   CASUAL_1
   CASUAL_2
@@ -47,168 +361,63 @@ enum RoomType {
   COMPETITIVE_2
 }
 
-// ----------------------
-//  User Table
-// ----------------------
-model Users {
-  id               Int       @id @default(autoincrement())
-  userName         String    @unique
-  winRate          Float     @default(0)
-  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt        DateTime? @updatedAt @db.Timestamptz(3)
-  gender           GENDER    @default(MAN)
-  level            Int?
-  password         String?
-  mmr              Int       @default(1000)
-  winStreak        Int       @default(0)
-  lossStreak       Int       @default(0)
-  recentResults    Json      @default("[]")     // boolean[] last 20 results
-  recentOpponents  Json      @default("[]")     // { opponentId, timestamp }[]
-  profile          Profile?  @relation("USER_PROFILE")
-  whiteGames       Games[]   @relation("WhitePlayerRelation")
-  blackGames       Games[]   @relation("BlackPlayerRelation")
-  lbRecords        MatchLBRecord[]
+model Provinces {
+  id        Int       @id @default(autoincrement())
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime? @updatedAt @db.Timestamptz(3)
+  faName    String    @unique @db.VarChar(99)
+  isCapital Boolean   @default(false)
+  enName    String?   @unique @db.VarChar(99)
+  about     String?
+  cities    Cities[]  @relation("PROVINCE_CITIES")
+  users     User[]    @relation("USER_PROVINCE")// اگر در User فیلد provinceId داشته باشید
+
+  @@map("Provinces")
 }
 
-model Profile {
-  id         Int       @id @default(autoincrement())
-  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt  DateTime? @updatedAt @db.Timestamptz(3)
-  fullName   String    @db.VarChar(70)
-  provinceId Int?
-  province   Provinces? @relation("USER_PROVINCE", fields: [provinceId], references: [id])
-  cityId     Int?
-  city       Cities?    @relation("USER_CITY", fields: [cityId], references: [id])
-  image      String?
-  mobile     String?
-  userId     Int?       @unique
-  user       Users?     @relation("USER_PROFILE", fields: [userId], references: [id])
+model Cities {
+  id         Int           @id @default(autoincrement())
+  isActive   Boolean       @default(true)
+  createdAt  DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime?     @updatedAt @db.Timestamptz(3)
+  faName     String        @db.VarChar(99)
+  isCapital  Boolean       @default(false)
+  enName     String?       @db.VarChar(99)
+  about      String?
+  latitude   Float?
+  longitude  Float?
+  population Int?
+  provinceId Int
+  province   Provinces     @relation("PROVINCE_CITIES", fields: [provinceId], references: [id])
+  users      User[]        @relation("USER_CITY")// اگر در User فیلد cityId داشته باشید
 
-  @@index([id])
-  @@index([id, cityId])
+  @@map("Cities")
 }
 
-// ----------------------
-//  Game Table
-// ----------------------
-model Games {
-  id            Int         @id @default(autoincrement())
-  status        GAMESTATUS  @default(PENDING)
-  roomType      RoomType?                //  اتاق بازی (برای لیدربورد)
-  createdAt     DateTime    @default(now()) @db.Timestamptz(3)
-  updatedAt     DateTime?   @updatedAt @db.Timestamptz(3)
-
-  whitePlayerId Int?
-  blackPlayerId Int?
-
-  whitePlayer   Users?      @relation("WhitePlayerRelation", fields: [whitePlayerId], references: [id])
-  blackPlayer   Users?      @relation("BlackPlayerRelation", fields: [blackPlayerId], references: [id])
-
-  events        GameEvents[]
-  snapshots     GameSnapshots[]
-  lbRecords     MatchLBRecord[]
-
-  @@index([whitePlayerId])
-  @@index([blackPlayerId])
-}
 
 // ----------------------
-//  GameEvent Table
-// ----------------------
-model GameEvents {
-  id         Int        @id @default(autoincrement())
-  gameId     Int
-  sequence   Int
-  type       EVENTTYPE
-  payload    Json
-  createdAt  DateTime   @default(now()) @db.Timestamptz(3)
-  updatedAt  DateTime?  @updatedAt @db.Timestamptz(3)
-  isUndo     Boolean    @default(false)
-  game       Games      @relation(fields: [gameId], references: [id])
-
-  @@index([gameId, sequence])
-  @@unique([gameId, sequence])
-}
-
-// ----------------------
-//  GameSnapshot Table
-// ----------------------
-model GameSnapshots {
-  id           Int        @id @default(autoincrement())
-  gameId       Int
-  sequence     Int
-  state        Json
-  createdAt    DateTime   @default(now()) @db.Timestamptz(3)
-  lastSequence Int?
-  game         Games      @relation(fields: [gameId], references: [id])
-
-  @@unique([gameId, sequence])
-}
-
-// ----------------------
-//  Leaderboard: ذخیره امتیاز هر مسابقه
-// ----------------------
-model MatchLBRecord {
-  id                   Int        @id @default(autoincrement())
-  userId               Int
-  opponentId           Int
-  gameId               Int
-  roomType             RoomType
-  isWin                Boolean
-  winType              String?    // "normal", "mars", "backgammon"
-  repetitionMultiplier Float
-  basePoints           Int
-  bonusPoints          Int
-  totalLBPoints        Int
-  createdAt            DateTime   @default(now()) @db.Timestamptz(3)
-
-  user   Users @relation(fields: [userId], references: [id])
-  game   Games @relation(fields: [gameId], references: [id])
-
-  @@index([userId])
-  @@index([createdAt])
-  @@index([gameId])
-}
-
-// ----------------------
-//  Timer Presets
-// ----------------------
-model TimerPreset {
-  id               Int       @id @default(autoincrement())
-  name             String    @unique
-  primarySeconds   Int
-  secondarySeconds Int
-  leagueLevel      Int?
-  gameType         String?   // "casual", "tournament"
-  isDefault        Boolean   @default(false)
-  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt        DateTime? @updatedAt @db.Timestamptz(3)
-
-  @@map("timer_presets")
-}
-
-// ----------------------
-//  Mini Static Chat
+//  mini static chat 
 // ----------------------
 model MessagesCategory {
-  id         Int              @id @default(autoincrement())
-  createdAt  DateTime         @default(now()) @db.Timestamptz(3)
-  updatedAt  DateTime?        @updatedAt @db.Timestamptz(3)
-  isActive   Boolean          @default(true)
-  nameFa     String           @unique
+  id         Int      @id @default(autoincrement())
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+  isActive  Boolean  @default(true)
+  nameFa     String   @unique
   nameEn     String?
-  isFree     Boolean          @default(false)
-  buyCount   Int?
-  conditions Json?            @db.Json
-  lock       Boolean          @default(false)
+  isFree     Boolean  @default(false)
+  buyCount   Int?            // در صورت نیاز بعداً مقداردهی می‌شود
+  conditions Json?    @db.Json
+  lock       Boolean  @default(false)
   messages   StaticMessages[] @relation("MSG_CATEGORY")
 }
 
 model StaticMessages {
-  id         Int             @id @default(autoincrement())
-  createdAt  DateTime        @default(now()) @db.Timestamptz(3)
-  updatedAt  DateTime?       @updatedAt @db.Timestamptz(3)
-  isActive   Boolean         @default(true)
+  id         Int      @id @default(autoincrement())
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+  isActive   Boolean  @default(true)
   message    String
   order      Int?
   categoryId Int
@@ -216,37 +425,4 @@ model StaticMessages {
 
   @@index([categoryId])
   @@index([isActive])
-}
-
-// ----------------------
-//  Location Tables
-// ----------------------
-model Provinces {
-  id        Int        @id @default(autoincrement())
-  isActive  Boolean    @default(true)
-  createdAt DateTime   @default(now()) @db.Timestamptz(3)
-  updatedAt DateTime?  @updatedAt @db.Timestamptz(3)
-  faName    String     @unique @db.VarChar(99)
-  isCapital Boolean    @default(false)
-  enName    String?    @unique @db.VarChar(99)
-  about     String?
-  cities    Cities[]   @relation("PROVINCE_CITIES")
-  person    Profile[]  @relation("USER_PROVINCE")
-}
-
-model Cities {
-  id         Int        @id @default(autoincrement())
-  isActive   Boolean    @default(true)
-  createdAt  DateTime   @default(now()) @db.Timestamptz(3)
-  updatedAt  DateTime?  @updatedAt @db.Timestamptz(3)
-  faName     String     @db.VarChar(99)
-  isCapital  Boolean    @default(false)
-  enName     String?    @db.VarChar(99)
-  about      String?
-  latitude   Float?
-  longitude  Float?
-  population Int?
-  provinceId Int
-  province   Provinces  @relation("PROVINCE_CITIES", fields: [provinceId], references: [id])
-  person     Profile[]  @relation("USER_CITY")
 }
