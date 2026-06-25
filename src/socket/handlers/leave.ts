@@ -57,6 +57,7 @@ export async function handleLeave(
       lastActionAt: Date.now(),
       primaryTimePerTurn: 400,
       secondaryTimeBank: {},
+      secondaryTimeTotal: {},
       rolledThisTurn: false,
     };
     return ctx.send({

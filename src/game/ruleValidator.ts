@@ -1,3 +1,4 @@
+import { computeTargetFromBar } from "./moveGenerator";
 import { GameState, PlayerId, SPECIAL_POSITIONS } from "./types";
 
 function getDirection(game: GameState, playerId: PlayerId): 1 | -1 {
@@ -14,9 +15,11 @@ export function getHomeRange(
   return dir === -1 ? [0, 5] : [18, 23];
 }
 
+// ruleValidator.ts
 export function canBearOff(game: GameState, playerId: PlayerId): boolean {
   const [start, end] = getHomeRange(game, playerId);
   const { points, bar } = game.board;
+  // اگر مهره روی BAR باشد، نمی‌توان خارج کرد
   if ((bar[playerId] ?? 0) > 0) return false;
   for (let i = 0; i < 24; i++) {
     const p = points[i];
@@ -97,6 +100,7 @@ function findMatchingDie(
   return exact ?? null;
 }
 
+// ruleValidator.ts - بخش bear off
 function findHigherDieForBearOff(
   game: GameState,
   playerId: PlayerId,
@@ -110,20 +114,19 @@ function findHigherDieForBearOff(
   const dir = getDirection(game, playerId);
   const [start, end] = getHomeRange(game, playerId);
 
-  // بررسی وجود مهره‌ای عقب‌تر (نسبت به مهره‌ی فعلی)
   let hasCheckerBehind = false;
 
   if (dir === -1) {
-    // سفید: حرکت به سمت چپ (کاهش ایندکس) → عقب‌تر = ایندکس‌های کوچک‌تر
-    for (let i = from - 1; i >= start; i--) {
+    // سفید: خانه‌ها 0 تا 5، مهره‌های عقب‌تر اندیس بزرگ‌تر دارند
+    for (let i = from + 1; i <= end; i++) {
       if (points[i].owner === playerId && points[i].count > 0) {
         hasCheckerBehind = true;
         break;
       }
     }
   } else {
-    // سیاه: حرکت به سمت راست (افزایش ایندکس) → عقب‌تر = ایندکس‌های بزرگ‌تر
-    for (let i = from + 1; i <= end; i++) {
+    // سیاه: خانه‌ها 18 تا 23، مهره‌های عقب‌تر اندیس کوچک‌تر دارند
+    for (let i = start; i < from; i++) {
       if (points[i].owner === playerId && points[i].count > 0) {
         hasCheckerBehind = true;
         break;
@@ -133,7 +136,6 @@ function findHigherDieForBearOff(
 
   if (hasCheckerBehind) return null;
 
-  // پیدا کردن کوچکترین تاس بزرگتر از distance
   const bigger = dice.filter((d) => d > distance).sort((a, b) => a - b)[0];
   return bigger ?? null;
 }
@@ -188,6 +190,12 @@ export function validateMove(
 
   // حرکت از نقاط تخته (غیر BAR)
   const src = board.points[from];
+  if (from < 0 || from > 23) {
+    return {
+      isValid: false,
+      message: "Invalid source position",
+    };
+  }
   if (!src || src.owner !== playerId || src.count <= 0) {
     return { isValid: false, message: "Invalid source point" };
   }
@@ -279,6 +287,27 @@ export function hasLegalMoves(game: GameState, playerId: PlayerId): boolean {
       }
       if (validateMove(game, playerId, i, bearOffPos).isValid) return true;
     }
+  }
+  return false;
+}
+
+export function hasLegalBarEntry(game: GameState, playerId: PlayerId): boolean {
+  const barCount = game.board.bar[playerId] ?? 0;
+  if (barCount === 0) return true; // اگر مهره‌ای روی BAR نیست، نیازی به ورود نیست
+
+  const dice = game.dice;
+  if (!dice || dice.length === 0) return false;
+
+  for (const die of dice) {
+    const to = computeTargetFromBar(game, playerId, die);
+    const result = validateMove(
+      game,
+      playerId,
+      SPECIAL_POSITIONS.BAR,
+      to,
+      dice,
+    );
+    if (result.isValid) return true;
   }
   return false;
 }

@@ -1,5 +1,5 @@
 import { GameState, Move, PlayerId, SPECIAL_POSITIONS } from "./types";
-import { validateMove } from "./ruleValidator";
+import { getHomeRange, validateMove } from "./ruleValidator";
 import { applyMove } from "./engine";
 
 export interface MoveSequence {
@@ -25,7 +25,8 @@ export function generateMoveSequences(
 
   const results: MoveSequence[] = [];
 
-  recurse(game, playerId, dice, [], results);
+  // ✅ آرگومان ششم (hitSources) اضافه شد
+  recurse(game, playerId, dice, [], results, new Set<number>());
 
   if (DEBUG_DOUBLE) {
     console.log(
@@ -86,10 +87,11 @@ function recurse(
   dice: number[],
   path: Move[],
   results: MoveSequence[],
+  hitSources: Set<number>,
 ) {
   if (DEBUG_DOUBLE) {
     console.log(
-      `[DEBUG] recurse: dice left=${dice}, path length=${path.length}`,
+      `[DEBUG] recurse: dice left=${dice}, path length=${path.length}, hitSources=${[...hitSources]}`,
     );
   }
   if (dice.length === 0) {
@@ -98,7 +100,10 @@ function recurse(
     results.push({ moves: [...path] });
     return;
   }
-  const legal = generateSingleMoves(game, playerId, dice);
+
+  // تولید حرکت‌های قانونی با در نظر گرفتن hitSources
+  const legal = generateSingleMoves(game, playerId, dice, hitSources);
+
   if (DEBUG_DOUBLE) {
     console.log(`[DEBUG] recurse: legal moves count=${legal.length}`);
   }
@@ -108,6 +113,7 @@ function recurse(
     results.push({ moves: [...path] });
     return;
   }
+
   for (const move of legal) {
     if (DEBUG_DOUBLE) {
       console.log(
@@ -116,16 +122,36 @@ function recurse(
     }
     const snapshot = takeSnapshot(game);
     try {
-      // اعمال حرکت (تاس مصرف می‌شود)
-      applyMove(game, playerId, move.from, move.to, move.die);
-      // تاس‌های باقی‌مانده را از game.dice می‌گیریم
+      // اعمال حرکت و دریافت نتیجه
+      const result = applyMove(game, playerId, move.from, move.to, move.die);
+
+      // ساخت مجموعه‌ی جدید از hitSources
+      const newHitSources = new Set(hitSources);
+      // اگر حرکت hit بود و در خونه‌ی خودی رخ داد، مبدأ را ممنوع کن
+      if (result.hit && isHomePoint(game, playerId, move.to)) {
+        newHitSources.add(move.from);
+        if (DEBUG_DOUBLE) {
+          console.log(
+            `[DEBUG] recurse: hit in home, blocking source ${move.from}`,
+          );
+        }
+      }
+
       const remaining = game.dice ? [...game.dice] : [];
       if (DEBUG_DOUBLE) {
         console.log(
           `[DEBUG] recurse: after apply, remaining dice=${remaining}`,
         );
       }
-      recurse(game, playerId, remaining, [...path, move], results);
+      // فراخوانی بازگشتی با hitSources جدید
+      recurse(
+        game,
+        playerId,
+        remaining,
+        [...path, move],
+        results,
+        newHitSources,
+      );
     } catch (err) {
       if (DEBUG_DOUBLE) {
         console.log(`[DEBUG] recurse: applyMove error: ${err}`);
@@ -135,14 +161,16 @@ function recurse(
     }
   }
 }
+
+// ✅ پارامتر hitSources اضافه شد
 function generateSingleMoves(
   game: GameState,
   playerId: PlayerId,
   dice: number[],
+  hitSources: Set<number>,
 ): Move[] {
   const moves: Move[] = [];
   const board = game.board;
-  // استفاده از ترتیب اصلی تاس‌ها (مرتب‌سازی ضروری نیست)
   const diceToTry = [...dice];
   if (DEBUG_DOUBLE) {
     console.log(
@@ -173,6 +201,9 @@ function generateSingleMoves(
     }
 
     for (let i = 0; i < 24; i++) {
+      // ✅ اگر این نقطه در لیست ممنوعه باشد، از آن حرکتی تولید نمی‌کنیم
+      if (hitSources.has(i)) continue;
+
       const p = board.points[i];
       if (!p || p.count === 0 || p.owner !== playerId) continue;
       const to = computeTarget(game, playerId, i, die);
@@ -273,7 +304,7 @@ function computeTarget(
   }
 }
 
-function computeTargetFromBar(
+export function computeTargetFromBar(
   game: GameState,
   playerId: PlayerId,
   die: number,
@@ -356,4 +387,13 @@ export function flattenMoveSequences(sequences: MoveSequence[]): Move[] {
     if (!unique.has(key)) unique.set(key, move);
   }
   return Array.from(unique.values());
+}
+
+function isHomePoint(
+  game: GameState,
+  playerId: PlayerId,
+  point: number,
+): boolean {
+  const [homeStart, homeEnd] = getHomeRange(game, playerId);
+  return point >= homeStart && point <= homeEnd;
 }

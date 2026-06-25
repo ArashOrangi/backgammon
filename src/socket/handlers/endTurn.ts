@@ -17,6 +17,8 @@ import {
 import { GameQueue } from "@/game/gameQueue";
 import { runBotIfNeeded } from "@/game/botRunner";
 import { BOT_USER_ID } from "@/static/statics";
+import { clearPendingEndTurn } from "./roll";
+import { resetWarningState, broadcastTimerStarted } from "@/game/engine/timer";
 
 const gameQueue = new GameQueue();
 
@@ -34,6 +36,9 @@ export async function handleEndTurn(
       payload: onErrorSocketResponse("Not authenticated"),
     });
   }
+  console.log(
+    `[ENDTURN] Received endTurn from player ${playerId} for game ${gameId}`,
+  );
 
   await gameQueue.enqueue(gameId, async () => {
     const game = await loadGameState(gameId);
@@ -53,13 +58,14 @@ export async function handleEndTurn(
 
     const currentSubStatus = calculateSubStatus(game);
 
-    // فقط زمانی که حرکت قانونی وجود دارد (playDice) نباید اجازه endTurn بدهیم
     if (currentSubStatus === "playDice") {
       return ctx.send({
         type: "game.error",
         payload: onErrorSocketResponse("You still have legal moves available!"),
       });
     }
+
+    clearPendingEndTurn(gameId);
 
     try {
       await appendGameEvent(gameId, {
@@ -72,7 +78,27 @@ export async function handleEndTurn(
 
       saveGame(updatedGame);
 
-      // ارسال رویداد game.turn برای اطلاع‌رسانی مستقیم نوبت جدید
+      resetWarningState(gameId);
+
+      // ===== ترتیب جدید: game.state → game.turn → timer.started =====
+      // ۱. ابتدا state کامل با subStatus محاسبه‌شده و legalMoves
+      let legalMoves: any[] = [];
+      if (updatedGame.turn !== null) {
+        legalMoves = generateMoveSequences(updatedGame, updatedGame.turn);
+      }
+      const flatLegalMoves = flattenMoveSequences(legalMoves);
+      const stateToSend = {
+        ...updatedGame,
+        subStatus: "mustEndTurn",
+        legalMoves: flatLegalMoves,
+      };
+
+      rooms.broadcast(gameId, {
+        type: "game.state",
+        payload: onOkSocketResponse(stateToSend, "Turn passed successfully"),
+      });
+
+      // ۲. سپس game.turn (اختیاری، چون state حاوی turn است)
       const nextPlayer = updatedGame.players.find(
         (p) => p.id === updatedGame.turn,
       );
@@ -86,27 +112,21 @@ export async function handleEndTurn(
         });
       }
 
-      let legalMoves: any[] = [];
-      if (updatedGame.turn !== null) {
-        legalMoves = generateMoveSequences(updatedGame, updatedGame.turn);
+      // ۳. در آخر timer.started
+      if (updatedGame.turn) {
+        broadcastTimerStarted(
+          gameId,
+          updatedGame.turn,
+          updatedGame.primaryTimePerTurn,
+          updatedGame.secondaryTimeBank[updatedGame.turn] || 0,
+          updatedGame.turnStartedAt!,
+          rooms,
+        );
       }
 
-      const flatLegalMoves = flattenMoveSequences(legalMoves);
-      const stateToSend = {
-        ...updatedGame,
-        subStatus: "mustEndTurn", // بعد از تعویض نوبت، برای حالت قبلی نیازی نیست، ولی فرستاده می‌شود
-        legalMoves: flatLegalMoves,
-      };
-
-      rooms.broadcast(gameId, {
-        type: "game.state",
-        payload: onOkSocketResponse(stateToSend, "Turn passed successfully"),
-      });
-
-      //  اضافه کردن تأخیر 100 میلی‌ثانیه
+      // تأخیر ۱۰۰ میلی‌ثانیه قبل از اجرای ربات
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // اگر نوبت بات است، بلافاصله اجرا کن
       if (updatedGame.status === "in-progress") {
         const opponentId = updatedGame.players.find(
           (p) => p.id !== playerId,

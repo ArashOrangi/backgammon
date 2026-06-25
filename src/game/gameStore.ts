@@ -63,23 +63,19 @@ export async function createInitialGameState(
     dice: undefined,
     startingDice: {},
     board: {
-      points: Array.from({ length: 24 }, () => ({
-        owner: null,
-        count: 0,
-      })),
+      points: Array.from({ length: 24 }, () => ({ owner: null, count: 0 })),
       bar: {},
       borneOff: {},
     },
     pipCount: {},
-
     cubeValue: 1,
     createdAt: Date.now(),
     lastActionAt: Date.now(),
     turnStartedAt: undefined,
-    turnTimeLimit: 30, // ممکن است بعداً حذف شود
     primaryTimePerTurn: preset.primarySeconds,
     rolledThisTurn: false,
-    secondaryTimeBank: {}, // خالی بماند تا بعداً پر شود? اما بهتر است برای بازیکنان آینده مقداردهی نشود چون هنوز بازیکنی نیست
+    secondaryTimeBank: {},
+    secondaryTimeTotal: {},
   };
 }
 
