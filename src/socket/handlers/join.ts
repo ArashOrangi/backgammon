@@ -1,3 +1,4 @@
+// socket/handlers/join.ts
 import {
   getGame,
   saveGame,
@@ -18,6 +19,14 @@ import { RoomType } from "@prisma/client";
 
 type JoinPayload = { gameId: number; userId: number; roomType?: RoomType };
 
+// ======================================================
+// ذخیره SocketContext کاربران در حال انتظار در صف
+// ======================================================
+const waitingSockets = new Map<number, SocketContext>();
+
+/**
+ * تنظیم تایمرهای پیش‌فرض برای بازی (در صورت نیاز)
+ */
 async function applyTimerSettingsToGame(game: GameState) {
   const preset = await getDefaultTimerPreset();
   let needUpdate = false;
@@ -38,6 +47,44 @@ async function applyTimerSettingsToGame(game: GameState) {
   }
 }
 
+/**
+ * ارسال پیام به کاربر در حال انتظار که بازی آماده است
+ * این تابع از matchmaking.ts صدا زده می‌شود
+ */
+export async function notifyUserGameReady(
+  userId: number,
+  gameId: number,
+  rooms: RoomManager,
+) {
+  const ctx = waitingSockets.get(userId);
+  if (!ctx) return;
+
+  // حذف کاربر از صف (چون دیگر منتظر نیست)
+  waitingSockets.delete(userId);
+
+  // بارگذاری وضعیت کامل بازی
+  const game = await loadGameState(gameId);
+  if (!game) {
+    ctx.send({
+      type: "game.error",
+      payload: onErrorSocketResponse("Game not found"),
+    });
+    return;
+  }
+
+  // کاربر را به اتاق اضافه کن (قبل از ارسال پیام)
+  rooms.join(gameId, ctx, "player");
+
+  // ارسال وضعیت کامل بازی به کاربر
+  ctx.send({
+    type: "game.state",
+    payload: onOkSocketResponse(game, "Opponent found! Game is ready."),
+  });
+}
+
+/**
+ * هندلر اصلی Join
+ */
 export async function handleJoin(
   ctx: SocketContext,
   payload: JoinPayload,
@@ -49,20 +96,26 @@ export async function handleJoin(
   try {
     // ---------- حالت مچ‌میکینگ (خودکار) ----------
     if (gameId === -1) {
-      // اگر کاربر قبلاً در صف است، خطا بده
-      const alreadyQueued = await prisma.users.findUnique({
-        where: { id: userId },
-        select: { id: true },
-      }); // ساده: می‌توانیم از یک Map محلی برای تشخیص استفاده کنیم
-      // برای سادگی فرض می‌کنیم addToMatchmaking خودش تکراری را مدیریت می‌کند
+      // ۱. بررسی اینکه کاربر قبلاً در صف نیست
+      if (waitingSockets.has(userId)) {
+        return ctx.send({
+          type: "game.error",
+          payload: onErrorSocketResponse("Already in matchmaking queue"),
+        });
+      }
 
+      // ۲. تلاش برای پیدا کردن حریف (همگام) - rooms را هم پاس می‌دهیم
       const matchedGameId = await addToMatchmaking(
         userId,
         roomType || RoomType.CASUAL_1,
+        rooms, // <-- اضافه شد
       );
 
       if (matchedGameId === 0) {
-        // در صف قرار گرفت – فقط وضعیت منتظر را بفرست
+        // ---------- در صف قرار گرفت ----------
+        waitingSockets.set(userId, ctx);
+
+        // ارسال وضعیت منتظر به کاربر
         const waitingGame = await createInitialGameState(-1);
         waitingGame.status = "waiting";
         waitingGame.subStatus = "playerJoin";
@@ -72,7 +125,11 @@ export async function handleJoin(
           payload: onOkSocketResponse(waitingGame, "Waiting for opponent"),
         });
       } else {
-        // حریف پیدا شد (انسانی یا بات) – بازی را بارگذاری کن
+        // ---------- حریف پیدا شد (انسانی یا بات) ----------
+        // کاربر فعلی را به اتاق اضافه کن
+        rooms.join(matchedGameId, ctx, "player");
+
+        // بازی را بارگذاری کن
         const game = await loadGameState(matchedGameId);
         if (!game) {
           return ctx.send({
@@ -99,13 +156,10 @@ export async function handleJoin(
           });
         }
 
-        // تنظیم تایمرهای بازی (اگر قبلاً تنظیم نشده)
+        // تنظیم تایمر
         await applyTimerSettingsToGame(game);
 
-        // کاربر فعلی را به اتاق اضافه کن
-        rooms.join(matchedGameId, ctx, "player");
-
-        // وضعیت بازی را ready کن (اگر هنوز ready نیست)
+        // وضعیت بازی را ready کن
         if (game.status !== "ready") {
           game.status = "ready";
           game.subStatus = "gameReady";
@@ -114,12 +168,19 @@ export async function handleJoin(
           await forceSnapshot(game.id, game);
         }
 
-        // برای کاربر دیگر (اگر آنلاین است) قبلاً توسط مچ‌میکینگ یا بات به اتاق اضافه شده
-        // اما باید به همه بگوییم بازی آماده است
+        // به همه (هر دو بازیکن) بگو بازی آماده است
         rooms.broadcast(matchedGameId, {
           type: "game.state",
           payload: onOkSocketResponse(game, "Both players joined, ready"),
         });
+
+        // پاک کردن کاربر از صف (در صورت وجود)
+        waitingSockets.delete(userId);
+        const otherPlayer = game.players.find((p) => p.id !== userId);
+        if (otherPlayer) {
+          waitingSockets.delete(otherPlayer.id);
+        }
+
         return;
       }
     }
@@ -188,6 +249,8 @@ export async function handleJoin(
     }
   } catch (err) {
     console.error("Join Error:", err);
+    // در صورت خطا، کاربر را از صف حذف کن
+    waitingSockets.delete(userId);
     ctx.send({
       type: "game.error",
       payload: onErrorSocketResponse(
@@ -197,7 +260,10 @@ export async function handleJoin(
   }
 }
 
-// تابع پاک کردن کاربر از صف (در صورت لزوم از خارج)
+/**
+ * تابع پاک کردن کاربر از صف (در صورت خروج یا قطع اتصال)
+ */
 export function clearWaitingUser(userId: number) {
+  waitingSockets.delete(userId);
   removeFromMatchmaking(userId);
 }

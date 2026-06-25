@@ -1,6 +1,7 @@
+// models/game.ts
 import { errorHandlersOnPrisma } from "@/components/errorHandler";
 import { prisma } from "@/components/prisma";
-import { $Enums, RoomType } from "@prisma/client";
+import { $Enums } from "@prisma/client";
 
 export interface Game {
   id: number;
@@ -20,19 +21,14 @@ const prismaSelectGame = {
   updatedAt: true,
 };
 
-export async function prismaGameCreate(
-  whitePlayerId: number,
-  roomType?: RoomType,
-) {
+export async function prismaGameCreate(whitePlayerId: number) {
   try {
     const game = await prisma.games.create({
       data: {
         whitePlayerId,
-        roomType,
       },
       select: prismaSelectGame,
     });
-
     return game;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
@@ -45,7 +41,6 @@ export async function prismaGameGetById(id: number) {
       where: { id },
       select: prismaSelectGame,
     });
-
     return game;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
@@ -68,7 +63,6 @@ export async function prismaGameJoin({
       },
       select: prismaSelectGame,
     });
-
     return game;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
@@ -83,19 +77,6 @@ export async function prismaGameFinish(gameId: number) {
         status: "FINISHED",
       },
       select: prismaSelectGame,
-    });
-
-    return game;
-  } catch (error) {
-    return errorHandlersOnPrisma({ error });
-  }
-}
-
-export async function prismaGameGetInfo(gameId: number) {
-  try {
-    const game = await prisma.games.findUnique({
-      where: { id: gameId },
-      select: { roomType: true, createdAt: true },
     });
     return game;
   } catch (error) {

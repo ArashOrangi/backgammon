@@ -124,9 +124,6 @@ async function handleTimeout(
     },
   });
 
-  // به‌روزرسانی آمار بازیکنان (MMR، استریک و تاریخچه)
-  await updatePlayerStatsAfterGame(winner.id, loserId, gameId);
-
   const finalGame = await loadGameState(gameId);
   if (finalGame) {
     saveGame(finalGame);

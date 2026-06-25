@@ -26,11 +26,11 @@ export async function jwtVerifySession({ token }: { token: string }) {
 }
 
 // user
-export async function jwtSignUser({ username }: { username: string }) {
-  const jwt = await new SignJWT({ id: username })
+export async function jwtSignUser({ userName }: { userName: string }) {
+  const jwt = await new SignJWT({ id: userName })
     .setProtectedHeader({ alg })
     .sign(new TextEncoder().encode(secretTokenUser));
-  // const jwt = await sign({ username }, secretTokenUser);
+  // const jwt = await sign({ userName }, secretTokenUser);
 
   return jwt;
 }

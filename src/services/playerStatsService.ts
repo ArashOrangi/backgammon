@@ -6,8 +6,8 @@ export async function updatePlayerStatsAfterGame(
   loserId: number,
   gameId: number,
 ) {
-  const winner = await prisma.users.findUnique({ where: { id: winnerId } });
-  const loser = await prisma.users.findUnique({ where: { id: loserId } });
+  const winner = await prisma.user.findUnique({ where: { id: winnerId } });
+  const loser = await prisma.user.findUnique({ where: { id: loserId } });
   if (!winner || !loser) return;
 
   // به‌روزرسانی MMR
@@ -37,7 +37,7 @@ export async function updatePlayerStatsAfterGame(
   loserOpponents.unshift({ opponentId: winnerId, timestamp: now });
   if (loserOpponents.length > 10) loserOpponents.pop();
 
-  await prisma.users.update({
+  await prisma.user.update({
     where: { id: winnerId },
     data: {
       mmr: newWinnerMmr,
@@ -47,7 +47,7 @@ export async function updatePlayerStatsAfterGame(
       recentOpponents: winnerOpponents,
     },
   });
-  await prisma.users.update({
+  await prisma.user.update({
     where: { id: loserId },
     data: {
       mmr: newLoserMmr,

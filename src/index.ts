@@ -15,14 +15,18 @@ import { OrmState } from "./models/enums";
 import { chatRoutes } from "./routes/miniChat";
 import { locationRoutes } from "./routes/location";
 import { getWsLogs, clearWsLogs } from "./utils/wsLogger";
+import { middlewareAuth } from "./middlewares/middlewareAuth";
+import { accountRoute } from "./routes/account";
 
 dotenv.config();
 
 const app = new Hono();
 app.use(logger());
+app.use("*", middlewareAuth);
 
 // مسیرهای API
 app.get("/api", (c) => c.text("Hello Hono!"));
+app.route("/api/account", accountRoute);
 app.route("/api/users", userRoutes);
 app.route("/api/games", gameRoutes);
 app.route("/api/history", history);

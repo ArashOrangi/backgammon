@@ -15,7 +15,7 @@ import {
   generateMoveSequences,
 } from "@/game/moveGenerator";
 import { GameQueue } from "@/game/gameQueue";
-import { removeFromMatchmaking } from "@/models/matchmaking"; // <-- تغییر اینجا
+import { clearWaitingUser } from "./join";
 import { GameState } from "@/game/types";
 
 const gameQueue = new GameQueue();
@@ -37,9 +37,9 @@ export async function handleLeave(
     });
   }
 
-  // حالت مچ‌میکینگ (gameId = -1)
+  // ✅ حالت مچ‌میکینگ (gameId = -1)
   if (gameId === -1) {
-    removeFromMatchmaking(playerId); // <-- جایگزین clearWaitingUser
+    clearWaitingUser(playerId);
     const waitingGameState: GameState = {
       id: -1,
       players: [{ id: playerId, color: "white" }],
@@ -97,6 +97,7 @@ export async function handleLeave(
           saveGame(updatedGame);
           rooms.leave(ctx);
 
+          // محاسبه subStatus و legalMoves برای وضعیت جدید
           const subStatus = calculateSubStatus(updatedGame);
           let legalMoves: any[] = [];
           if (updatedGame.turn !== null) {

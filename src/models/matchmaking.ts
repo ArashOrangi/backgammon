@@ -1,12 +1,14 @@
+// models/matchmaking.ts
 import { prisma } from "@/components/prisma";
-import { prismaGameCreate } from "./game";
 import { appendGameEvent, forceSnapshot } from "@/game/eventStore";
 import { getDefaultTimerPreset } from "./timerPreset";
 import { OrmState } from "./enums";
 import { BOT_USER_ID } from "@/static/statics";
 import type { GameState } from "@/game/types";
 import { RoomType } from "@prisma/client";
-
+import { RoomManager } from "@/socket/room-manager";
+import { notifyUserGameReady } from "@/socket/handlers/join";
+import { prismaGameCreate } from "./game";
 export interface RoomConfig {
   id: RoomType;
   name: string;
@@ -58,14 +60,14 @@ const queues = new Map<RoomType, QueuedPlayer[]>();
 
 // -------------------- توابع کمکی داخلی --------------------
 
-/** محاسبه محدوده مجاز MMR بر اساس زمان انتظار */
+/** محاسبه محدوده مجاز MMR بر اساس زمان انتظار (طبق PDF) */
 function getAllowedRange(queued: QueuedPlayer, config: RoomConfig): number {
   const waitSeconds = (Date.now() - queued.queueEnterTime) / 1000;
   const range = config.initialRange + Math.floor(waitSeconds / 3) * 50;
   return Math.min(range, config.maxRange);
 }
 
-/** بررسی قوانین جلوگیری از تکرار حریف (۳ بازی در ۳۰ دقیقه، دو بازی پشت سر هم ممنوع) */
+/** بررسی قوانین جلوگیری از تکرار حریف (PDF: حداکثر ۲ بازی پشت سر هم و حداکثر ۳ بازی در ۳۰ دقیقه) */
 function canMatchAgain(
   playerId: number,
   opponentId: number,
@@ -86,18 +88,20 @@ function canMatchAgain(
   return true;
 }
 
-/** اعمال قوانین Streak (برد/باخت پشت سر هم) */
+/** اعمال قوانین Streak (طبق PDF) */
 function isStreakValid(player: any, opponent: any): boolean {
-  // Loss Streak
-  if (player.lossStreak >= 3 && player.lossStreak <= 4) {
+  // Loss Streak قوانین
+  if (player.lossStreak === 3) {
     if (opponent.mmr > player.mmr + 100) return false;
   }
+  if (player.lossStreak === 4) {
+    if (opponent.mmr > player.mmr + 50) return false;
+  }
   if (player.lossStreak >= 5) {
-    if (opponent.mmr > player.mmr + 50 || opponent.mmr > player.mmr)
-      return false;
+    if (opponent.mmr > player.mmr) return false;
   }
 
-  // Win Streak
+  // Win Streak قوانین
   if (player.winStreak >= 4 && player.winStreak <= 5) {
     if (opponent.mmr < player.mmr - 100) return false;
   }
@@ -107,7 +111,7 @@ function isStreakValid(player: any, opponent: any): boolean {
   return true;
 }
 
-/** اولویت نرم Win Rate (ترجیح حریف با MMR بیشتر یا کمتر) */
+/** اولویت نرم Win Rate (طبق PDF) */
 function getWinRatePreference(player: any, opponent: any): number {
   const wins = (player.recentResults as boolean[]).filter(
     (r) => r === true,
@@ -124,13 +128,13 @@ function getWinRatePreference(player: any, opponent: any): number {
   return 0;
 }
 
-/** جستجوی بهترین حریف در صف یک اتاق */
+/** جستجوی بهترین حریف در صف یک اتاق (طبق فرآیند انتخاب PDF) */
 async function findOpponent(
   queuedPlayer: QueuedPlayer,
   config: RoomConfig,
 ): Promise<QueuedPlayer | null> {
   const queue = queues.get(queuedPlayer.room) || [];
-  const currentPlayer = await prisma.users.findUnique({
+  const currentPlayer = await prisma.user.findUnique({
     where: { id: queuedPlayer.userId },
   });
   if (!currentPlayer) return null;
@@ -144,38 +148,39 @@ async function findOpponent(
   if (candidates.length === 0) return null;
 
   const candidateIds = candidates.map((c) => c.userId);
-  const candidateUsers = await prisma.users.findMany({
+  const candidateUsers = await prisma.user.findMany({
     where: { id: { in: candidateIds } },
   });
   const userMap = new Map(candidateUsers.map((u) => [u.id, u]));
 
-  // مرحله ۲: فیلتر MMR
+  // مرحله ۱: فیلتر MMR (بر اساس allowed_range)
   let filtered = candidates.filter((c) => {
     const u = userMap.get(c.userId);
     return u && u.mmr >= minMmr && u.mmr <= maxMmr;
   });
   if (filtered.length === 0) return null;
 
-  // مرحله ۳: جلوگیری از تکرار حریف
+  // مرحله ۲: جلوگیری از تکرار حریف
   const recentOpponents = (currentPlayer.recentOpponents as any[]) || [];
   filtered = filtered.filter((c) =>
     canMatchAgain(queuedPlayer.userId, c.userId, recentOpponents),
   );
   if (filtered.length === 0) return null;
 
-  // مرحله ۴: اعمال قوانین Streak
+  // مرحله ۳: اعمال قوانین Streak
   filtered = filtered.filter((c) =>
     isStreakValid(currentPlayer, userMap.get(c.userId)!),
   );
   if (filtered.length === 0) return null;
 
-  // مرحله ۵: اولویت Win Rate و سپس نزدیک‌ترین MMR
+  // مرحله ۴: اعمال ترجیح Win Rate (اولویت اول)
   filtered.sort((a, b) => {
     const oppA = userMap.get(a.userId)!;
     const oppB = userMap.get(b.userId)!;
     const prefA = getWinRatePreference(currentPlayer, oppA);
     const prefB = getWinRatePreference(currentPlayer, oppB);
     if (prefA !== prefB) return prefA - prefB;
+    // مرحله ۵: نزدیک‌ترین MMR
     const diffA = Math.abs(currentPlayer.mmr - oppA.mmr);
     const diffB = Math.abs(currentPlayer.mmr - oppB.mmr);
     return diffA - diffB;
@@ -211,7 +216,7 @@ async function createGameBetween(
     payload: { playerId: blackId, color: "black" },
   });
 
-  // تنظیم تایمرهای پیش‌فرض (بعداً در ready اعمال می‌شوند)
+  // تنظیم تایمرهای پیش‌فرض
   const preset = await getDefaultTimerPreset();
   let state = await import("@/game/eventStore").then((m) =>
     m.loadGameState(game.id),
@@ -228,12 +233,13 @@ async function createGameBetween(
   return game.id;
 }
 
-/** زمان انتظار و ساخت بات در صورت عدم پیدا شدن حریف */
+/** زمان انتظار و ساخت بات در صورت عدم پیدا شدن حریف (طبق PDF) */
 function scheduleBotCheck(
   userId: number,
   room: RoomType,
   enterTime: number,
   timeoutSec: number,
+  rooms?: RoomManager,
 ) {
   setTimeout(async () => {
     const queue = queues.get(room) || [];
@@ -246,7 +252,6 @@ function scheduleBotCheck(
     const updatedQueue = queue.filter((p) => p.userId !== userId);
     queues.set(room, updatedQueue);
 
-    // ساخت بازی با بات
     try {
       const botId = BOT_USER_ID;
       const gameId = await createGameBetween(userId, botId, room);
@@ -256,19 +261,19 @@ function scheduleBotCheck(
         );
         return;
       }
-      // اطلاع‌رسانی به کاربر از طریق WebSocket بعداً در join.ts انجام می‌شود
-      // (نیاز به دسترسی به SocketContext داریم، بنابراین در join.ts پس از برگشت gameId پیام ارسال می‌شود)
+      if (rooms) {
+        await notifyUserGameReady(userId, gameId, rooms);
+      }
       console.log(
         `[Matchmaking] Bot game created: ${gameId} for user ${userId}`,
       );
-      // در اینجا نمی‌توانیم به کلاینت پیام بدهیم؛ join.ts خودش بعد از دریافت gameId(!==0) مراحل را طی می‌کند
     } catch (err) {
       console.error(`[Matchmaking] Bot creation error:`, err);
     }
   }, timeoutSec * 1000);
 }
 
-// -------------------- توابع عمومی (همان API قبلی) --------------------
+// -------------------- توابع عمومی --------------------
 
 /**
  * افزودن کاربر به صف مچ‌میکینگ
@@ -279,6 +284,7 @@ function scheduleBotCheck(
 export async function addToMatchmaking(
   userId: number,
   roomType: RoomType = RoomType.CASUAL_1,
+  rooms?: RoomManager,
 ): Promise<number> {
   // حذف کاربر از هر صف دیگری (در صورت وجود)
   for (const [room, q] of queues.entries()) {
@@ -309,11 +315,13 @@ export async function addToMatchmaking(
   }
 
   // در صف ماند و تایم‌اوت برای بات
+  // زمان‌بندی برای بات
   scheduleBotCheck(
     userId,
     roomType,
     queuedPlayer.queueEnterTime,
     config.botTimeoutSeconds,
+    rooms, // <-- پاس دادن rooms
   );
   return 0;
 }
@@ -330,23 +338,17 @@ export function removeFromMatchmaking(userId: number): void {
   }
 }
 
-// -------------------- بروزرسانی آمار پس از پایان بازی --------------------
-/**
- * این تابع بعد از پایان هر بازی صدا زده شود
- * @param winnerId برنده
- * @param loserId بازنده
- * @param gameId (اختیاری، برای لاگ)
- */
+// -------------------- بروزرسانی آمار پس از پایان بازی (طبق PDF) --------------------
 export async function updatePlayerStatsAfterGame(
   winnerId: number,
   loserId: number,
   gameId?: number,
 ): Promise<void> {
-  const winner = await prisma.users.findUnique({ where: { id: winnerId } });
-  const loser = await prisma.users.findUnique({ where: { id: loserId } });
+  const winner = await prisma.user.findUnique({ where: { id: winnerId } });
+  const loser = await prisma.user.findUnique({ where: { id: loserId } });
   if (!winner || !loser) return;
 
-  // به‌روزرسانی MMR
+  // به‌روزرسانی MMR (طبق PDF: +25 برد، -25 باخت)
   const newWinnerMmr = Math.max(0, winner.mmr + 25);
   const newLoserMmr = Math.max(0, loser.mmr - 25);
 
@@ -373,7 +375,7 @@ export async function updatePlayerStatsAfterGame(
   loserOpponents.unshift({ opponentId: winnerId, timestamp: now });
   if (loserOpponents.length > 10) loserOpponents.pop();
 
-  await prisma.users.update({
+  await prisma.user.update({
     where: { id: winnerId },
     data: {
       mmr: newWinnerMmr,
@@ -383,7 +385,7 @@ export async function updatePlayerStatsAfterGame(
       recentOpponents: winnerOpponents,
     },
   });
-  await prisma.users.update({
+  await prisma.user.update({
     where: { id: loserId },
     data: {
       mmr: newLoserMmr,
@@ -395,7 +397,7 @@ export async function updatePlayerStatsAfterGame(
   });
 }
 
-// -------------------- تعیین سطح بات بر اساس استریک بازیکن --------------------
+// -------------------- تعیین سطح سختی Bot (طبق PDF) --------------------
 export function getBotDifficulty(player: any): {
   level: string;
   botMmr: number;
@@ -403,8 +405,10 @@ export function getBotDifficulty(player: any): {
   const lossStreak = player.lossStreak;
   const winStreak = player.winStreak;
   if (lossStreak >= 4) return { level: "Easy", botMmr: player.mmr - 80 };
-  if (lossStreak >= 2) return { level: "Normal-Easy", botMmr: player.mmr - 40 };
+  if (lossStreak >= 2 && lossStreak <= 3)
+    return { level: "Normal-Easy", botMmr: player.mmr - 40 };
   if (winStreak >= 6) return { level: "Hard", botMmr: player.mmr + 80 };
-  if (winStreak >= 4) return { level: "Normal-Hard", botMmr: player.mmr + 40 };
+  if (winStreak >= 4 && winStreak <= 5)
+    return { level: "Normal-Hard", botMmr: player.mmr + 40 };
   return { level: "Normal", botMmr: player.mmr };
 }

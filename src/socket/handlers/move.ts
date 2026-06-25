@@ -20,10 +20,6 @@ import { isGameOver, calculateWinType } from "../../game/engine";
 import { saveGame } from "../../game/gameStore";
 import { SPECIAL_POSITIONS } from "@/game/types";
 import { runBotIfNeeded } from "@/game/botRunner";
-import { updatePlayerStatsAfterGame } from "@/models/matchmaking";
-import { prismaGameGetInfo } from "@/models/game";
-import { updateLeaderboardAfterGame } from "@/services/leaderboardService";
-import { OrmState } from "@/models/enums";
 
 type MoveItem = {
   gameId: number;
@@ -88,6 +84,15 @@ export async function handleMove(
       isUndo?: boolean;
     }> = [];
 
+    /**
+     * Important:
+     *
+     * Some clients may send multiple visual items for undo, especially when the
+     * original move was a hit and the opponent checker visually goes to BAR.
+     *
+     * In event-sourcing we only undo the actual MOVE_APPLIED event once.
+     * So this guard prevents double-undo in a single move request.
+     */
     let undoAppliedInThisRequest = false;
 
     for (const moveItem of payload) {
@@ -134,6 +139,10 @@ export async function handleMove(
 
         undoAppliedInThisRequest = true;
 
+        /**
+         * Prefer the event-store payload over the client payload.
+         * The client payload may contain visual/helper moves, especially for hits.
+         */
         const normalizedUndonePayload = undonePayload as {
           playerId?: number;
           from?: number;
@@ -163,6 +172,7 @@ export async function handleMove(
         });
       }
 
+      // جلوگیری از حرکت مستقیم مهره به BAR (حرکت hit فقط توسط سرور ثبت می‌شود)
       if (to === SPECIAL_POSITIONS.BAR) {
         return ctx.send({
           type: "game.error",
@@ -242,7 +252,6 @@ export async function handleMove(
 
       if (isGameOver(finalGame)) {
         const winType = calculateWinType(finalGame, playerId);
-        const loserId = finalGame.players.find((p) => p.id !== playerId)?.id;
 
         await appendGameEvent(gameId, {
           type: "GAME_FINISHED",
@@ -252,27 +261,6 @@ export async function handleMove(
             reason: "REGULAR",
           },
         });
-
-        if (loserId) {
-          await updatePlayerStatsAfterGame(playerId, loserId, gameId);
-
-          const gameInfo = await prismaGameGetInfo(gameId);
-          if (
-            gameInfo !== OrmState.Error &&
-            gameInfo !== null &&
-            gameInfo.roomType &&
-            gameInfo.createdAt
-          ) {
-            await updateLeaderboardAfterGame(
-              gameId,
-              playerId,
-              loserId,
-              gameInfo.roomType,
-              winType,
-              gameInfo.createdAt,
-            );
-          }
-        }
 
         const finishedGame = await loadGameState(gameId);
 

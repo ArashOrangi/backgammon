@@ -1,3 +1,4 @@
+// routes/users.ts
 import { Hono } from "hono";
 import {
   onOkRestResponse,
@@ -17,10 +18,12 @@ import {
   RegisterSchema,
   UpdateProfileSchema,
 } from "@/validations/userSchema";
+import { IMiddlewareAuth } from "@/models/middleware";
+import { middlewareAuth } from "@/middlewares/middlewareAuth";
 
-export const userRoutes = new Hono();
+export const userRoutes = new Hono<IMiddlewareAuth>();
 
-// ساخت کاربر ساده بدون پروفایل (Legacy)
+// ایجاد کاربر ساده (Legacy)
 userRoutes.post("/", async (c) => {
   const body = await c.req.json();
   const validation = validator({ data: body, schema: SimpleUserSchema });
@@ -42,36 +45,8 @@ userRoutes.post("/", async (c) => {
   return onOkRestResponse({ ctx: c, data: result });
 });
 
-// ثبت‌نام کامل با پروفایل
-userRoutes.post("/register", async (c) => {
-  const body = await c.req.json();
-  const validation = validator({ data: body, schema: RegisterSchema });
-  if (!validation.isValid) {
-    return onValidationsRestResponse({
-      ctx: c,
-      validations: validation.errors,
-      message: "Validation failed",
-    });
-  }
-  const { userName, fullName, provinceId, cityId, image, mobile, gender } =
-    validation.data;
-  const result = await createUserWithProfile({
-    userName,
-    fullName,
-    provinceId: provinceId ? Number(provinceId) : undefined,
-    cityId: cityId ? Number(cityId) : undefined,
-    image,
-    mobile,
-    gender,
-  });
-  if (!result || (result as any).errorType) {
-    return onErrorRestResponse({ ctx: c, errorMessage: "Registration failed" });
-  }
-  return onOkRestResponse({ ctx: c, data: result });
-});
-
-// دریافت اطلاعات کاربر + پروفایل
-userRoutes.get("/profile/:userId", async (c) => {
+// دریافت اطلاعات کاربر + پروفایل (با middlewareAuth)
+userRoutes.get("/profile/:userId", middlewareAuth, async (c) => {
   const userIdRaw = c.req.param("userId");
   const userId = Number(userIdRaw);
   if (isNaN(userId) || !Number.isInteger(userId) || userId <= 0) {
@@ -88,8 +63,8 @@ userRoutes.get("/profile/:userId", async (c) => {
   return onOkRestResponse({ ctx: c, data: result });
 });
 
-// بروزرسانی پروفایل
-userRoutes.put("/profile/:userId", async (c) => {
+// بروزرسانی پروفایل (با middlewareAuth)
+userRoutes.put("/profile/:userId", middlewareAuth, async (c) => {
   const userIdRaw = c.req.param("userId");
   const userId = Number(userIdRaw);
   if (isNaN(userId) || !Number.isInteger(userId) || userId <= 0) {
@@ -108,16 +83,25 @@ userRoutes.put("/profile/:userId", async (c) => {
       message: "Validation failed",
     });
   }
-  const { fullName, provinceId, cityId, image, mobile } = validation.data;
+  const { provinceId, cityId, image, phoneNumber } = validation.data;
   const result = await updateUserProfile(userId, {
-    fullName,
+    // fullName,
     provinceId,
     cityId,
     image,
-    mobile,
+    phoneNumber,
   });
   if (!result || (result as any).errorType) {
     return onErrorRestResponse({ ctx: c, errorMessage: "Update failed" });
   }
   return onOkRestResponse({ ctx: c, data: result });
+});
+
+// دریافت کاربر فعلی (از توکن)
+userRoutes.get("/me", middlewareAuth, async (c) => {
+  const user = c.get("user");
+  if (!user) {
+    return onErrorRestResponse({ ctx: c, errorMessage: "Not authenticated" });
+  }
+  return onOkRestResponse({ ctx: c, data: user });
 });
