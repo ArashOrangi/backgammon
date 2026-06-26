@@ -7,7 +7,7 @@ datasource db {
 }
 
 // ============================================================
-//  مدل‌های ضروری گیم‌پلی (حفظ می‌شوند)
+//  مدل‌های گیم‌پلی
 // ============================================================
 
 model Games {
@@ -89,48 +89,90 @@ model TimerPreset {
 }
 
 // ============================================================
-//  جداول جدید (مطابق SQL مدیر فنی)
+//  مدل‌های اصلی (User و وابسته‌ها)
 // ============================================================
 
 model User {
   id            Int      @id @default(autoincrement())
-  userName      String   @unique @map("Username")   // مطابق SQL
+  userName      String   @unique @map("Username")
   botPresetId   Int?     @map("BotPreset_Id")
   joinDate      DateTime @default(now()) @db.Timestamptz(3) @map("JoinDate")
   phoneNumber   String?  @map("PhoneNumber")
   lastOnline    DateTime @default(now()) @db.Timestamptz(3) @map("LastOnline")
   isLocked      Boolean  @default(false) @map("IsLocked")
 
-  // ===== فیلدهای اضافی ضروری (I NEED IT) =====
+  // ===== فیلدهای گیم‌پلی (I NEED IT) =====
   winRate       Float    @default(0)
   mmr           Int      @default(0)
   winStreak     Int      @default(0)
   lossStreak    Int      @default(0)
-  recentResults Json?    // آرایه‌ای از boolean
-  recentOpponents Json?  // آرایه‌ای از id
+  recentResults Json?
+  recentOpponents Json?
   gender        GENDER   @default(MAN)
   level         Int?
   password      String?
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  // ===== فیلدهای پروفایل (I NEED IT) =====
+  avatar        String?   // تصویر پروفایل
+  frame         String?   // قاب عکس
+  title         String?   // لقب
+
+  // ===== فیلدهای شخصی‌سازی (I NEED IT) =====
+  selectedDiceId     Int?
+  selectedCheckerId  Int?
+  selectedCupId      Int?
+  selectedBoardId    Int?
+  selectedStickerId  Int?
+
+  // ===== آمار بازی (I NEED IT) =====
+  totalWins     Int     @default(0)
+  totalMars     Int     @default(0)
+  totalBackgammon Int   @default(0)
+  totalMatches  Int     @default(0)
+
+  // ===== فیلدهای مکان (I NEED IT) =====
+  provinceId    Int?
+  cityId        Int?
+
   // ============================================
 
-  // روابط (حذف شده‌های province, city چون در SQL نیستند)
-  botPreset     BotPreset? @relation(fields: [botPresetId], references: [id])
-  stats         UserStats?
-  additional    AdditionalStat[]
-  matchParticipants MatchParticipent[]
-  reportsAsReporter UserReport[]   @relation("Reporter")
-  reportsAsProfile  UserReport[]   @relation("ReportedProfile")
-  flags         UserFlag[]
-  inventory     UserInventoryItem[]
+  // ---------- Relation‌ها ----------
 
+  // 1 روابط با جداول مکان
+  province      Provinces? @relation("USER_PROVINCE", fields: [provinceId], references: [id])
+  city          Cities?    @relation("USER_CITY", fields: [cityId], references: [id])
+
+  // 2 روابط با جداول گیم‌پلی
+  botPreset     BotPreset? @relation(fields: [botPresetId], references: [id])
   whiteGames    Games[] @relation("WhitePlayerRelation")
   blackGames    Games[] @relation("BlackPlayerRelation")
-  cityId      Int?
-  city        Cities?    @relation("USER_CITY", fields: [cityId],references: [id])
-  provinceId  Int?
-  province    Provinces?     @relation("USER_PROVINCE", fields: [provinceId], references: [id])
+
+  // 3 روابط با جداول شخصی‌سازی (Inventory)
+  selectedDice     InventoryItem? @relation("SelectedDice", fields: [selectedDiceId], references: [id])
+  selectedChecker  InventoryItem? @relation("SelectedChecker", fields: [selectedCheckerId], references: [id])
+  selectedCup      InventoryItem? @relation("SelectedCup", fields: [selectedCupId], references: [id])
+  selectedBoard    InventoryItem? @relation("SelectedBoard", fields: [selectedBoardId], references: [id])
+  selectedSticker  InventoryItem? @relation("SelectedSticker", fields: [selectedStickerId], references: [id])
+
+  // 4 روابط با جداول آمار و پیشرفت
+  stats         UserStats?
+  additional    AdditionalStat[]
+
+  // 5 روابط با جداول مسابقات
+  matchParticipants MatchParticipent[]
+
+  // 6 روابط با جداول گزارش و پرچم
+  reportsAsReporter UserReport[] @relation("Reporter")
+  reportsAsProfile  UserReport[] @relation("ReportedProfile")
+  flags         UserFlag[]
+
+  // 7 روابط با جداول موجودی
+  inventory     UserInventoryItem[]
+
+  // 8 روابط با جداول مالی
+  coinHistory   UserCoinHistory[]
 
   @@map("User")
 }
@@ -140,6 +182,89 @@ enum GENDER {
   WOMAN
   OTHER
 }
+
+// ============================================================
+//  مدل‌های مکان (Provinces & Cities)
+// ============================================================
+
+model Provinces {
+  id        Int       @id @default(autoincrement())
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime? @updatedAt @db.Timestamptz(3)
+  faName    String    @unique @db.VarChar(99)
+  isCapital Boolean   @default(false)
+  enName    String?   @unique @db.VarChar(99)
+  about     String?
+  
+  // Relation‌ها
+  cities    Cities[]  @relation("PROVINCE_CITIES")
+  users     User[]    @relation("USER_PROVINCE")
+
+  @@map("Provinces")
+}
+
+model Cities {
+  id         Int           @id @default(autoincrement())
+  isActive   Boolean       @default(true)
+  createdAt  DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime?     @updatedAt @db.Timestamptz(3)
+  faName     String        @db.VarChar(99)
+  isCapital  Boolean       @default(false)
+  enName     String?       @db.VarChar(99)
+  about      String?
+  latitude   Float?
+  longitude  Float?
+  population Int?
+  provinceId Int
+  
+  // Relation‌ها
+  province   Provinces     @relation("PROVINCE_CITIES", fields: [provinceId], references: [id])
+  users      User[]        @relation("USER_CITY")
+
+  @@map("Cities")
+}
+
+// ============================================================
+//  مدل‌های Inventory (شخصی‌سازی)
+// ============================================================
+
+model InventoryItem {
+  id         Int     @id @default(autoincrement())
+  name       String  @db.VarChar(255)
+  visualCode String  @db.VarChar(255) @map("VisualCode")
+  usageType  Bytes   @db.ByteA @map("UsageType") // dice, checker, cup, board, sticker, frame, avatar
+  
+  // Relation‌ها
+  userItems  UserInventoryItem[]
+  
+  // Relation‌های انتخابی کاربران (یک‌به‌یک)
+  selectedByDice    User[] @relation("SelectedDice")
+  selectedByChecker User[] @relation("SelectedChecker")
+  selectedByCup     User[] @relation("SelectedCup")
+  selectedByBoard   User[] @relation("SelectedBoard")
+  selectedBySticker User[] @relation("SelectedSticker")
+
+  @@map("InventoryItem")
+}
+
+model UserInventoryItem {
+  id               Int            @id @default(autoincrement())
+  userId           Int            @map("User_Id")
+  inventoryItemId  Int            @map("InventoryItem_Id")
+  amount           Int
+  expirationDate   DateTime?      @db.Timestamptz(3) @map("ExpirationDate")
+
+  // Relation‌ها
+  user             User           @relation(fields: [userId], references: [id])
+  inventoryItem    InventoryItem  @relation(fields: [inventoryItemId], references: [id])
+
+  @@map("UserInventoryItem")
+}
+
+// ============================================================
+//  مدل‌های آمار و پیشرفت (Progression)
+// ============================================================
 
 model UserStats {
   id        Int     @id @default(autoincrement())
@@ -163,6 +288,24 @@ model AdditionalStat {
   @@map("AdditionalStat")
 }
 
+model LevelIntrepeter {
+  xp    Int     @id @default(autoincrement()) @map("XP")
+  level Int?    @map("Level")
+
+  @@map("LevelIntrepeter")
+}
+
+// ============================================================
+//  مدل‌های اتاق‌ها و مچ‌میکینگ
+// ============================================================
+
+enum RoomType {
+  CASUAL_1
+  CASUAL_2
+  COMPETITIVE_1
+  COMPETITIVE_2
+}
+
 model RoomPreset {
   id             Int     @id @default(autoincrement())
   minXp          Int?    @map("minimum required XP")
@@ -179,6 +322,10 @@ model RoomPreset {
 
   @@map("RoomPreset")
 }
+
+// ============================================================
+//  مدل‌های مسابقات (Match)
+// ============================================================
 
 model MatchRecord {
   id            Int           @id @default(autoincrement())
@@ -248,6 +395,35 @@ model MatchParticipentDisconnect {
   @@map("MatchParticipentDisconnect")
 }
 
+// ============================================================
+//  مدل‌های تورنومنت‌ها
+// ============================================================
+
+model TournamentPreset {
+  id                Int     @id @default(autoincrement())
+  tournamentType    Bytes   @db.ByteA @map("TournamentType")
+  groupCount        Int     @map("GroupCount")
+  gamePerGroup      Int     @map("GamePerGroup")
+
+  participations    TournamentParticipentRecord[]
+
+  @@map("TournamentPreset")
+}
+
+model TournamentParticipentRecord {
+  id                           Int               @id @default(autoincrement())
+  tournamentMatchParticipemntId Int              @map("TournamentMatchParticipemnt_Id")
+  matchParticipent             MatchParticipent  @relation(fields: [tournamentMatchParticipemntId], references: [id])
+  tournamentPresetId           Int               @map("TournamentPreset_Id")
+  tournamentPreset             TournamentPreset  @relation(fields: [tournamentPresetId], references: [id])
+
+  @@map("TournamentParticipentRecord")
+}
+
+// ============================================================
+//  مدل‌های گزارش، پرچم و مالی
+// ============================================================
+
 model UserReport {
   id          Int     @id @default(autoincrement())
   reporterId  Int     @map("Reporter_Id")
@@ -274,29 +450,6 @@ model UserFlag {
   @@map("UserFlag")
 }
 
-model InventoryItem {
-  id         Int     @id @default(autoincrement())
-  name       String  @db.VarChar(255)
-  visualCode String  @db.VarChar(255) @map("VisualCode")
-  usageType  Bytes   @db.ByteA @map("UsageType")
-
-  userItems  UserInventoryItem[]
-
-  @@map("InventoryItem")
-}
-
-model UserInventoryItem {
-  id               Int            @id @default(autoincrement())
-  userId           Int            @map("User_Id")
-  user             User           @relation(fields: [userId], references: [id])
-  inventoryItemId  Int            @map("InventoryItem_Id")
-  inventoryItem    InventoryItem  @relation(fields: [inventoryItemId], references: [id])
-  amount           Int
-  expirationDate   DateTime?      @db.Timestamptz(3) @map("ExpirationDate")
-
-  @@map("UserInventoryItem")
-}
-
 model PaymentRecord {
   id        Int     @id @default(autoincrement())
   clientId  Int?    @map("client_id")
@@ -315,90 +468,26 @@ model UserCoinHistory {
   date        DateTime?      @db.Date @map("date")
   initiatorId Int?           @map("initiator_id")
   initiator   PaymentRecord? @relation(fields: [initiatorId], references: [id])
-
+  user        User?          @relation(fields: [clientId], references: [id])
+  
   @@map("UserCoinHistory")
 }
 
+// ============================================================
+//  مدل‌های ربات
+// ============================================================
+
 model BotPreset {
   id    Int    @id @default(autoincrement())
-  users User[] // رابطه‌ی یک‌به‌چند
+  users User[]
 
   @@map("BotPreset")
 }
 
-model LevelIntrepeter {
-  xp    Int     @id @default(autoincrement()) @map("XP")
-  level Int?    @map("Level")
+// ============================================================
+//  مدل‌های مینی‌چت
+// ============================================================
 
-  @@map("LevelIntrepeter")
-}
-
-model TournamentPreset {
-  id                Int     @id @default(autoincrement())
-  tournamentType    Bytes   @db.ByteA @map("TournamentType")
-  groupCount        Int     @map("GroupCount")
-  gamePerGroup      Int     @map("GamePerGroup")
-
-  participations    TournamentParticipentRecord[]
-
-  @@map("TournamentPreset")
-}
-
-model TournamentParticipentRecord {
-  id                           Int               @id @default(autoincrement())
-  tournamentMatchParticipemntId Int              @map("TournamentMatchParticipemnt_Id")
-  matchParticipent             MatchParticipent  @relation(fields: [tournamentMatchParticipemntId], references: [id])
-  tournamentPresetId           Int               @map("TournamentPreset_Id")
-  tournamentPreset             TournamentPreset  @relation(fields: [tournamentPresetId], references: [id])
-
-  @@map("TournamentParticipentRecord")
-}
-
-enum RoomType {
-  CASUAL_1
-  CASUAL_2
-  COMPETITIVE_1
-  COMPETITIVE_2
-}
-
-model Provinces {
-  id        Int       @id @default(autoincrement())
-  isActive  Boolean   @default(true)
-  createdAt DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt DateTime? @updatedAt @db.Timestamptz(3)
-  faName    String    @unique @db.VarChar(99)
-  isCapital Boolean   @default(false)
-  enName    String?   @unique @db.VarChar(99)
-  about     String?
-  cities    Cities[]  @relation("PROVINCE_CITIES")
-  users     User[]    @relation("USER_PROVINCE")// اگر در User فیلد provinceId داشته باشید
-
-  @@map("Provinces")
-}
-
-model Cities {
-  id         Int           @id @default(autoincrement())
-  isActive   Boolean       @default(true)
-  createdAt  DateTime      @default(now()) @db.Timestamptz(3)
-  updatedAt  DateTime?     @updatedAt @db.Timestamptz(3)
-  faName     String        @db.VarChar(99)
-  isCapital  Boolean       @default(false)
-  enName     String?       @db.VarChar(99)
-  about      String?
-  latitude   Float?
-  longitude  Float?
-  population Int?
-  provinceId Int
-  province   Provinces     @relation("PROVINCE_CITIES", fields: [provinceId], references: [id])
-  users      User[]        @relation("USER_CITY")// اگر در User فیلد cityId داشته باشید
-
-  @@map("Cities")
-}
-
-
-// ----------------------
-//  mini static chat 
-// ----------------------
 model MessagesCategory {
   id         Int      @id @default(autoincrement())
   createdAt  DateTime @default(now()) @db.Timestamptz(3)
@@ -407,7 +496,7 @@ model MessagesCategory {
   nameFa     String   @unique
   nameEn     String?
   isFree     Boolean  @default(false)
-  buyCount   Int?            // در صورت نیاز بعداً مقداردهی می‌شود
+  buyCount   Int?
   conditions Json?    @db.Json
   lock       Boolean  @default(false)
   messages   StaticMessages[] @relation("MSG_CATEGORY")

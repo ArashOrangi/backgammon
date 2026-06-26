@@ -1,4 +1,3 @@
-// validations/userSchema.ts
 import { Type, Static } from "@sinclair/typebox";
 
 export const SimpleUserSchema = Type.Object({
@@ -30,6 +29,11 @@ export const UpdateProfileSchema = Type.Object({
   cityId: Type.Optional(Type.Number({ minimum: 1 })),
   image: Type.Optional(Type.String({ maxLength: 500 })),
   phoneNumber: Type.Optional(Type.String({ pattern: "^[0-9]{11}$" })),
+});
+
+export const ChangePasswordSchema = Type.Object({
+  oldPassword: Type.Optional(Type.String({ minLength: 6 })),
+  newPassword: Type.String({ minLength: 6, maxLength: 16 }),
 });
 
 export type SimpleUserInput = Static<typeof SimpleUserSchema>;

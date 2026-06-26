@@ -135,3 +135,59 @@ accountRoute.post("/logout", async (ctx) => {
     return onErrorRestResponse({ ctx, errorMessage: messageError.user.logout });
   }
 });
+
+accountRoute.post("/password/change", async (ctx) => {
+  try {
+    const user = ctx.get("user");
+    if (!user) {
+      return onErrorRestResponse({ ctx, errorMessage: "Not authenticated" });
+    }
+
+    const { oldPassword, newPassword } = await ctx.req.json();
+
+    // بررسی وجود رمز عبور جدید
+    if (!newPassword || newPassword.length < 4) {
+      return onErrorRestResponse({
+        ctx,
+        errorMessage: "رمز عبور جدید باید حداقل ۴ کاراکتر باشد",
+      });
+    }
+
+    // اگر کاربر رمز عبور نداشته باشد (مهمان)، اجازه تغییر نمی‌دهیم
+    if (!user.password) {
+      return onErrorRestResponse({
+        ctx,
+        errorMessage: "این حساب کاربری رمز عبور ندارد",
+      });
+    }
+
+    // بررسی رمز قدیمی (در صورت وارد شدن)
+    if (oldPassword) {
+      const isValid = await myCrypt.verify({
+        password: oldPassword,
+        hash: user.password,
+      });
+      if (!isValid) {
+        return onValidationsRestResponse({
+          ctx,
+          validations: { oldPassword: ["رمز عبور فعلی اشتباه است"] },
+        });
+      }
+    }
+
+    // هش کردن رمز جدید
+    const hashedPassword = await myCrypt.hashed({ password: newPassword });
+
+    // به‌روزرسانی در دیتابیس
+    await updateUserProfile(user.id, { password: hashedPassword });
+
+    return onOkRestResponse({
+      ctx,
+      data: {},
+      message: "رمز عبور با موفقیت تغییر کرد",
+    });
+  } catch (error) {
+    console.error("Password Change Error:", error);
+    return onErrorRestResponse({ ctx, errorMessage: "خطا در تغییر رمز عبور" });
+  }
+});

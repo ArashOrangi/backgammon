@@ -14,19 +14,30 @@ export interface User {
   mmr: number;
   winStreak: number;
   lossStreak: number;
-  recentResults: JsonValue; // به جای boolean[]
-  recentOpponents: JsonValue; // به جای any[]
+  recentResults: JsonValue;
+  recentOpponents: JsonValue;
   createdAt: Date;
   updatedAt: Date;
-  // سایر فیلدها (اختیاری)
   gender?: "MAN" | "WOMAN" | "OTHER";
   level?: number | null;
   password?: string | null;
-  fullName?: string | null;
-  image?: string | null;
-  mobile?: string | null;
   provinceId?: number | null;
   cityId?: number | null;
+  // ===== فیلدهای پروفایل جدید =====
+  avatar?: string | null;
+  frame?: string | null;
+  title?: string | null;
+  // ===== فیلدهای شخصی‌سازی =====
+  selectedDiceId?: number | null;
+  selectedCheckerId?: number | null;
+  selectedCupId?: number | null;
+  selectedBoardId?: number | null;
+  selectedStickerId?: number | null;
+  // ===== آمار بازی =====
+  totalWins: number;
+  totalMars: number;
+  totalBackgammon: number;
+  totalMatches: number;
 }
 
 const prismaSelectUser = {
@@ -46,12 +57,22 @@ const prismaSelectUser = {
   password: true,
   isLocked: true,
   lastOnline: true,
-  // fullName: true,
-  image: true,
-  mobile: true,
   provinceId: true,
   cityId: true,
-};
+  // ===== فیلدهای جدید =====
+  avatar: true,
+  frame: true,
+  title: true,
+  selectedDiceId: true,
+  selectedCheckerId: true,
+  selectedCupId: true,
+  selectedBoardId: true,
+  selectedStickerId: true,
+  totalWins: true,
+  totalMars: true,
+  totalBackgammon: true,
+  totalMatches: true,
+} as const;
 
 // ------------------- توابع اصلی گیم‌پلی -------------------
 
@@ -131,18 +152,28 @@ export async function generateGuestUsername(): Promise<string> {
   return `guest_${nextNumber}`;
 }
 
-// ------------------- توابع پروفایل (بدون جدول Profile) -------------------
+// ------------------- توابع پروفایل -------------------
 
 export async function createUserWithProfile(data: {
   userName?: string;
-  // fullName?: string;
   provinceId?: number;
   cityId?: number;
-  // image?: string;
   phoneNumber?: string;
   gender?: "MAN" | "WOMAN" | "OTHER";
+  avatar?: string;
+  frame?: string;
+  title?: string;
 }) {
-  const { userName, provinceId, cityId, phoneNumber, gender } = data;
+  const {
+    userName,
+    provinceId,
+    cityId,
+    phoneNumber,
+    gender,
+    avatar,
+    frame,
+    title,
+  } = data;
   const finalUsername = userName || (await generateGuestUsername());
 
   try {
@@ -150,11 +181,12 @@ export async function createUserWithProfile(data: {
       data: {
         userName: finalUsername,
         gender: gender || "MAN",
-        // fullName: fullName || null,
         provinceId: provinceId || null,
         cityId: cityId || null,
-        // image: image || null,
         phoneNumber: phoneNumber || null,
+        avatar: avatar || null,
+        frame: frame || null,
+        title: title || null,
       },
       select: prismaSelectUser,
     });
@@ -167,15 +199,22 @@ export async function createUserWithProfile(data: {
 export async function updateUserProfile(
   userId: number,
   data: Partial<{
-    // fullName: string;
     provinceId: number;
     cityId: number;
-    image: string;
-    mobile: string;
-    password: string;
     phoneNumber: string;
     gender: "MAN" | "WOMAN" | "OTHER";
     level: number;
+    password: string;
+    // فیلدهای پروفایل
+    avatar: string;
+    frame: string;
+    title: string;
+    // فیلدهای شخصی‌سازی
+    selectedDiceId: number;
+    selectedCheckerId: number;
+    selectedCupId: number;
+    selectedBoardId: number;
+    selectedStickerId: number;
   }>,
 ) {
   try {
@@ -210,14 +249,48 @@ export async function updateUserStats(
     mmr: number;
     winStreak: number;
     lossStreak: number;
-    recentResults: boolean[];
-    recentOpponents: any[];
+    recentResults: JsonValue;
+    recentOpponents: JsonValue;
+    totalWins: number;
+    totalMars: number;
+    totalBackgammon: number;
+    totalMatches: number;
   }>,
 ) {
   try {
     const user = await prisma.user.update({
       where: { id: userId },
       data: data as Prisma.UserUpdateInput,
+      select: prismaSelectUser,
+    });
+    return user;
+  } catch (error) {
+    return errorHandlersOnPrisma({ error });
+  }
+}
+
+// ------------------- توابع کمکی برای آمار بازی (پس از هر مسابقه) -------------------
+
+export async function incrementUserStats({
+  userId,
+  isWin,
+  isMars = false,
+  isBackgammon = false,
+}: {
+  userId: number;
+  isWin: boolean;
+  isMars?: boolean;
+  isBackgammon?: boolean;
+}) {
+  try {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        totalMatches: { increment: 1 },
+        totalWins: isWin ? { increment: 1 } : undefined,
+        totalMars: isMars ? { increment: 1 } : undefined,
+        totalBackgammon: isBackgammon ? { increment: 1 } : undefined,
+      },
       select: prismaSelectUser,
     });
     return user;

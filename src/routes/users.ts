@@ -88,7 +88,7 @@ userRoutes.put("/profile/:userId", middlewareAuth, async (c) => {
     // fullName,
     provinceId,
     cityId,
-    image,
+    // image,
     phoneNumber,
   });
   if (!result || (result as any).errorType) {
