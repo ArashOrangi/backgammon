@@ -2,15 +2,24 @@ param(
     [string]$SiteName = "appname"
 )
 
-Write-Host "Deploying"
-Write-Host "Application: $SiteName"
-Write-Host "Env:"
-Get-ChildItem Env: | Sort Name
+Write-Host "Deploying $SiteName"
 
-pm2 flush $SiteName
-pm2 delete $SiteName
-Start-Sleep -Seconds 1
+# Stop application
+pm2 stop $SiteName 2>$null
+pm2 delete $SiteName 2>$null
+
+Start-Sleep -Seconds 3
+
+# Build
 npm run build
-pm2 start dist/index.js --name "$SiteName" --no-autorestart -o ./out_new.log -e ./err.log
 
-Write-Host "Deployment completed successfully!" -ForegroundColor Green
+# Start
+pm2 start dist/index.js `
+    --name $SiteName `
+    --no-autorestart `
+    -o out_new.log `
+    -e err.log
+
+pm2 save
+
+Write-Host "Deployment completed."
