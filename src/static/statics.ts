@@ -8,11 +8,14 @@ export const sitURL = process.env.API_URL;
 
 export const BOT_USER_ID = 1;
 
-export const keyPublic = "BwdN45bMapeCnUdU7DIQc8DiHwUVVvVwhHEMvxk03ys";
-export const keyUser = "gwLXSgG3jqMH67YfwE4lkzfk1Jj1cN0LC3hcEat0k14JZqeWnWXt9C";
+export const keyPublic = "backgammonGuest";
+export const keyUser = "backgammonUser";
 
-export const secretTokenUser = process.env.SECRET_USER ?? "";
-export const secretTokenSession = process.env.SECRET_SESSION ?? "";
+export const secretTokenUser =
+  process.env.SECRET_USER ??
+  "gwLXSgG3jqMH67YfwE4lkzfk1Jj1cN0LC3hcEat0k14JZqeWnWXt9C";
+export const secretTokenSession =
+  process.env.SECRET_SESSION ?? "BwdN45bMapeCnUdU7DIQc8DiHwUVVvVwhHEMvxk03ys";
 
 const dayInSecond = 86400;
 export const keyPublicAge = dayInSecond * 365; //"365 day in second"
