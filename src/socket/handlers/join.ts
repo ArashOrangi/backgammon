@@ -20,9 +20,10 @@ import { RoomType } from "@prisma/client";
 type JoinPayload = { gameId: number; userId: number; roomType?: RoomType };
 
 // ======================================================
-// ذخیره SocketContext کاربران در حال انتظار در صف
+// مدیریت صف کاربران در حال انتظار
 // ======================================================
 const waitingSockets = new Map<number, SocketContext>();
+const pendingUsers = new Set<number>(); // برای جلوگیری از ورود مجدد
 
 /**
  * تنظیم تایمرهای پیش‌فرض برای بازی (در صورت نیاز)
@@ -61,6 +62,7 @@ export async function notifyUserGameReady(
 
   // حذف کاربر از صف (چون دیگر منتظر نیست)
   waitingSockets.delete(userId);
+  pendingUsers.delete(userId);
 
   // بارگذاری وضعیت کامل بازی
   const game = await loadGameState(gameId);
@@ -97,7 +99,7 @@ export async function handleJoin(
     // ---------- حالت مچ‌میکینگ (خودکار) ----------
     if (gameId === -1) {
       // ۱. بررسی اینکه کاربر قبلاً در صف نیست
-      if (waitingSockets.has(userId)) {
+      if (waitingSockets.has(userId) || pendingUsers.has(userId)) {
         return ctx.send({
           type: "game.error",
           payload: onErrorSocketResponse("Already in matchmaking queue"),
@@ -108,11 +110,12 @@ export async function handleJoin(
       const matchedGameId = await addToMatchmaking(
         userId,
         roomType || RoomType.CASUAL_1,
-        rooms, // <-- اضافه شد
+        rooms,
       );
 
       if (matchedGameId === 0) {
         // ---------- در صف قرار گرفت ----------
+        pendingUsers.add(userId);
         waitingSockets.set(userId, ctx);
 
         // ارسال وضعیت منتظر به کاربر
@@ -126,6 +129,9 @@ export async function handleJoin(
         });
       } else {
         // ---------- حریف پیدا شد (انسانی یا بات) ----------
+        pendingUsers.delete(userId);
+        waitingSockets.delete(userId);
+
         // کاربر فعلی را به اتاق اضافه کن
         rooms.join(matchedGameId, ctx, "player");
 
@@ -174,11 +180,11 @@ export async function handleJoin(
           payload: onOkSocketResponse(game, "Both players joined, ready"),
         });
 
-        // پاک کردن کاربر از صف (در صورت وجود)
-        waitingSockets.delete(userId);
+        // پاک کردن کاربر دیگر از صف (اگر در صف باشد)
         const otherPlayer = game.players.find((p) => p.id !== userId);
         if (otherPlayer) {
           waitingSockets.delete(otherPlayer.id);
+          pendingUsers.delete(otherPlayer.id);
         }
 
         return;
@@ -251,6 +257,7 @@ export async function handleJoin(
     console.error("Join Error:", err);
     // در صورت خطا، کاربر را از صف حذف کن
     waitingSockets.delete(userId);
+    pendingUsers.delete(userId);
     ctx.send({
       type: "game.error",
       payload: onErrorSocketResponse(
@@ -265,5 +272,6 @@ export async function handleJoin(
  */
 export function clearWaitingUser(userId: number) {
   waitingSockets.delete(userId);
+  pendingUsers.delete(userId);
   removeFromMatchmaking(userId);
 }
