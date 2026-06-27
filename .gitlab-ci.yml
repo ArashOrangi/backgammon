@@ -1,10 +1,23 @@
 stages:
+  - pre-stop
   - build
   - deploy
   - report
 
 variables:
   SITE_NAME: $CI_PROJECT_NAME
+
+stop-app:
+  stage: pre-stop
+  tags:
+    - windows-iis
+  variables:
+    GIT_STRATEGY: none
+  only:
+    - Develop
+    - cicd
+  script:
+    - cmd /c "pm2 delete %SITE_NAME% 2>nul || exit /b 0"
 
 build-app:
   stage: build
@@ -15,7 +28,6 @@ build-app:
     - cicd
   script:
     - echo $PWD
-    - cmd /c "pm2 delete %SITE_NAME% 2>nul || exit /b 0"
 
 deploy:
   stage: deploy
