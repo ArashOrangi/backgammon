@@ -17,6 +17,7 @@ import {
   flattenMoveSequences,
 } from "@/game/moveGenerator";
 import { runBotIfNeeded } from "@/game/botRunner";
+import { sleep } from "@/components/sleep";
 
 // ===== اصلاح: readyStates را export کنید =====
 export const readyStates = new Map<number, Set<number>>();
@@ -180,7 +181,8 @@ export async function handleReady(
         color: freshGame.players.find((p) => p.id === freshGame.turn)!.color,
       }),
     });
-
+    // ===== اضافه شده: تأخیر برای نمایش تاس شروع به کاربر =====
+    await sleep(1500); // 1500ms تأخیر
     if (freshGame.status === "in-progress") {
       await runBotIfNeeded(gameId, freshGame.turn!, rooms);
     }
