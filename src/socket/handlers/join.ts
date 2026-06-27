@@ -60,11 +60,9 @@ export async function notifyUserGameReady(
   const ctx = waitingSockets.get(userId);
   if (!ctx) return;
 
-  // حذف کاربر از صف (چون دیگر منتظر نیست)
   waitingSockets.delete(userId);
   pendingUsers.delete(userId);
 
-  // بارگذاری وضعیت کامل بازی
   const game = await loadGameState(gameId);
   if (!game) {
     ctx.send({
@@ -74,10 +72,19 @@ export async function notifyUserGameReady(
     return;
   }
 
-  // کاربر را به اتاق اضافه کن (قبل از ارسال پیام)
+  // ===== اضافه شده: تنظیم وضعیت بازی به ready =====
+  if (game.status !== "ready" && game.status !== "in-progress") {
+    game.status = "ready";
+    game.subStatus = "gameReady";
+    game.turn = null;
+    saveGame(game);
+    await forceSnapshot(game.id, game);
+    console.log(`[notifyUserGameReady] Game ${gameId} status set to ready`);
+  }
+  // ==============================================
+
   rooms.join(gameId, ctx, "player");
 
-  // ارسال وضعیت کامل بازی به کاربر
   ctx.send({
     type: "game.state",
     payload: onOkSocketResponse(game, "Opponent found! Game is ready."),
