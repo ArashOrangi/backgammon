@@ -18,9 +18,22 @@ import {
 } from "@/game/moveGenerator";
 import { runBotIfNeeded } from "@/game/botRunner";
 
-// ذخیره وضعیت آمادگی هر بازی (در حافظه، نه در state بازی)
-const readyStates = new Map<number, Set<number>>();
+// ===== اصلاح: readyStates را export کنید =====
+export const readyStates = new Map<number, Set<number>>();
 
+// ===== اضافه شده: تابع برای علامت‌گذاری بات =====
+export function markBotReady(gameId: number, botId: number) {
+  if (!readyStates.has(gameId)) {
+    readyStates.set(gameId, new Set());
+  }
+  const readySet = readyStates.get(gameId)!;
+  if (!readySet.has(botId)) {
+    readySet.add(botId);
+    console.log(`[Ready] Bot ${botId} marked as ready for game ${gameId}`);
+  }
+}
+
+// ===== بقیه‌ی کد بدون تغییر =====
 export async function handleReady(
   ctx: SocketContext,
   payload: { gameId: number },
@@ -36,7 +49,6 @@ export async function handleReady(
     });
   }
 
-  // ✅ اصلاح: اگر gameId نامعتبر است (0 یا منفی)، از اتاق سوکت دریافت کن
   if (gameId <= 0) {
     const actualGameId = rooms.getRoomOfSocket(ctx);
     if (!actualGameId) {
@@ -53,7 +65,7 @@ export async function handleReady(
       payload: onErrorSocketResponse("Still invalid game ID"),
     });
   }
-  // ۱. بارگذاری آخرین وضعیت از دیتابیس (event sourcing)
+
   let game = await loadGameState(gameId);
   if (!game) {
     return ctx.send({
@@ -70,7 +82,6 @@ export async function handleReady(
     });
   }
 
-  // اگر بازی قبلاً شروع شده باشد، اجازه آماده شدن مجدد ندهید
   if (game.status === "in-progress") {
     return ctx.send({
       type: "game.error",
@@ -78,7 +89,6 @@ export async function handleReady(
     });
   }
 
-  // مطمئن شوید هر دو بازیکن حضور دارند (حداقل ۲ نفر)
   if (game.players.length < 2) {
     return ctx.send({
       type: "game.error",
@@ -86,7 +96,7 @@ export async function handleReady(
     });
   }
 
-  // ۲. ثبت آمادگی در حافظه موقت
+  // ثبت آمادگی کاربر
   if (!readyStates.has(gameId)) {
     readyStates.set(gameId, new Set());
   }
@@ -95,7 +105,7 @@ export async function handleReady(
     readySet.add(userId);
   }
 
-  // ۳. اگر هر دو آماده شدند → شروع بازی
+  // اگر هر دو آماده شدند → شروع بازی
   if (readySet.size === 2) {
     const whitePlayer = game.players.find((p) => p.color === "white")!;
     const blackPlayer = game.players.find((p) => p.color === "black")!;
@@ -141,14 +151,10 @@ export async function handleReady(
       },
     });
 
-    // بارگذاری مجدد وضعیت جدید
     const freshGame = await loadGameState(gameId);
     if (!freshGame) throw new Error("Failed to reload game after start");
 
-    // پاک کردن وضعیت آمادگی این بازی از حافظه موقت
     readyStates.delete(gameId);
-
-    // ذخیره در حافظه سرور
     saveGame(freshGame);
 
     const subStatus = calculateSubStatus(freshGame);
@@ -175,13 +181,10 @@ export async function handleReady(
       }),
     });
 
-    // ========== اضافه شده: اجرای بات در صورت نیاز ==========
     if (freshGame.status === "in-progress") {
       await runBotIfNeeded(gameId, freshGame.turn!, rooms);
     }
-    // ====================================================
   } else {
-    // هنوز هر دو آماده نشده‌اند: فقط به همین کلاینت وضعیت فعلی را بفرست
     const stateToSend = {
       ...game,
       subStatus: "playerJoin" as const,

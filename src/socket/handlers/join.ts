@@ -16,6 +16,8 @@ import { prisma } from "@/components/prisma";
 import { getDefaultTimerPreset } from "@/models/timerPreset";
 import { GameState } from "@/game/types";
 import { RoomType } from "@prisma/client";
+import { markBotReady } from "./ready"; // <-- اضافه شد
+import { BOT_USER_ID } from "@/static/statics"; // <-- اضافه شد
 
 type JoinPayload = { gameId: number; userId: number; roomType?: RoomType };
 
@@ -72,7 +74,7 @@ export async function notifyUserGameReady(
     return;
   }
 
-  // ===== اضافه شده: تنظیم وضعیت بازی به ready =====
+  // تنظیم وضعیت بازی به ready
   if (game.status !== "ready" && game.status !== "in-progress") {
     game.status = "ready";
     game.subStatus = "gameReady";
@@ -81,7 +83,14 @@ export async function notifyUserGameReady(
     await forceSnapshot(game.id, game);
     console.log(`[notifyUserGameReady] Game ${gameId} status set to ready`);
   }
-  // ==============================================
+
+  // ===== علامت‌گذاری بات به عنوان آماده (اگر در بازی باشد) =====
+  const hasBot = game.players.some((p) => p.id === BOT_USER_ID);
+  if (hasBot) {
+    markBotReady(gameId, BOT_USER_ID);
+    console.log(`[notifyUserGameReady] Bot marked ready for game ${gameId}`);
+  }
+  // ===========================================================
 
   rooms.join(gameId, ctx, "player");
 
@@ -180,6 +189,16 @@ export async function handleJoin(
           saveGame(game);
           await forceSnapshot(game.id, game);
         }
+
+        // ===== اگر حریف بات است، آن را به عنوان آماده علامت‌گذاری کن =====
+        const hasBot = game.players.some((p) => p.id === BOT_USER_ID);
+        if (hasBot) {
+          markBotReady(matchedGameId, BOT_USER_ID);
+          console.log(
+            `[handleJoin] Bot marked ready for game ${matchedGameId}`,
+          );
+        }
+        // ===========================================================
 
         // به همه (هر دو بازیکن) بگو بازی آماده است
         rooms.broadcast(matchedGameId, {
