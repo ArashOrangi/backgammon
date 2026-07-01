@@ -183,6 +183,8 @@ export async function handleReady(
       }),
     });
 
+    // ===== تأخیر برای نمایش انیمیشن تاس =====
+    await sleep(1500);
     // =====  : ریست وضعیت هشدار و ارسال timer.started =====
     resetWarningState(gameId);
     if (freshGame.turn) {
