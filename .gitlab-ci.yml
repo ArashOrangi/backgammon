@@ -16,6 +16,8 @@ stop-app:
   only:
     - Develop
     - cicd
+  script:
+    - echo $PWD
 
 build-app:
   stage: build
