@@ -16,8 +16,6 @@ stop-app:
   only:
     - Develop
     - cicd
-  script:
-    - powershell.exe -Command "pm2 delete $env:SITE_NAME 2>`$null; exit 0"
 
 build-app:
   stage: build
