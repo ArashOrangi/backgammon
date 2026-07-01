@@ -7,6 +7,8 @@ import {
   validateRoll,
   validateReady,
   validateEndTurn,
+  validateCubeOffer,
+  validateCubeRespond,
 } from "@/validations/socket";
 import { validateMove } from "@/game/ruleValidator";
 import { Value } from "@sinclair/typebox/value";
@@ -98,6 +100,10 @@ export class MessageRouter {
         return validateReady(message.payload);
       case "game.endTurn":
         return validateEndTurn(message.payload);
+      case "game.cube.offer":
+        return validateCubeOffer(message.payload);
+      case "game.cube.respond":
+        return validateCubeRespond(message.payload);
       default:
         return false;
     }

@@ -5,6 +5,7 @@ export * from "./turn";
 export * from "./timer";
 export * from "./dice";
 export * from "./starting";
+export * from "./doublingCube";
 
 /* -------------------------------------------------- */
 /* 🏁 GAME OVER & WIN TYPE LOGIC */

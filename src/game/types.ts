@@ -51,9 +51,13 @@ export interface GameState {
   pipCount?: Record<PlayerId, number>;
 
   /** اطلاعات دوبلینگ */
+  roomType?: string;
+  doublingCubeEnabled?: boolean;
   cubeValue?: number;
-  cubeOwner?: PlayerId;
-  cubeOffered?: PlayerId;
+  cubeOwner?: PlayerId | null;
+  cubeOfferedBy?: PlayerId | null;
+  cubeOfferedTo?: PlayerId | null;
+  cubeOfferedValue?: number | null;
 
   /** اطلاعات پایان بازی */
   winner?: PlayerId;
@@ -65,7 +69,7 @@ export interface GameState {
 
   /** تایمر نوبت */
   turnStartedAt?: number;
-  primaryTimePerTurn: number; // زمان تایمر اولیه برای هر نوبت (ثانیه)
+  primaryTimePerTurn: number;
   secondaryTimeBank: Record<PlayerId, number>; //مقدار فعلی (باقی‌مانده)
   secondaryTimeTotal: Record<PlayerId, number>; // مقدار اولیه (مجموع)
   lastActionAt?: number;
@@ -85,6 +89,7 @@ export type GameSubStatus =
   | "gameReady" // هر دو بازیکن حاضرند، منتظر اعلام آمادگی
   | "turnRoll" // نوبت ریختن تاس شروع
   | "waitForRoll" // منتظر درخواست تاس (بعد از اعلام نوبت)
+  | "cubeOffered" // پیشنهاد تاس داو در انتظار پاسخ حریف
   | "playDice" // در حال انجام حرکت با تاس
   | "mustEndTurn" // نوبت تمام شده، باید م
   | "playerJoin";
@@ -98,7 +103,12 @@ export const SPECIAL_POSITIONS = {
 export type SpecialPosition =
   (typeof SPECIAL_POSITIONS)[keyof typeof SPECIAL_POSITIONS];
 
-export type SubStatus = "turnRoll" | "playDice" | "mustEndTurn" | "waitForRoll";
+export type SubStatus =
+  | "turnRoll"
+  | "playDice"
+  | "mustEndTurn"
+  | "waitForRoll"
+  | "cubeOffered";
 
 export interface Move {
   from: number;

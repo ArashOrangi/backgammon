@@ -16,7 +16,11 @@ import {
   undoLastMove,
 } from "@/game/eventStore";
 import { GameQueue } from "@/game/gameQueue";
-import { isGameOver, calculateWinType } from "../../game/engine";
+import {
+  isGameOver,
+  calculateGameScore,
+  calculateWinType,
+} from "../../game/engine";
 import { saveGame } from "../../game/gameStore";
 import { SPECIAL_POSITIONS } from "@/game/types";
 import { runBotIfNeeded } from "@/game/botRunner";
@@ -72,6 +76,15 @@ export async function handleMove(
       return ctx.send({
         type: "game.error",
         payload: onErrorSocketResponse("Game not found"),
+      });
+    }
+
+    if (finalGame.cubeOfferedBy || finalGame.cubeOfferedTo) {
+      return ctx.send({
+        type: "game.error",
+        payload: onErrorSocketResponse(
+          "Resolve the pending doubling cube offer before moving",
+        ),
       });
     }
 
@@ -252,6 +265,7 @@ export async function handleMove(
 
       if (isGameOver(finalGame)) {
         const winType = calculateWinType(finalGame, playerId);
+        const score = calculateGameScore(finalGame, winType);
 
         await appendGameEvent(gameId, {
           type: "GAME_FINISHED",
@@ -259,6 +273,7 @@ export async function handleMove(
             winner: playerId,
             winType,
             reason: "REGULAR",
+            score,
           },
         });
 
@@ -275,6 +290,7 @@ export async function handleMove(
             winner: playerId,
             winType,
             reason: "REGULAR",
+            score,
           }),
         });
 

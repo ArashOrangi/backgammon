@@ -221,9 +221,16 @@ export async function handleJoin(
     let game = getGame(gameId);
     if (!game) {
       game = await createInitialGameState(gameId);
+      game.roomType = roomType || RoomType.CASUAL_1;
+      game.doublingCubeEnabled = game.roomType !== RoomType.CASUAL_1;
       saveGame(game);
       await applyTimerSettingsToGame(game);
     } else {
+      if (roomType && !game.roomType) {
+        game.roomType = roomType;
+        game.doublingCubeEnabled = roomType !== RoomType.CASUAL_1;
+        saveGame(game);
+      }
       await applyTimerSettingsToGame(game);
     }
 

@@ -2,6 +2,7 @@ import { getAllActiveGames, saveGame } from "../gameStore";
 import { appendGameEvent, loadGameState } from "../eventStore";
 import { RoomManager } from "../../socket/room-manager";
 import { onOkSocketResponse } from "@/responses/response-builder";
+import { calculateGameScore } from "./doublingCube";
 
 // وضعیت هشدار برای هر بازی (برای جلوگیری از ارسال مکرر)
 const warningState = new Map<number, { level: "none" | "5s" }>();
@@ -121,6 +122,7 @@ async function handleTimeout(
       winner: winner.id,
       winType: "normal",
       reason: type === "TURN_TIMEOUT" ? "TIMEOUT" : "DISCONNECT",
+      score: calculateGameScore(state, "normal"),
     },
   });
 
@@ -133,6 +135,7 @@ async function handleTimeout(
       payload: onOkSocketResponse({
         winner: winner.id,
         reason: type === "TURN_TIMEOUT" ? "timeout" : "disconnect",
+        score: calculateGameScore(state, "normal"),
       }),
     });
 

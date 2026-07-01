@@ -15,7 +15,13 @@ import {
 
 import { createInitialGameState } from "./gameStore";
 import { createInitialBoard } from "./board";
-import { applyMove, resetWarningState, switchTurn } from "./engine";
+import {
+  applyMove,
+  calculateGameScore,
+  getNextCubeValue,
+  resetWarningState,
+  switchTurn,
+} from "./engine";
 import { generateMoveSequences } from "./moveGenerator";
 import { OrmState } from "@/models/enums";
 import { prisma } from "@/components/prisma";
@@ -103,7 +109,35 @@ export type GameFinishedEvent = {
   payload: {
     winner: PlayerId;
     winType: "normal" | "mars" | "backgammon";
-    reason: "REGULAR" | "TIMEOUT" | "DISCONNECT";
+    reason: "REGULAR" | "TIMEOUT" | "DISCONNECT" | "DOUBLE_REJECTED";
+    score?: number;
+  };
+};
+
+export type CubeOfferedEvent = {
+  type: "CUBE_OFFERED";
+  payload: {
+    offeredBy: PlayerId;
+    offeredTo: PlayerId;
+    value: number;
+  };
+};
+
+export type CubeAcceptedEvent = {
+  type: "CUBE_ACCEPTED";
+  payload: {
+    acceptedBy: PlayerId;
+    offeredBy: PlayerId;
+    value: number;
+  };
+};
+
+export type CubeRejectedEvent = {
+  type: "CUBE_REJECTED";
+  payload: {
+    rejectedBy: PlayerId;
+    offeredBy: PlayerId;
+    score: number;
   };
 };
 
@@ -144,6 +178,9 @@ export type GameEvent =
   | TurnTimeoutEvent
   | NetworkTimeoutEvent
   | GameFinishedEvent
+  | CubeOfferedEvent
+  | CubeAcceptedEvent
+  | CubeRejectedEvent
   | PracticeBearOffSetupEvent
   | PracticeRearrangeEvent
   | PracticeSetupBoardEvent;
@@ -175,6 +212,27 @@ function isEventRow(value: unknown): value is {
     "payload" in value &&
     "sequence" in value
   );
+}
+
+function refreshPipCount(state: GameState) {
+  const pipCount: Record<PlayerId, number> = {};
+
+  for (const player of state.players) {
+    let total = 0;
+
+    for (let index = 0; index < state.board.points.length; index++) {
+      const point = state.board.points[index];
+      if (point.owner !== player.id || point.count <= 0) continue;
+
+      const distance = player.color === "white" ? index + 1 : 24 - index;
+      total += distance * point.count;
+    }
+
+    total += (state.board.bar[player.id] ?? 0) * 25;
+    pipCount[player.id] = total;
+  }
+
+  state.pipCount = pipCount;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -241,6 +299,12 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       };
       state.dice = dice;
       state.rolledThisTurn = true;
+      state.cubeValue = state.cubeValue ?? 1;
+      state.cubeOwner = state.cubeOwner ?? null;
+      state.cubeOfferedBy = null;
+      state.cubeOfferedTo = null;
+      state.cubeOfferedValue = null;
+      refreshPipCount(state);
 
       return state;
     }
@@ -261,6 +325,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
         event.payload.to,
         event.payload.die,
       );
+      refreshPipCount(state);
 
       return state;
     }
@@ -282,8 +347,43 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       state.status = "finished";
       state.winner = event.payload.winner;
       state.winType = event.payload.winType;
+      state.score =
+        event.payload.score ??
+        calculateGameScore(state, event.payload.winType);
       state.turn = null;
+      state.cubeOfferedBy = null;
+      state.cubeOfferedTo = null;
+      state.cubeOfferedValue = null;
 
+      return state;
+    }
+
+    case "CUBE_OFFERED": {
+      state.cubeOfferedBy = event.payload.offeredBy;
+      state.cubeOfferedTo = event.payload.offeredTo;
+      state.cubeOfferedValue = event.payload.value;
+      return state;
+    }
+
+    case "CUBE_ACCEPTED": {
+      state.cubeValue = event.payload.value || getNextCubeValue(state);
+      state.cubeOwner = event.payload.acceptedBy;
+      state.cubeOfferedBy = null;
+      state.cubeOfferedTo = null;
+      state.cubeOfferedValue = null;
+      state.turnStartedAt = Date.now();
+      return state;
+    }
+
+    case "CUBE_REJECTED": {
+      state.status = "finished";
+      state.winner = event.payload.offeredBy;
+      state.winType = "normal";
+      state.score = event.payload.score;
+      state.turn = null;
+      state.cubeOfferedBy = null;
+      state.cubeOfferedTo = null;
+      state.cubeOfferedValue = null;
       return state;
     }
 
@@ -317,6 +417,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       state.rolledThisTurn = false;
       state.turn = playerId;
       state.turnStartedAt = Date.now();
+      refreshPipCount(state);
 
       return state;
     }
@@ -348,6 +449,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       state.rolledThisTurn = false;
       state.turn = playerId;
       state.turnStartedAt = Date.now();
+      refreshPipCount(state);
 
       return state;
     }
@@ -362,6 +464,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       state.rolledThisTurn = false;
       state.turn = event.payload.playerId;
       state.turnStartedAt = Date.now();
+      refreshPipCount(state);
 
       return state;
     }
@@ -538,6 +641,10 @@ export async function loadGameStateUntil(
 export function calculateSubStatus(state: GameState): SubStatus | undefined {
   if (state.status !== "in-progress" || !state.turn) {
     return undefined;
+  }
+
+  if (state.cubeOfferedBy || state.cubeOfferedTo) {
+    return "cubeOffered";
   }
 
   if (!state.dice?.length) {

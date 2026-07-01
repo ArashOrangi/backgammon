@@ -93,6 +93,15 @@ export async function handleRoll(
       });
     }
 
+    if (game.cubeOfferedBy || game.cubeOfferedTo) {
+      return ctx.send({
+        type: "game.error",
+        payload: onErrorSocketResponse(
+          "Resolve the pending doubling cube offer before rolling",
+        ),
+      });
+    }
+
     try {
       // ---------- فاز تعیین شروع‌کننده (Starting) ----------
       if (game.status === "starting") {

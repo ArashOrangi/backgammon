@@ -18,6 +18,11 @@ export type ClientMessage =
   | { type: "player.leave"; payload: { gameId: number } }
   | { type: "player.ready"; payload: { gameId: number } }
   | { type: "game.endTurn"; payload: { gameId: number } }
+  | { type: "game.cube.offer"; payload: { gameId: number } }
+  | {
+      type: "game.cube.respond";
+      payload: { gameId: number; accept: boolean };
+    }
   | { type: "game.practice.bearoff"; payload: { gameId: number } }
   | {
       type: "game.practice.rearrange";
@@ -58,6 +63,32 @@ export type ServerMessage =
       payload: IDataResponse<{ playerId: number; color?: "white" | "black" }>;
     }
   | { type: "player.move"; payload: IDataResponse<MovePayload> } // MovePayload می‌تواند تکی یا آرایه‌ای باشد
+  | {
+      type: "game.cube.offer";
+      payload: IDataResponse<{
+        offeredBy: number;
+        offeredTo: number;
+        value: number;
+        previousValue: number;
+      }>;
+    }
+  | {
+      type: "game.cube.accepted";
+      payload: IDataResponse<{
+        acceptedBy: number;
+        offeredBy: number;
+        value: number;
+        owner: number;
+      }>;
+    }
+  | {
+      type: "game.cube.rejected";
+      payload: IDataResponse<{
+        rejectedBy: number;
+        winner: number;
+        score: number;
+      }>;
+    }
   | { type: "turn.timeout"; payload: IDataResponse<{ playerId: number }> }
   | {
       type: "network.timeout";
@@ -69,6 +100,7 @@ export type ServerMessage =
         winner: number;
         winType?: "normal" | "mars" | "backgammon";
         reason: string;
+        score?: number;
       }>;
     };
 

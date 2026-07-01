@@ -3,6 +3,8 @@ import type { GameState } from "../game/types";
 export interface ClientToServerEvents {
   "game.join": (data: { gameId: number }) => void;
   "game.roll": (data: { gameId: number }) => void;
+  "game.cube.offer": (data: { gameId: number }) => void;
+  "game.cube.respond": (data: { gameId: number; accept: boolean }) => void;
   "game.move": (data: {
     gameId: number;
     from: number; // before: number | "bar"
@@ -21,6 +23,23 @@ export interface ServerToClientEvents {
   "room.ready": (data: { gameId: number }) => void;
   "game.turn": (data: { playerId: number; color: "white" | "black" }) => void;
   "dice.result": (data: { dice: number[]; playerId: number }) => void;
+  "game.cube.offer": (data: {
+    offeredBy: number;
+    offeredTo: number;
+    value: number;
+    previousValue: number;
+  }) => void;
+  "game.cube.accepted": (data: {
+    acceptedBy: number;
+    offeredBy: number;
+    value: number;
+    owner: number;
+  }) => void;
+  "game.cube.rejected": (data: {
+    rejectedBy: number;
+    winner: number;
+    score: number;
+  }) => void;
   "turn.timeout": (data: { playerId: number }) => void;
   "network.timeout": (data: { playerId: number }) => void;
   "game.result": (data: { winner: string; reason: string }) => void;

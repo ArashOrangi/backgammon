@@ -15,7 +15,7 @@ import { RoomManager } from "@/socket/room-manager";
 import { onOkSocketResponse } from "@/responses/response-builder";
 import { BOT_USER_ID } from "@/static/statics";
 import { saveGame } from "./gameStore";
-import { isGameOver, calculateWinType } from "./engine";
+import { isGameOver, calculateGameScore, calculateWinType } from "./engine";
 // changesCode: ایمپورت توابع تایمر
 import { broadcastTimerStarted, resetWarningState } from "@/game/engine/timer";
 import { sleep } from "@/components/sleep";
@@ -413,9 +413,10 @@ export async function runBotIfNeeded(
 
       if (isGameOver(state)) {
         const winType = calculateWinType(state, playerId);
+        const score = calculateGameScore(state, winType);
         await appendGameEvent(gameId, {
           type: "GAME_FINISHED",
-          payload: { winner: playerId, winType, reason: "REGULAR" },
+          payload: { winner: playerId, winType, reason: "REGULAR", score },
         });
         await new Promise((resolve) =>
           setTimeout(resolve, BOT_ACTION_DELAY_MS),
@@ -429,6 +430,7 @@ export async function runBotIfNeeded(
               winner: playerId,
               winType,
               reason: "REGULAR",
+              score,
             }),
           });
           rooms.broadcast(gameId, {

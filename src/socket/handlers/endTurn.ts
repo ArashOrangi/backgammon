@@ -56,6 +56,15 @@ export async function handleEndTurn(
       });
     }
 
+    if (game.cubeOfferedBy || game.cubeOfferedTo) {
+      return ctx.send({
+        type: "game.error",
+        payload: onErrorSocketResponse(
+          "Resolve the pending doubling cube offer before ending turn",
+        ),
+      });
+    }
+
     const currentSubStatus = calculateSubStatus(game);
 
     if (currentSubStatus === "playDice") {

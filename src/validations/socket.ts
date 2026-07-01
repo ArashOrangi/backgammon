@@ -6,6 +6,8 @@ import {
   JoinPayload,
   ReadyPayload,
   EndTurnPayload,
+  CubeOfferPayload,
+  CubeRespondPayload,
 } from "@/type-schemas/socket-schemas";
 
 const ajv = new Ajv();
@@ -16,3 +18,5 @@ export const validateMove = ajv.compile(MovePayload);
 export const validateLeave = ajv.compile(LeavePayload);
 export const validateReady = ajv.compile(ReadyPayload);
 export const validateEndTurn = ajv.compile(EndTurnPayload);
+export const validateCubeOffer = ajv.compile(CubeOfferPayload);
+export const validateCubeRespond = ajv.compile(CubeRespondPayload);

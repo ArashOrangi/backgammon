@@ -16,6 +16,10 @@ import {
 import { handleReady } from "./handlers/ready";
 import { logWSMessage } from "@/utils/wsLogger"; // <-- اضافه شده
 import {
+  handleCubeOffer,
+  handleCubeRespond,
+} from "./handlers/doublingCube";
+import {
   handlePracticeBearOff,
   handlePracticeRearrange,
   handlePracticeSetupBoard,
@@ -33,6 +37,8 @@ export function registerSocketHandlers(
   router.register("game.move", handleMove);
   router.register("player.leave", handleLeave);
   router.register("game.endTurn", handleEndTurn);
+  router.register("game.cube.offer", handleCubeOffer);
+  router.register("game.cube.respond", handleCubeRespond);
   router.register("game.practice.bearoff", handlePracticeBearOff);
   router.register("game.practice.rearrange", handlePracticeRearrange);
   router.register("game.practice.setup_board", handlePracticeSetupBoard);

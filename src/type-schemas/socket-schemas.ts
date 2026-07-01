@@ -27,6 +27,11 @@ export const ReadyPayload = Type.Object({
   gameId: Type.Number(),
 });
 export const EndTurnPayload = Type.Object({ gameId: Type.Number() });
+export const CubeOfferPayload = Type.Object({ gameId: Type.Number() });
+export const CubeRespondPayload = Type.Object({
+  gameId: Type.Number(),
+  accept: Type.Boolean(),
+});
 
 export type JoinPayloadType = Static<typeof JoinPayload>;
 export type RollPayloadType = Static<typeof RollPayload>;
@@ -34,3 +39,5 @@ export type MovePayloadType = Static<typeof MovePayload>;
 export type LeavePayloadType = Static<typeof LeavePayload>;
 export type ReadyPayloadType = Static<typeof ReadyPayload>;
 export type EndTurnPayloadType = Static<typeof EndTurnPayload>;
+export type CubeOfferPayloadType = Static<typeof CubeOfferPayload>;
+export type CubeRespondPayloadType = Static<typeof CubeRespondPayload>;

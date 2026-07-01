@@ -54,6 +54,27 @@ export function eventToTimeline(event: any) {
         event: "Turn",
         details: null,
       };
+    case "CUBE_OFFERED":
+      return {
+        ...base,
+        initiator: event.payload.offeredBy,
+        event: "CubeOffered",
+        details: event.payload.value?.toString(),
+      };
+    case "CUBE_ACCEPTED":
+      return {
+        ...base,
+        initiator: event.payload.acceptedBy,
+        event: "CubeAccepted",
+        details: event.payload.value?.toString(),
+      };
+    case "CUBE_REJECTED":
+      return {
+        ...base,
+        initiator: event.payload.rejectedBy,
+        event: "CubeRejected",
+        details: event.payload.score?.toString(),
+      };
     case "GAME_FINISHED":
       return {
         ...base,

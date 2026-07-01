@@ -222,6 +222,8 @@ async function createGameBetween(
     m.loadGameState(game.id),
   );
   if (state) {
+    state.roomType = room;
+    state.doublingCubeEnabled = room !== RoomType.CASUAL_1;
     state.primaryTimePerTurn = preset.primarySeconds;
     state.secondaryTimeBank = {
       [whiteId]: preset.secondarySeconds,
