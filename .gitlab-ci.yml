@@ -17,7 +17,7 @@ stop-app:
     - Develop
     - cicd
   script:
-    - cmd /c "pm2 delete %SITE_NAME% 2>nul || exit /b 0"
+    - powershell.exe -Command "pm2 delete %SITE_NAME% 2>$null; exit 0"
 
 build-app:
   stage: build
