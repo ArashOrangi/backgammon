@@ -18,11 +18,13 @@ import {
 } from "@/game/moveGenerator";
 import { runBotIfNeeded } from "@/game/botRunner";
 import { sleep } from "@/components/sleep";
+// ===== ایمپورت‌های جدید برای تایمر =====
+import { resetWarningState, broadcastTimerStarted } from "@/game/engine/timer";
 
-// ===== اصلاح: readyStates را export کنید =====
+// ===== readyStates را export کنید =====
 export const readyStates = new Map<number, Set<number>>();
 
-// ===== اضافه شده: تابع برای علامت‌گذاری بات =====
+// ===== تابع برای علامت‌گذاری بات =====
 export function markBotReady(gameId: number, botId: number) {
   if (!readyStates.has(gameId)) {
     readyStates.set(gameId, new Set());
@@ -34,7 +36,6 @@ export function markBotReady(gameId: number, botId: number) {
   }
 }
 
-// ===== بقیه‌ی کد بدون تغییر =====
 export async function handleReady(
   ctx: SocketContext,
   payload: { gameId: number },
@@ -181,8 +182,23 @@ export async function handleReady(
         color: freshGame.players.find((p) => p.id === freshGame.turn)!.color,
       }),
     });
-    // ===== اضافه شده: تأخیر برای نمایش تاس شروع به کاربر =====
-    await sleep(1500); // 1500ms تأخیر
+
+    // =====  : ریست وضعیت هشدار و ارسال timer.started =====
+    resetWarningState(gameId);
+    if (freshGame.turn) {
+      broadcastTimerStarted(
+        gameId,
+        freshGame.turn,
+        freshGame.primaryTimePerTurn,
+        freshGame.secondaryTimeBank[freshGame.turn] || 0,
+        freshGame.turnStartedAt!,
+        rooms,
+      );
+    }
+    // =========================================================
+
+    // ===== تأخیر برای نمایش تاس شروع به کاربر =====
+    await sleep(1500);
     if (freshGame.status === "in-progress") {
       await runBotIfNeeded(gameId, freshGame.turn!, rooms);
     }
