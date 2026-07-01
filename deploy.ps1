@@ -1,43 +1,16 @@
 param(
-    [string]$SiteName = "backgammon-server"
+    [string]$SiteName = "appname"
 )
 
-$DeployPath = "C:\Apps\BackgammonServer"
+Write-Host "Deploying"
+Write-Host "Application: $SiteName"
+Write-Host "Env:"
+Get-ChildItem Env: | Sort Name
 
-Write-Host "Stopping application..."
-
-pm2 stop $SiteName 2>$null
-pm2 delete $SiteName 2>$null
-
-Write-Host "Building..."
+pm2 flush $SiteName
+pm2 delete $SiteName
+Start-Sleep -Seconds 1
 npm run build
+pm2 start dist/index.js --name "$SiteName" --no-autorestart -o ./out_new.log -e ./err.log
 
-if ($LASTEXITCODE -ne 0) {
-    throw "Build failed."
-}
-
-Write-Host "Copying files..."
-
-if (!(Test-Path $DeployPath)) {
-    New-Item -ItemType Directory -Path $DeployPath | Out-Null
-}
-
-robocopy dist "$DeployPath\dist" /MIR
-robocopy prisma "$DeployPath\prisma" /MIR
-
-Copy-Item package.json "$DeployPath\" -Force
-Copy-Item package-lock.json "$DeployPath\" -Force
-
-Write-Host "Installing production packages..."
-
-Push-Location $DeployPath
-
-npm install --omit=dev
-
-pm2 start dist/index.js --name $SiteName
-
-pm2 save
-
-Pop-Location
-
-Write-Host "Deploy finished."
+Write-Host "Deployment completed successfully!" -ForegroundColor Green
