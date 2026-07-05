@@ -228,7 +228,7 @@ export async function handleJoin(
     } else {
       if (roomType && !game.roomType) {
         game.roomType = roomType;
-        game.doublingCubeEnabled = roomType !== RoomType.CASUAL_1;
+        game.doublingCubeEnabled = true; //roomType !== RoomType.CASUAL_1;
         saveGame(game);
       }
       await applyTimerSettingsToGame(game);

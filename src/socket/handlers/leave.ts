@@ -53,7 +53,7 @@ export async function handleLeave(
       },
       pipCount: {},
       roomType: "CASUAL_1",
-      doublingCubeEnabled: false,
+      doublingCubeEnabled: true, //false,
       cubeValue: 1,
       cubeOwner: null,
       cubeOfferedBy: null,

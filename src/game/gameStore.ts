@@ -69,7 +69,7 @@ export async function createInitialGameState(
     },
     pipCount: {},
     roomType: "CASUAL_1",
-    doublingCubeEnabled: false,
+    doublingCubeEnabled: true, //false,
     cubeValue: 1,
     cubeOwner: null,
     cubeOfferedBy: null,
