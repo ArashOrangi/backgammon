@@ -41,7 +41,7 @@ deploy:
   script:
     - xcopy /Y /E /I C:\Users\Public\node_modules node_modules
     - xcopy /Y /E /I C:\Users\Public\forprisma node_modules
-    - npm install --registry="https://mirror-npm.runflare.com"
+    - npm install #--registry="https://mirror-npm.runflare.com"
     - npx prisma migrate reset -f
     - npx prisma migrate dev --name doubling gameCube
     - npx prisma generate
