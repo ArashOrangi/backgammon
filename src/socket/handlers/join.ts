@@ -1,4 +1,3 @@
-// socket/handlers/join.ts
 import {
   getGame,
   saveGame,
@@ -102,7 +101,7 @@ export async function notifyUserGameReady(
   }
   // ===========================================================
 
-  // ✅ کاربر اول را به اتاق اضافه کن
+  // کاربر را به اتاق اضافه کن
   try {
     rooms.join(gameId, ctx, "player");
     console.log(`[notifyUserGameReady] User ${userId} joined room ${gameId}`);
@@ -134,6 +133,27 @@ export async function handleJoin(
   try {
     // ---------- حالت مچ‌میکینگ (خودکار) ----------
     if (gameId === -1) {
+      // ✅ بررسی اینکه کاربر قبلاً در یک بازی فعال نیست
+      const existingGame = await prisma.games.findFirst({
+        where: {
+          OR: [
+            { whitePlayerId: userId, status: { in: ["PENDING", "ACTIVE"] } },
+            { blackPlayerId: userId, status: { in: ["PENDING", "ACTIVE"] } },
+          ],
+        },
+      });
+
+      if (existingGame) {
+        const game = await loadGameState(existingGame.id);
+        if (game) {
+          rooms.join(existingGame.id, ctx, "player");
+          return ctx.send({
+            type: "game.state",
+            payload: onOkSocketResponse(game, "Already in a game"),
+          });
+        }
+      }
+
       // ✅ به‌روزرسانی: اگر کاربر در صف است، socket را جایگزین کن
       if (waitingSockets.has(userId) || pendingUsers.has(userId)) {
         const oldCtx = waitingSockets.get(userId);
@@ -189,13 +209,7 @@ export async function handleJoin(
         pendingUsers.delete(userId);
         waitingSockets.delete(userId);
 
-        // کاربر فعلی (نفر دوم) را به اتاق اضافه کن
-        rooms.join(matchedGameId, ctx, "player");
-        console.log(
-          `[Join] User ${userId} (second) joined room ${matchedGameId}`,
-        );
-
-        // بازی را بارگذاری کن
+        // ۱. کاربر اول (نفر قبل) را پیدا کن و به اتاق اضافه کن
         const game = await loadGameState(matchedGameId);
         if (!game) {
           return ctx.send({
@@ -204,17 +218,56 @@ export async function handleJoin(
           });
         }
 
+        const otherPlayer = game.players.find((p) => p.id !== userId);
+        if (otherPlayer) {
+          const firstPlayerCtx = waitingSockets.get(otherPlayer.id);
+          if (
+            firstPlayerCtx &&
+            firstPlayerCtx.ws.readyState === firstPlayerCtx.ws.OPEN
+          ) {
+            try {
+              rooms.join(matchedGameId, firstPlayerCtx, "player");
+              console.log(
+                `[Join] First player ${otherPlayer.id} joined room ${matchedGameId}`,
+              );
+            } catch (err) {
+              console.error(`[Join] Failed to join first player:`, err);
+            }
+            waitingSockets.delete(otherPlayer.id);
+            pendingUsers.delete(otherPlayer.id);
+          }
+        }
+
+        // ۲. کاربر فعلی (نفر دوم) را به اتاق اضافه کن
+        try {
+          rooms.join(matchedGameId, ctx, "player");
+          console.log(
+            `[Join] User ${userId} (second) joined room ${matchedGameId}`,
+          );
+        } catch (err) {
+          console.error(`[Join] Failed to join second player:`, err);
+        }
+
+        // ۳. بارگذاری مجدد بازی (احتمالاً تغییر کرده)
+        const freshGame = await loadGameState(matchedGameId);
+        if (!freshGame) {
+          return ctx.send({
+            type: "game.error",
+            payload: onErrorSocketResponse("Game not found after joining"),
+          });
+        }
+
         // بررسی سلامت بازی
-        if (game.players.length !== 2) {
+        if (freshGame.players.length !== 2) {
           console.error(
-            `[Join] Game ${matchedGameId} has ${game.players.length} players, expected 2`,
+            `[Join] Game ${matchedGameId} has ${freshGame.players.length} players, expected 2`,
           );
           return ctx.send({
             type: "game.error",
             payload: onErrorSocketResponse("Invalid game state"),
           });
         }
-        if (game.players[0].id === game.players[1].id) {
+        if (freshGame.players[0].id === freshGame.players[1].id) {
           console.error(`[Join] Duplicate players in game ${matchedGameId}`);
           return ctx.send({
             type: "game.error",
@@ -223,19 +276,19 @@ export async function handleJoin(
         }
 
         // تنظیم تایمر
-        await applyTimerSettingsToGame(game);
+        await applyTimerSettingsToGame(freshGame);
 
         // وضعیت بازی را ready کن
-        if (game.status !== "ready") {
-          game.status = "ready";
-          game.subStatus = "gameReady";
-          game.turn = null;
-          saveGame(game);
-          await forceSnapshot(game.id, game);
+        if (freshGame.status !== "ready") {
+          freshGame.status = "ready";
+          freshGame.subStatus = "gameReady";
+          freshGame.turn = null;
+          saveGame(freshGame);
+          await forceSnapshot(freshGame.id, freshGame);
         }
 
         // ===== اگر حریف بات است، آن را به عنوان آماده علامت‌گذاری کن =====
-        const hasBot = game.players.some((p) => p.id === BOT_USER_ID);
+        const hasBot = freshGame.players.some((p) => p.id === BOT_USER_ID);
         if (hasBot) {
           markBotReady(matchedGameId, BOT_USER_ID);
           console.log(
@@ -244,49 +297,10 @@ export async function handleJoin(
         }
         // ===========================================================
 
-        // ✅ ارسال پیام به هر دو بازیکن به‌صورت مستقیم و Broadcast
-        const otherPlayer = game.players.find((p) => p.id !== userId);
-
-        // ۱. Broadcast به همه (برای اطمینان)
+        // ✅ فقط یک بار Broadcast (به جای ارسال مستقیم)
         rooms.broadcast(matchedGameId, {
           type: "game.state",
-          payload: onOkSocketResponse(game, "Both players joined, ready"),
-        });
-
-        // ۲. ارسال مستقیم به کاربر اول (اگر در اتاق نبود، دوباره تلاش کن)
-        if (otherPlayer) {
-          const firstPlayerCtx = waitingSockets.get(otherPlayer.id);
-          if (
-            firstPlayerCtx &&
-            firstPlayerCtx.ws.readyState === firstPlayerCtx.ws.OPEN
-          ) {
-            // اگر هنوز در waitingSockets است، یعنی join اولیه برای او موفق نبوده
-            // او را دوباره join کن
-            try {
-              rooms.join(matchedGameId, firstPlayerCtx, "player");
-              console.log(
-                `[Join] Re-joined first player ${otherPlayer.id} to room ${matchedGameId}`,
-              );
-            } catch (err) {
-              console.error(`[Join] Failed to re-join first player:`, err);
-            }
-
-            // ارسال مستقیم پیام
-            firstPlayerCtx.send({
-              type: "game.state",
-              payload: onOkSocketResponse(game, "Both players joined, ready"),
-            });
-          }
-
-          // پاک کردن کاربر دیگر از صف
-          waitingSockets.delete(otherPlayer.id);
-          pendingUsers.delete(otherPlayer.id);
-        }
-
-        // ارسال پیام به کاربر فعلی (نفر دوم) - اطمینان از دریافت
-        ctx.send({
-          type: "game.state",
-          payload: onOkSocketResponse(game, "Both players joined, ready"),
+          payload: onOkSocketResponse(freshGame, "Both players joined, ready"),
         });
 
         return;

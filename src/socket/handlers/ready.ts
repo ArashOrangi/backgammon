@@ -18,8 +18,8 @@ import {
 } from "@/game/moveGenerator";
 import { runBotIfNeeded } from "@/game/botRunner";
 import { sleep } from "@/components/sleep";
-// ===== ایمپورت‌های جدید برای تایمر =====
 import { resetWarningState, broadcastTimerStarted } from "@/game/engine/timer";
+import { GameState, GameSubStatus } from "@/game/types"; // ✅ اضافه کردن تایپ GameSubStatus
 
 // ===== readyStates را export کنید =====
 export const readyStates = new Map<number, Set<number>>();
@@ -84,6 +84,7 @@ export async function handleReady(
     });
   }
 
+  // ✅ اگر بازی شروع شده، خطا بده (اما با پیام مناسب)
   if (game.status === "in-progress") {
     return ctx.send({
       type: "game.error",
@@ -103,9 +104,25 @@ export async function handleReady(
     readyStates.set(gameId, new Set());
   }
   const readySet = readyStates.get(gameId)!;
-  if (!readySet.has(userId)) {
-    readySet.add(userId);
+
+  // ✅ اگر کاربر قبلاً ready ارسال کرده، فقط وضعیت فعلی را برگردان
+  if (readySet.has(userId)) {
+    // ✅ اصلاح تایپ subStatus با استفاده از GameSubStatus
+    const subStatus: GameSubStatus =
+      game.status === "ready" ? "gameReady" : "playerJoin";
+    const stateToSend: GameState = {
+      ...game,
+      subStatus,
+    };
+    return ctx.send({
+      type: "game.state",
+      payload: onOkSocketResponse(stateToSend, "Already ready"),
+    });
   }
+
+  // ثبت آمادگی جدید
+  readySet.add(userId);
+  console.log(`[Ready] User ${userId} ready for game ${gameId}`);
 
   // اگر هر دو آماده شدند → شروع بازی
   if (readySet.size === 2) {
@@ -185,7 +202,8 @@ export async function handleReady(
 
     // ===== تأخیر برای نمایش انیمیشن تاس =====
     await sleep(1500);
-    // =====  : ریست وضعیت هشدار و ارسال timer.started =====
+
+    // ===== ریست وضعیت هشدار و ارسال timer.started =====
     resetWarningState(gameId);
     if (freshGame.turn) {
       broadcastTimerStarted(
@@ -199,15 +217,14 @@ export async function handleReady(
     }
     // =========================================================
 
-    // ===== تأخیر برای نمایش تاس شروع به کاربر =====
-    await sleep(1500);
+    // ===== تأخیر برای نمایش تاس شروع به کاربر و اجرای ربات =====
     if (freshGame.status === "in-progress") {
       await runBotIfNeeded(gameId, freshGame.turn!, rooms);
     }
   } else {
-    const stateToSend = {
+    const stateToSend: GameState = {
       ...game,
-      subStatus: "playerJoin" as const,
+      subStatus: "playerJoin",
     };
     ctx.send({
       type: "game.state",
