@@ -62,7 +62,7 @@ export async function notifyUserGameReady(
   const ctx = waitingSockets.get(userId);
   if (!ctx) return;
 
-  // ✅ بررسی اینکه socket هنوز باز است
+  // بررسی اینکه socket هنوز باز است
   if (ctx.ws.readyState !== ctx.ws.OPEN) {
     console.log(
       `[notifyUserGameReady] Socket for user ${userId} is closed, removing from queue`,
@@ -102,8 +102,18 @@ export async function notifyUserGameReady(
   }
   // ===========================================================
 
-  rooms.join(gameId, ctx, "player");
+  // ✅ کاربر اول را به اتاق اضافه کن
+  try {
+    rooms.join(gameId, ctx, "player");
+    console.log(`[notifyUserGameReady] User ${userId} joined room ${gameId}`);
+  } catch (err) {
+    console.error(
+      `[notifyUserGameReady] Failed to join room for user ${userId}:`,
+      err,
+    );
+  }
 
+  // ارسال پیام مستقیم به کاربر اول
   ctx.send({
     type: "game.state",
     payload: onOkSocketResponse(game, "Opponent found! Game is ready."),
@@ -126,7 +136,6 @@ export async function handleJoin(
     if (gameId === -1) {
       // ✅ به‌روزرسانی: اگر کاربر در صف است، socket را جایگزین کن
       if (waitingSockets.has(userId) || pendingUsers.has(userId)) {
-        // بررسی اینکه socket قدیمی باز است یا نه
         const oldCtx = waitingSockets.get(userId);
         if (oldCtx && oldCtx.ws.readyState !== oldCtx.ws.OPEN) {
           // socket قدیمی بسته است → آن را حذف کن
@@ -180,8 +189,11 @@ export async function handleJoin(
         pendingUsers.delete(userId);
         waitingSockets.delete(userId);
 
-        // کاربر فعلی را به اتاق اضافه کن
+        // کاربر فعلی (نفر دوم) را به اتاق اضافه کن
         rooms.join(matchedGameId, ctx, "player");
+        console.log(
+          `[Join] User ${userId} (second) joined room ${matchedGameId}`,
+        );
 
         // بازی را بارگذاری کن
         const game = await loadGameState(matchedGameId);
@@ -232,18 +244,50 @@ export async function handleJoin(
         }
         // ===========================================================
 
-        // به همه (هر دو بازیکن) بگو بازی آماده است
+        // ✅ ارسال پیام به هر دو بازیکن به‌صورت مستقیم و Broadcast
+        const otherPlayer = game.players.find((p) => p.id !== userId);
+
+        // ۱. Broadcast به همه (برای اطمینان)
         rooms.broadcast(matchedGameId, {
           type: "game.state",
           payload: onOkSocketResponse(game, "Both players joined, ready"),
         });
 
-        // پاک کردن کاربر دیگر از صف (اگر در صف باشد)
-        const otherPlayer = game.players.find((p) => p.id !== userId);
+        // ۲. ارسال مستقیم به کاربر اول (اگر در اتاق نبود، دوباره تلاش کن)
         if (otherPlayer) {
+          const firstPlayerCtx = waitingSockets.get(otherPlayer.id);
+          if (
+            firstPlayerCtx &&
+            firstPlayerCtx.ws.readyState === firstPlayerCtx.ws.OPEN
+          ) {
+            // اگر هنوز در waitingSockets است، یعنی join اولیه برای او موفق نبوده
+            // او را دوباره join کن
+            try {
+              rooms.join(matchedGameId, firstPlayerCtx, "player");
+              console.log(
+                `[Join] Re-joined first player ${otherPlayer.id} to room ${matchedGameId}`,
+              );
+            } catch (err) {
+              console.error(`[Join] Failed to re-join first player:`, err);
+            }
+
+            // ارسال مستقیم پیام
+            firstPlayerCtx.send({
+              type: "game.state",
+              payload: onOkSocketResponse(game, "Both players joined, ready"),
+            });
+          }
+
+          // پاک کردن کاربر دیگر از صف
           waitingSockets.delete(otherPlayer.id);
           pendingUsers.delete(otherPlayer.id);
         }
+
+        // ارسال پیام به کاربر فعلی (نفر دوم) - اطمینان از دریافت
+        ctx.send({
+          type: "game.state",
+          payload: onOkSocketResponse(game, "Both players joined, ready"),
+        });
 
         return;
       }
