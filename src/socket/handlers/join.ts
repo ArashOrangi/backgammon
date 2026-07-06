@@ -16,8 +16,8 @@ import { prisma } from "@/components/prisma";
 import { getDefaultTimerPreset } from "@/models/timerPreset";
 import { GameState } from "@/game/types";
 import { RoomType } from "@prisma/client";
-import { markBotReady } from "./ready"; // <-- اضافه شد
-import { BOT_USER_ID } from "@/static/statics"; // <-- اضافه شد
+import { markBotReady } from "./ready";
+import { BOT_USER_ID } from "@/static/statics";
 
 type JoinPayload = { gameId: number; userId: number; roomType?: RoomType };
 
@@ -25,7 +25,7 @@ type JoinPayload = { gameId: number; userId: number; roomType?: RoomType };
 // مدیریت صف کاربران در حال انتظار
 // ======================================================
 const waitingSockets = new Map<number, SocketContext>();
-const pendingUsers = new Set<number>(); // برای جلوگیری از ورود مجدد
+const pendingUsers = new Set<number>();
 
 /**
  * تنظیم تایمرهای پیش‌فرض برای بازی (در صورت نیاز)
@@ -61,6 +61,16 @@ export async function notifyUserGameReady(
 ) {
   const ctx = waitingSockets.get(userId);
   if (!ctx) return;
+
+  // ✅ بررسی اینکه socket هنوز باز است
+  if (ctx.ws.readyState !== ctx.ws.OPEN) {
+    console.log(
+      `[notifyUserGameReady] Socket for user ${userId} is closed, removing from queue`,
+    );
+    waitingSockets.delete(userId);
+    pendingUsers.delete(userId);
+    return;
+  }
 
   waitingSockets.delete(userId);
   pendingUsers.delete(userId);
@@ -114,12 +124,34 @@ export async function handleJoin(
   try {
     // ---------- حالت مچ‌میکینگ (خودکار) ----------
     if (gameId === -1) {
-      // ۱. بررسی اینکه کاربر قبلاً در صف نیست
+      // ✅ به‌روزرسانی: اگر کاربر در صف است، socket را جایگزین کن
       if (waitingSockets.has(userId) || pendingUsers.has(userId)) {
-        return ctx.send({
-          type: "game.error",
-          payload: onErrorSocketResponse("Already in matchmaking queue"),
-        });
+        // بررسی اینکه socket قدیمی باز است یا نه
+        const oldCtx = waitingSockets.get(userId);
+        if (oldCtx && oldCtx.ws.readyState !== oldCtx.ws.OPEN) {
+          // socket قدیمی بسته است → آن را حذف کن
+          waitingSockets.delete(userId);
+          pendingUsers.delete(userId);
+          console.log(`[Join] Removed stale socket for user ${userId}`);
+        } else {
+          // socket باز است → آن را به‌روزرسانی کن (جایگزین کن)
+          waitingSockets.set(userId, ctx);
+          pendingUsers.add(userId);
+          console.log(`[Join] Updated socket for user ${userId} in queue`);
+
+          // ارسال وضعیت منتظر به کاربر
+          const waitingGame = await createInitialGameState(-1);
+          waitingGame.status = "waiting";
+          waitingGame.subStatus = "playerJoin";
+          waitingGame.players = [{ id: userId, color: "white" }];
+          return ctx.send({
+            type: "game.state",
+            payload: onOkSocketResponse(
+              waitingGame,
+              "Already in queue, socket updated",
+            ),
+          });
+        }
       }
 
       // ۲. تلاش برای پیدا کردن حریف (همگام) - rooms را هم پاس می‌دهیم
@@ -228,7 +260,7 @@ export async function handleJoin(
     } else {
       if (roomType && !game.roomType) {
         game.roomType = roomType;
-        game.doublingCubeEnabled = true; //roomType !== RoomType.CASUAL_1;
+        game.doublingCubeEnabled = true;
         saveGame(game);
       }
       await applyTimerSettingsToGame(game);
