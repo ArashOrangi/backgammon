@@ -3,6 +3,9 @@ import { errorHandlersOnPrisma } from "@/components/errorHandler";
 import { prisma } from "@/components/prisma";
 import { Prisma } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/client";
+// ===== اضافه شده: import سرویس‌های Starter Pack و Fake Data =====
+import { applyStarterPackToUser } from "@/services/starter-pack.service";
+import { generateFakeUserData } from "@/services/fake-data.service";
 
 export interface User {
   id: number;
@@ -190,6 +193,32 @@ export async function createUserWithProfile(data: {
       },
       select: prismaSelectUser,
     });
+
+    // ===== اضافه شده: اعمال Starter Pack و دیتای فیک به کاربر جدید =====
+    if (user) {
+      // ۱. اعمال بسته شروع (Starter Pack)
+      try {
+        const packId = userName ? "starter_classic" : undefined;
+        await applyStarterPackToUser(user.id, packId);
+      } catch (error) {
+        console.error(
+          `Failed to apply starter pack to user ${user.id}:`,
+          error,
+        );
+      }
+
+      // ۲. تولید دیتای فیک (آمار، تورنومنت، لیدربورد)
+      try {
+        await generateFakeUserData(user.id);
+      } catch (error) {
+        console.error(
+          `Failed to generate fake data for user ${user.id}:`,
+          error,
+        );
+      }
+    }
+    // ================================================================
+
     return user;
   } catch (error) {
     return errorHandlersOnPrisma({ error });

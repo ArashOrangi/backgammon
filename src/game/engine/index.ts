@@ -18,7 +18,7 @@ export function isGameOver(game: GameState): boolean {
   for (const player of game.players) {
     const borne = game.board.borneOff[player.id] ?? 0;
     if (borne >= 15) {
-      // اعتبارسنجی: مجموع مهره‌های بازیکن باید ۱۵ باشد و هیچ مهره‌ای روی تخته یا BAR نباشد
+      // اعتبارسنجی: مجموع مهره‌های بازیکن باید 1۵ باشد و هیچ مهره‌ای روی تخته یا BAR نباشد
       const onBoard = game.board.points.reduce(
         (sum, p) => sum + (p.owner === player.id ? p.count : 0),
         0,

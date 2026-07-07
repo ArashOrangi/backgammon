@@ -8,7 +8,7 @@ export function rollDie(): number {
 /**
  * تاس معمولی بازی:
  * - اگر دابل → ۴ تاس
- * - اگر عادی → ۲ تاس
+ * - اگر عادی → 2 تاس
  */
 export function rollDice(): number[] {
   const d1 = rollDie();

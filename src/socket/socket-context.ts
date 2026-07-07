@@ -15,7 +15,7 @@ export class SocketContext {
   send(message: ServerMessage) {
     if (this.ws.readyState === this.ws.OPEN) {
       setTimeout(() => {
-        // دوباره وضعیت اتصال را بررسی کن، چون ممکن است در ۱۵۰ میلی‌ثانیه بسته شده باشد
+        // دوباره وضعیت اتصال را بررسی کن، چون ممکن است در 1۵۰ میلی‌ثانیه بسته شده باشد
         if (this.ws.readyState === this.ws.OPEN) {
           this.ws.send(JSON.stringify(message));
         }

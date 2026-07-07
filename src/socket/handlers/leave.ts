@@ -91,7 +91,7 @@ export async function handleLeave(
     }
 
     try {
-      // سناریو ۱: بازی شروع نشده (waiting یا ready)
+      // سناریو 1: بازی شروع نشده (waiting یا ready)
       if (game.status === "waiting" || game.status === "ready") {
         await appendGameEvent(game.id, {
           type: "PLAYER_LEFT",
@@ -124,7 +124,7 @@ export async function handleLeave(
         return;
       }
 
-      // سناریو ۲: بازی در جریان است (starting یا in-progress)
+      // سناریو 2: بازی در جریان است (starting یا in-progress)
       rooms.leave(ctx);
 
       rooms.broadcast(gameId, {

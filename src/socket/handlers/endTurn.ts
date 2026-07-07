@@ -90,7 +90,7 @@ export async function handleEndTurn(
       resetWarningState(gameId);
 
       // ===== ترتیب جدید: game.state → game.turn → timer.started =====
-      // ۱. ابتدا state کامل با subStatus محاسبه‌شده و legalMoves
+      // 1. ابتدا state کامل با subStatus محاسبه‌شده و legalMoves
       let legalMoves: any[] = [];
       if (updatedGame.turn !== null) {
         legalMoves = generateMoveSequences(updatedGame, updatedGame.turn);
@@ -107,7 +107,7 @@ export async function handleEndTurn(
         payload: onOkSocketResponse(stateToSend, "Turn passed successfully"),
       });
 
-      // ۲. سپس game.turn (اختیاری، چون state حاوی turn است)
+      // 2. سپس game.turn (اختیاری، چون state حاوی turn است)
       const nextPlayer = updatedGame.players.find(
         (p) => p.id === updatedGame.turn,
       );
@@ -121,7 +121,7 @@ export async function handleEndTurn(
         });
       }
 
-      // ۳. در آخر timer.started
+      // 3. در آخر timer.started
       if (updatedGame.turn) {
         broadcastTimerStarted(
           gameId,
@@ -133,7 +133,7 @@ export async function handleEndTurn(
         );
       }
 
-      // تأخیر ۱۰۰ میلی‌ثانیه قبل از اجرای ربات
+      // تأخیر 1۰۰ میلی‌ثانیه قبل از اجرای ربات
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       if (updatedGame.status === "in-progress") {

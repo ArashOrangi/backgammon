@@ -213,7 +213,7 @@ function canEnterFromBarWithAnyDie(game: any, playerId: number): boolean {
     // اگر نقطه خالی باشد یا مال خود بازیکن باشد یا یک مهره حریف داشته باشد (قابل زدن)
     if (point.owner === null || point.owner === playerId) return true;
     if (point.owner !== playerId && point.count === 1) return true;
-    // در غیر این صورت بلاک است (۲ یا بیشتر)
+    // در غیر این صورت بلاک است (2 یا بیشتر)
   }
   return false;
 }

@@ -17,6 +17,9 @@ import { locationRoutes } from "./routes/location";
 import { getWsLogs, clearWsLogs } from "./utils/wsLogger";
 import { middlewareAuth } from "./middlewares/middlewareAuth";
 import { accountRoute } from "./routes/account";
+import { shopRoutes } from "./routes/shop";
+import { collectionRoutes } from "./routes/collection";
+import { leaderboardRoutes } from "./routes/leaderboard";
 
 dotenv.config();
 
@@ -33,6 +36,9 @@ app.route("/api/history", history);
 app.route("/api/timer-presets", timerConfigRoutes);
 app.route("/api/miniChat", chatRoutes);
 app.route("/api/location", locationRoutes);
+app.route("/api/shop", shopRoutes);
+app.route("/api/collection", collectionRoutes);
+app.route("/api/leaderboard", leaderboardRoutes);
 
 const PORT = Number(process.env.PORT) || 8080;
 
@@ -51,7 +57,7 @@ async function readBodyString(
 // راه‌اندازی سرور فقط پس از آماده شدن بات
 // ------------------------------------------------------------
 (async () => {
-  // ۱. ایجاد / دریافت کاربر بات
+  // 1. ایجاد / دریافت کاربر بات
   try {
     const bot = await prismaUserGetOrCreate("SystemBot");
     if (bot === OrmState.Error) {
@@ -66,7 +72,7 @@ async function readBodyString(
     process.env.BOT_USER_ID = "1";
   }
 
-  // ۲. ایجاد HTTP server
+  // 2. ایجاد HTTP server
   const server = createServer(async (req, res) => {
     if (req.url?.startsWith("/api")) {
       try {
@@ -108,7 +114,7 @@ async function readBodyString(
     }
   });
 
-  // ۳. RoomManager و WebSocket
+  // 3. RoomManager و WebSocket
   const rooms = new RoomManager();
   const wss = new WebSocketServer({ server });
   registerSocketHandlers(wss, rooms);

@@ -67,17 +67,17 @@ function getAllowedRange(queued: QueuedPlayer, config: RoomConfig): number {
   return Math.min(range, config.maxRange);
 }
 
-/** بررسی قوانین جلوگیری از تکرار حریف (PDF: حداکثر ۲ بازی پشت سر هم و حداکثر ۳ بازی در ۳۰ دقیقه) */
+/** بررسی قوانین جلوگیری از تکرار حریف (PDF: حداکثر 2 بازی پشت سر هم و حداکثر 3 بازی در 3۰ دقیقه) */
 function canMatchAgain(
   playerId: number,
   opponentId: number,
   recentOpponents: any[],
 ): boolean {
-  // قانون ۱: دو بازی پشت سر هم با یک حریف ممنوع
+  // قانون 1: دو بازی پشت سر هم با یک حریف ممنوع
   const lastOpponent = recentOpponents[recentOpponents.length - 1]?.opponentId;
   if (lastOpponent === opponentId) return false;
 
-  // قانون ۲: حداکثر ۳ بازی در ۳۰ دقیقه
+  // قانون 2: حداکثر 3 بازی در 3۰ دقیقه
   const now = Date.now();
   const matchesInLast30min = recentOpponents.filter(
     (entry: any) =>
@@ -153,21 +153,21 @@ async function findOpponent(
   });
   const userMap = new Map(candidateUsers.map((u) => [u.id, u]));
 
-  // مرحله ۱: فیلتر MMR (بر اساس allowed_range)
+  // مرحله 1: فیلتر MMR (بر اساس allowed_range)
   let filtered = candidates.filter((c) => {
     const u = userMap.get(c.userId);
     return u && u.mmr >= minMmr && u.mmr <= maxMmr;
   });
   if (filtered.length === 0) return null;
 
-  // مرحله ۲: جلوگیری از تکرار حریف
+  // مرحله 2: جلوگیری از تکرار حریف
   const recentOpponents = (currentPlayer.recentOpponents as any[]) || [];
   filtered = filtered.filter((c) =>
     canMatchAgain(queuedPlayer.userId, c.userId, recentOpponents),
   );
   if (filtered.length === 0) return null;
 
-  // مرحله ۳: اعمال قوانین Streak
+  // مرحله 3: اعمال قوانین Streak
   filtered = filtered.filter((c) =>
     isStreakValid(currentPlayer, userMap.get(c.userId)!),
   );
@@ -360,7 +360,7 @@ export async function updatePlayerStatsAfterGame(
   const loserLossStreak = loser.lossStreak + 1;
   const loserWinStreak = 0;
 
-  // به‌روزرسانی recentResults (آخرین ۲۰ بازی)
+  // به‌روزرسانی recentResults (آخرین 2۰ بازی)
   const winnerResults = (winner.recentResults as boolean[]) || [];
   winnerResults.unshift(true);
   if (winnerResults.length > 20) winnerResults.pop();
@@ -368,7 +368,7 @@ export async function updatePlayerStatsAfterGame(
   loserResults.unshift(false);
   if (loserResults.length > 20) loserResults.pop();
 
-  // به‌روزرسانی recentOpponents (حداکثر ۱۰ رکورد)
+  // به‌روزرسانی recentOpponents (حداکثر 1۰ رکورد)
   const now = Date.now();
   const winnerOpponents = (winner.recentOpponents as any[]) || [];
   winnerOpponents.unshift({ opponentId: loserId, timestamp: now });

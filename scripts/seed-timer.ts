@@ -6,13 +6,13 @@ async function main() {
     await prisma.timerPreset.create({
       data: {
         name: "default",
-        primarySeconds: 400,
-        secondarySeconds: 480,
+        primarySeconds: 30,
+        secondarySeconds: 40,
         isDefault: true,
         gameType: "casual",
       },
     });
-    console.log("✅ Default timer preset created (400s / 480s)");
+    console.log("✅ Default timer preset created (30s / 40s)");
   } else {
     console.log("Timer preset already exists, skipping seed.");
   }

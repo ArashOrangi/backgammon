@@ -20,7 +20,7 @@ export async function updatePlayerStatsAfterGame(
   const loserLossStreak = loser.lossStreak + 1;
   const loserWinStreak = 0;
 
-  // به‌روزرسانی recentResults (آخرین ۲۰ بازی)
+  // به‌روزرسانی recentResults (آخرین 2۰ بازی)
   const winnerResults = (winner.recentResults as boolean[]) || [];
   winnerResults.unshift(true);
   if (winnerResults.length > 20) winnerResults.pop();
@@ -32,7 +32,7 @@ export async function updatePlayerStatsAfterGame(
   const now = Date.now();
   const winnerOpponents = (winner.recentOpponents as any[]) || [];
   winnerOpponents.unshift({ opponentId: loserId, timestamp: now });
-  if (winnerOpponents.length > 10) winnerOpponents.pop(); // نگهداری حداکثر ۱۰ رکورد اخیر کافیست
+  if (winnerOpponents.length > 10) winnerOpponents.pop(); // نگهداری حداکثر 1۰ رکورد اخیر کافیست
   const loserOpponents = (loser.recentOpponents as any[]) || [];
   loserOpponents.unshift({ opponentId: winnerId, timestamp: now });
   if (loserOpponents.length > 10) loserOpponents.pop();

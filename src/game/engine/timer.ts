@@ -9,7 +9,7 @@ const warningState = new Map<number, { level: "none" | "5s" }>();
 
 /**
  * تابع اصلی بررسی تایم‌اوت‌ها
- * این تابع هر TICK (مثلاً هر ۲ ثانیه) توسط سرور فراخوانی می‌شود
+ * این تابع هر TICK (مثلاً هر 2 ثانیه) توسط سرور فراخوانی می‌شود
  */
 export async function checkGameTimeouts(rooms: RoomManager) {
   const games = getAllActiveGames();
@@ -28,7 +28,7 @@ export async function checkGameTimeouts(rooms: RoomManager) {
     const totalAllowed = primary + secondary;
     const remaining = totalAllowed - elapsed;
 
-    // ۱. اگر زمان تمام شده → تایم‌اوت
+    // 1. اگر زمان تمام شده → تایم‌اوت
     if (remaining <= 0) {
       rooms.broadcast(game.id, {
         type: "timer.timeout",
@@ -42,7 +42,7 @@ export async function checkGameTimeouts(rooms: RoomManager) {
       continue;
     }
 
-    // ۲. ارسال هشدار ۵ ثانیه مانده (فقط یک بار)
+    // 2. ارسال هشدار ۵ ثانیه مانده (فقط یک بار)
     const state = warningState.get(game.id) || { level: "none" };
     if (remaining <= 5 && state.level !== "5s") {
       rooms.broadcast(game.id, {

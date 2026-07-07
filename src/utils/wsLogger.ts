@@ -6,7 +6,7 @@ export interface WsLogEntry {
   type?: string;
 }
 
-const MAX_LOG_LENGTH = 10000; // افزایش به ۱۰۰۰۰ کاراکتر
+const MAX_LOG_LENGTH = 10000; // افزایش به 1۰۰۰۰ کاراکتر
 const wsLogs: WsLogEntry[] = [];
 const MAX_LOGS = 500;
 

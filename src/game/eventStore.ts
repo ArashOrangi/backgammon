@@ -25,6 +25,7 @@ import {
 import { generateMoveSequences } from "./moveGenerator";
 import { OrmState } from "@/models/enums";
 import { prisma } from "@/components/prisma";
+import { processGameCompletion } from "@/services/gameCompletion";
 
 function assertNever(x: never): never {
   throw new Error(`Unhandled event type: ${(x as any).type}`);
@@ -348,8 +349,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       state.winner = event.payload.winner;
       state.winType = event.payload.winType;
       state.score =
-        event.payload.score ??
-        calculateGameScore(state, event.payload.winType);
+        event.payload.score ?? calculateGameScore(state, event.payload.winType);
       state.turn = null;
       state.cubeOfferedBy = null;
       state.cubeOfferedTo = null;
@@ -562,6 +562,22 @@ export async function appendGameEvent(gameId: number, event: GameEvent) {
     throw new Error(`Failed to append event: ${JSON.stringify(created)}`);
   }
 
+  // ===== اضافه شده: پردازش پایان بازی =====
+  if (event.type === "GAME_FINISHED") {
+    // بارگذاری state جدید برای پردازش
+    const state = await loadGameState(gameId);
+    if (state) {
+      // پردازش را به صورت غیرهمزمان و بدون await اجرا می‌کنیم
+      processGameCompletion(gameId, state).catch((err) => {
+        console.error(
+          `[EventStore] Error in processGameCompletion for game ${gameId}:`,
+          err,
+        );
+      });
+    }
+  }
+  // ======================================
+
   if (nextSequence % SNAPSHOT_INTERVAL === 0) {
     const state = await loadGameState(gameId);
 
@@ -609,35 +625,6 @@ export async function loadGameStateUntil(
   return state;
 }
 
-// eventStore.ts
-
-// eventStore.ts
-
-// export function calculateSubStatus(
-//   state: GameState,
-// ): GameSubStatus | undefined {
-//   // اگر بازی در حالت ready است و هر دو بازیکن حضور دارند → gameReady
-//   if (state.status === "ready" && state.players.length === 2) {
-//     return "gameReady";
-//   }
-
-//   if (state.status !== "in-progress" || !state.turn) {
-//     return undefined;
-//   }
-
-//   const hasDice = state.dice && state.dice.length > 0;
-
-//   if (!hasDice) {
-//     // بدون تاس: اگر قبلاً تاس ریخته شده => نوبت تمام شده (mustEndTurn)
-//     // در غیر این صورت => منتظر ریختن تاس (waitForRoll)
-//     return state.rolledThisTurn === true ? "mustEndTurn" : "waitForRoll";
-//   }
-
-//   // تاس موجود است: بررسی حرکت قانونی
-//   const legalMoves = generateMoveSequences(state, state.turn);
-//   const hasRealMove = legalMoves.some((seq) => seq.moves.length > 0);
-//   return hasRealMove ? "playDice" : "mustEndTurn";
-// }
 export function calculateSubStatus(state: GameState): SubStatus | undefined {
   if (state.status !== "in-progress" || !state.turn) {
     return undefined;

@@ -44,7 +44,7 @@ export async function handleUndo(
   }
 
   await gameQueue.enqueue(gameId, async () => {
-    // ۱. لود کردن استیت فعلی برای چک کردن نوبت
+    // 1. لود کردن استیت فعلی برای چک کردن نوبت
     const currentGame = await loadGameState(gameId);
     if (!currentGame || currentGame.turn !== playerId) {
       return ctx.send({
@@ -53,7 +53,7 @@ export async function handleUndo(
       });
     }
 
-    // ۲. undo آخرین حرکت
+    // 2. undo آخرین حرکت
     const undone = await undoLastMove(gameId, playerId);
     if (!undone) {
       return ctx.send({
@@ -62,7 +62,7 @@ export async function handleUndo(
       });
     }
 
-    // ۳. بازسازی کامل استیت (Re-build state from events)
+    // 3. بازسازی کامل استیت (Re-build state from events)
     const updatedGame = await loadGameState(gameId);
     if (!updatedGame) return;
 
