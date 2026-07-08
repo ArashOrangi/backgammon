@@ -1,6 +1,6 @@
 export function textFixer(text: string) {
-  const persianDigits = ["۰", "1", "2", "3", "۴", "۵", "۶", "۷", "۸", "۹"];
-  const persianDigitsRegex = /[۰123۴۵۶۷۸۹]/g;
+  const persianDigits = ["۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹"];
+  const persianDigitsRegex = /[۰۱۲۳۴۵۶۷۸۹]/g;
 
   const fixed = text
     .trim()
@@ -22,8 +22,8 @@ export function textFixer(text: string) {
 }
 
 export function digitFixer(text: string) {
-  const persianDigits = ["۰", "1", "2", "3", "۴", "۵", "۶", "۷", "۸", "۹"];
-  const persianDigitsRegex = /[۰123۴۵۶۷۸۹]/g;
+  const persianDigits = ["۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹"];
+  const persianDigitsRegex = /[۰۱۲۳۴۵۶۷۸۹]/g;
 
   const fixed = text.replace(
     persianDigitsRegex,
