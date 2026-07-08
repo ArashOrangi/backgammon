@@ -107,7 +107,7 @@ export async function prismaUserGetOrCreate(userName: string) {
         await generateFakeUserData(newUser.id);
       } catch (error) {
         console.error(
-          `Failed to generate fake data for user ${newUser.id}:`,
+          `Failed to generate fake data: for user ${newUser.id}:`,
           error,
         );
       }
