@@ -91,6 +91,29 @@ export async function prismaUserGetOrCreate(userName: string) {
       data: { userName },
       select: prismaSelectUser,
     });
+
+    // ===== اضافه شده: اعمال Starter Pack و دیتای فیک (به جز برای بات) =====
+    if (newUser && userName !== "SystemBot") {
+      try {
+        const packId = "starter_classic"; // یا undefined برای رندوم
+        await applyStarterPackToUser(newUser.id, packId);
+      } catch (error) {
+        console.error(
+          `Failed to apply starter pack to user ${newUser.id}:`,
+          error,
+        );
+      }
+      try {
+        await generateFakeUserData(newUser.id);
+      } catch (error) {
+        console.error(
+          `Failed to generate fake data for user ${newUser.id}:`,
+          error,
+        );
+      }
+    }
+    // ================================================================
+
     return newUser;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
