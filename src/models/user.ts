@@ -177,8 +177,9 @@ export async function createUserWithProfile(data: {
     frame,
     title,
   } = data;
-  const finalUsername = userName || (await generateGuestUsername());
 
+  const finalUsername = userName || (await generateGuestUsername());
+  console.log("donaballl", { userName, finalUsername });
   try {
     const user = await prisma.user.create({
       data: {
@@ -197,10 +198,15 @@ export async function createUserWithProfile(data: {
     // ===== اضافه شده: اعمال Starter Pack و دیتای فیک به کاربر جدید =====
     if (user) {
       // ۱. اعمال بسته شروع (Starter Pack)
+      console.log("fake data");
+
       try {
         const packId = userName ? "starter_classic" : undefined;
         await applyStarterPackToUser(user.id, packId);
+        console.log("LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL");
       } catch (error) {
+        console.log("QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ");
+
         console.error(
           `Failed to apply starter pack to user ${user.id}:`,
           error,
@@ -209,6 +215,8 @@ export async function createUserWithProfile(data: {
 
       // ۲. تولید دیتای فیک (آمار، تورنومنت، لیدربورد)
       try {
+        console.log("generateFakeUserData33333333333333333333");
+
         await generateFakeUserData(user.id);
       } catch (error) {
         console.error(
@@ -218,7 +226,6 @@ export async function createUserWithProfile(data: {
       }
     }
     // ================================================================
-
     return user;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
