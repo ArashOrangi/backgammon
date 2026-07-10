@@ -54,7 +54,6 @@ const prismaSelectUserPublic = {
   phoneNumber: true,
   gender: true,
   level: true,
-  // password: true  // ❌ حذف شده
   isLocked: true,
   lastOnline: true,
   provinceId: true,
