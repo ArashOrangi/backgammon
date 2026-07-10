@@ -47,17 +47,19 @@ userRoutes.post("/", async (c) => {
 
 // دریافت اطلاعات کاربر + پروفایل (با middlewareAuth)
 userRoutes.get("/profile/:userId", middlewareAuth, async (c) => {
-  const userIdRaw = c.req.param("userId");
-  const userId = Number(userIdRaw);
-  if (isNaN(userId) || !Number.isInteger(userId) || userId <= 0) {
+  const currentUser = c.get("user"); // 👈 کاربر درخواست‌کننده را بگیر
+  const userId = Number(c.req.param("userId"));
+
+  if (isNaN(userId) || userId <= 0) {
     return onValidationsRestResponse({
       ctx: c,
       validations: { userId: ["Must be a positive integer"] },
-      message: "Invalid userId",
     });
   }
-  const result = await getUserWithProfile(userId);
-  if (!result || result === OrmState.Error) {
+
+  // 👈 currentUser?.id را به تابع پاس بده
+  const result = await getUserWithProfile(userId, currentUser?.id);
+  if (!result) {
     return onErrorRestResponse({ ctx: c, errorMessage: "User not found" });
   }
   return onOkRestResponse({ ctx: c, data: result });

@@ -3,7 +3,6 @@ import { errorHandlersOnPrisma } from "@/components/errorHandler";
 import { prisma } from "@/components/prisma";
 import { Prisma } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/client";
-// ===== اضافه شده: import سرویس‌های Starter Pack و Fake Data =====
 import { applyStarterPackToUser } from "@/services/starter-pack.service";
 import { generateFakeUserData } from "@/services/fake-data.service";
 
@@ -23,27 +22,25 @@ export interface User {
   updatedAt: Date;
   gender?: "MAN" | "WOMAN" | "OTHER";
   level?: number | null;
-  password?: string | null;
+  password?: string | null; // 👈 فقط برای استفاده داخلی (مثلاً احراز هویت)
   provinceId?: number | null;
   cityId?: number | null;
-  // ===== فیلدهای پروفایل جدید =====
   avatar?: string | null;
   frame?: string | null;
   title?: string | null;
-  // ===== فیلدهای شخصی‌سازی =====
   selectedDiceId?: number | null;
   selectedCheckerId?: number | null;
   selectedCupId?: number | null;
   selectedBoardId?: number | null;
   selectedStickerId?: number | null;
-  // ===== آمار بازی =====
   totalWins: number;
   totalMars: number;
   totalBackgammon: number;
   totalMatches: number;
 }
 
-const prismaSelectUser = {
+// ✅ Select عمومی برای پاسخ‌های کلاینت (بدون password)
+const prismaSelectUserPublic = {
   id: true,
   userName: true,
   winRate: true,
@@ -57,12 +54,11 @@ const prismaSelectUser = {
   phoneNumber: true,
   gender: true,
   level: true,
-  password: true,
+  // password: true  // ❌ حذف شده
   isLocked: true,
   lastOnline: true,
   provinceId: true,
   cityId: true,
-  // ===== فیلدهای جدید =====
   avatar: true,
   frame: true,
   title: true,
@@ -77,25 +73,31 @@ const prismaSelectUser = {
   totalMatches: true,
 } as const;
 
+//  Select مخصوص احراز هویت (شامل password)
+const prismaSelectUserAuth = {
+  ...prismaSelectUserPublic,
+  password: true,
+} as const;
+
 // ------------------- توابع اصلی گیم‌پلی -------------------
 
 export async function prismaUserGetOrCreate(userName: string) {
   try {
     const existingUser = await prisma.user.findUnique({
       where: { userName },
-      select: prismaSelectUser,
+      select: prismaSelectUserPublic,
     });
     if (existingUser) return existingUser;
 
     const newUser = await prisma.user.create({
       data: { userName },
-      select: prismaSelectUser,
+      select: prismaSelectUserPublic,
     });
 
-    // ===== اضافه شده: اعمال Starter Pack و دیتای فیک (به جز برای بات) =====
+    // اعمال Starter Pack و دیتای فیک (به جز برای بات)
     if (newUser && userName !== "SystemBot") {
       try {
-        const packId = "starter_classic"; // یا undefined برای رندوم
+        const packId = "starter_classic";
         await applyStarterPackToUser(newUser.id, packId);
       } catch (error) {
         console.error(
@@ -107,12 +109,11 @@ export async function prismaUserGetOrCreate(userName: string) {
         await generateFakeUserData(newUser.id);
       } catch (error) {
         console.error(
-          `Failed to generate fake data: for user ${newUser.id}:`,
+          `Failed to generate fake data for user ${newUser.id}:`,
           error,
         );
       }
     }
-    // ================================================================
 
     return newUser;
   } catch (error) {
@@ -124,7 +125,7 @@ export async function prismaUserGetById(id: number) {
   try {
     const user = await prisma.user.findUnique({
       where: { id },
-      select: prismaSelectUser,
+      select: prismaSelectUserPublic,
     });
     return user;
   } catch (error) {
@@ -132,11 +133,12 @@ export async function prismaUserGetById(id: number) {
   }
 }
 
+// ✅ این تابع برای احراز هویت استفاده می‌شود و شامل password است
 export async function prismaUserGetByUsername(userName: string) {
   try {
     const user = await prisma.user.findUnique({
       where: { userName },
-      select: prismaSelectUser,
+      select: prismaSelectUserAuth,
     });
     return user;
   } catch (error) {
@@ -155,7 +157,7 @@ export async function prismaUserUpdateWinRate({
     const user = await prisma.user.update({
       where: { id: userId },
       data: { winRate },
-      select: prismaSelectUser,
+      select: prismaSelectUserPublic,
     });
     return user;
   } catch (error) {
@@ -202,7 +204,7 @@ export async function createUserWithProfile(data: {
   } = data;
 
   const finalUsername = userName || (await generateGuestUsername());
-  console.log("donaballl", { userName, finalUsername });
+
   try {
     const user = await prisma.user.create({
       data: {
@@ -215,31 +217,20 @@ export async function createUserWithProfile(data: {
         frame: frame || null,
         title: title || null,
       },
-      select: prismaSelectUser,
+      select: prismaSelectUserPublic,
     });
 
-    // ===== اضافه شده: اعمال Starter Pack و دیتای فیک به کاربر جدید =====
     if (user) {
-      // ۱. اعمال بسته شروع (Starter Pack)
-      console.log("fake data");
-
       try {
         const packId = userName ? "starter_classic" : undefined;
         await applyStarterPackToUser(user.id, packId);
-        console.log("LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL");
       } catch (error) {
-        console.log("QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ");
-
         console.error(
           `Failed to apply starter pack to user ${user.id}:`,
           error,
         );
       }
-
-      // ۲. تولید دیتای فیک (آمار، تورنومنت، لیدربورد)
       try {
-        console.log("generateFakeUserData33333333333333333333");
-
         await generateFakeUserData(user.id);
       } catch (error) {
         console.error(
@@ -248,7 +239,7 @@ export async function createUserWithProfile(data: {
         );
       }
     }
-    // ================================================================
+
     return user;
   } catch (error) {
     return errorHandlersOnPrisma({ error });
@@ -264,11 +255,9 @@ export async function updateUserProfile(
     gender: "MAN" | "WOMAN" | "OTHER";
     level: number;
     password: string;
-    // فیلدهای پروفایل
     avatar: string;
     frame: string;
     title: string;
-    // فیلدهای شخصی‌سازی
     selectedDiceId: number;
     selectedCheckerId: number;
     selectedCupId: number;
@@ -280,7 +269,7 @@ export async function updateUserProfile(
     const user = await prisma.user.update({
       where: { id: userId },
       data: data as Prisma.UserUpdateInput,
-      select: prismaSelectUser,
+      select: prismaSelectUserPublic,
     });
     return user;
   } catch (error) {
@@ -288,13 +277,92 @@ export async function updateUserProfile(
   }
 }
 
-export async function getUserWithProfile(userId: number) {
+/**
+ * دریافت پروفایل کاربر با اطلاعات اضافی از جمله سطح، سکه، XP و بازی‌های مشترک
+ * @param userId شناسه کاربر مورد نظر
+ * @param currentUserId شناسه کاربر درخواست‌کننده (اختیاری) – برای محاسبه بازی‌های مشترک
+ */
+export async function getUserWithProfile(
+  userId: number,
+  currentUserId?: number,
+) {
   try {
+    // ۱. دریافت اطلاعات پایه کاربر (بدون password)
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: prismaSelectUser,
+      select: prismaSelectUserPublic,
     });
-    return user;
+    if (!user) return null;
+
+    // ۲. دریافت اطلاعات آماری (UserStats)
+    const userStats = await prisma.userStats.findUnique({
+      where: { userId },
+    });
+
+    // ۳. محاسبه بازی‌های مشترک (در صورت وجود currentUserId)
+    let commonMatches = 0;
+    let lastMatchDate: Date | null = null;
+    let lastMatchResult: string | null = null;
+
+    if (currentUserId && currentUserId !== userId) {
+      const commonGames = await prisma.matchParticipent.findMany({
+        where: {
+          playerId: userId,
+          matchRecord: {
+            participants: {
+              some: { playerId: currentUserId },
+            },
+          },
+        },
+      });
+
+      commonMatches = commonGames.length;
+
+      if (commonMatches > 0) {
+        const lastGame = await prisma.matchParticipent.findFirst({
+          where: {
+            playerId: userId,
+            matchRecord: {
+              participants: {
+                some: { playerId: currentUserId },
+              },
+            },
+          },
+          orderBy: { matchRecord: { endMatch: "desc" } },
+          include: {
+            matchRecord: {
+              include: {
+                participants: true,
+              },
+            },
+          },
+        });
+
+        if (lastGame) {
+          lastMatchDate = lastGame.matchRecord.endMatch;
+          const currentUserParticipent = lastGame.matchRecord.participants.find(
+            (p) => p.playerId === currentUserId,
+          );
+          if (currentUserParticipent) {
+            lastMatchResult = currentUserParticipent.result ? "win" : "loss";
+          }
+        }
+      }
+    }
+
+    // ۴. ترکیب اطلاعات و بازگرداندن
+    return {
+      ...user,
+      // سطح، XP، سکه و الماس از UserStats گرفته می‌شوند
+      level: userStats?.level ?? 1,
+      xp: userStats?.xp ?? 0,
+      coin: userStats?.coin ?? 0,
+      gem: userStats?.gem ?? 0,
+      // اطلاعات بازی‌های مشترک
+      commonMatches,
+      lastMatchDate,
+      lastMatchResult,
+    };
   } catch (error) {
     return errorHandlersOnPrisma({ error });
   }
@@ -320,7 +388,7 @@ export async function updateUserStats(
     const user = await prisma.user.update({
       where: { id: userId },
       data: data as Prisma.UserUpdateInput,
-      select: prismaSelectUser,
+      select: prismaSelectUserPublic,
     });
     return user;
   } catch (error) {
@@ -350,7 +418,7 @@ export async function incrementUserStats({
         totalMars: isMars ? { increment: 1 } : undefined,
         totalBackgammon: isBackgammon ? { increment: 1 } : undefined,
       },
-      select: prismaSelectUser,
+      select: prismaSelectUserPublic,
     });
     return user;
   } catch (error) {
