@@ -20,10 +20,13 @@ import { accountRoute } from "./routes/account";
 import { shopRoutes } from "./routes/shop";
 import { collectionRoutes } from "./routes/collection";
 import { leaderboardRoutes } from "./routes/leaderboard";
+import { cors } from "hono/cors";
 
 dotenv.config();
 
 const app = new Hono();
+app.use("*", cors());
+
 app.use(logger());
 app.use("*", middlewareAuth);
 
