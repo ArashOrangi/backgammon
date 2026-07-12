@@ -41,17 +41,12 @@ deploy:
   script:
     - xcopy /Y /E /I C:\Users\Public\node_modules node_modules
     - xcopy /Y /E /I C:\Users\Public\forprisma node_modules
-    # - npm install --registry="https://mirror-npm.runflare.com"
     - npm install
     # - npx prisma migrate reset -f
-    # - npx prisma migrate dev --name reset data
+    # - npx prisma migrate dev --name change all tables
     - npx prisma generate
     # - npx tsx scripts/seed-chat.ts
     # - npx tsx scripts/seed-timer.ts
-    # - npx tsx scripts/seed-rooms.ts
-    # - npx tsx scripts/seed-levels.ts
-    # - npx tsx scripts/seed-inventory.ts
-    # - npx tsx scripts/seed-starter-packs.ts
     - Write-Host "Starting deployment script..."
     - powershell -ExecutionPolicy Bypass -File .\deploy.ps1 -SiteName "$env:SITE_NAME"
   environment:
