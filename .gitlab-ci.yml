@@ -7,17 +7,17 @@ stages:
 variables:
   SITE_NAME: $CI_PROJECT_NAME
 
-stop-app:
-  stage: pre-stop
-  tags:
-    - windows-iis
-  variables:
-    GIT_STRATEGY: none
-  only:
-    - Develop
-    - cicd
-  script:
-    - powershell.exe -Command "pm2 delete $env:SITE_NAME 2>`$null; exit 0"
+# stop-app:
+#   stage: pre-stop
+#   tags:
+#     - windows-iis
+#   variables:
+#     GIT_STRATEGY: none
+#   only:
+#     - Develop
+#     - cicd
+#   script:
+#     - powershell.exe -Command "pm2 delete $env:SITE_NAME 2>`$null; exit 0"
 
 build-app:
   stage: build
