@@ -8,15 +8,14 @@ variables:
   SITE_NAME: $CI_PROJECT_NAME
 
 shutdown:
-  environment:
-    name: dev
   stage: shutdown
   tags:
-    - windows-iis-dev
+    - windows-iis
   variables:
     GIT_STRATEGY: none
   only:
-    - cicd-develop
+    - Develop
+    - cicd
   script:
     - echo $PWD
     - powershell -Command 'try { pm2 delete $env:SITE_NAME 2>$null } catch {}; exit 0'
