@@ -28,12 +28,24 @@ export async function middlewareAuth(
       return;
     }
 
-    const tokenUser = getCookie(ctx, keyUser);
+    let token: string | null = null;
     let user: User | null = null;
 
-    if (tokenUser) {
+    // 1. اولویت اول: خواندن از هدر Authorization (Bearer)
+    const authHeader = ctx.req.header("Authorization");
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.substring(7); // جدا کردن "Bearer "
+    }
+
+    // 2. اگر در هدر نبود، از کوکی بخوان (fallback برای کلاینت‌های قدیمی)
+    if (!token) {
+      token = getCookie(ctx, keyUser) ?? null; // ← اصلاح خطا
+    }
+
+    // 3. اگر توکن وجود داشت، اعتبارسنجی کن
+    if (token) {
       try {
-        const payload = await jwtVerifyUser({ token: tokenUser });
+        const payload = await jwtVerifyUser({ token });
         if (payload?.id && typeof payload.id === "string") {
           const fetched = await prismaUserGetByUsername(payload.id);
           if (fetched !== OrmState.Error) {
@@ -45,13 +57,14 @@ export async function middlewareAuth(
       }
     }
 
-    // اگر کاربر لاگین نیست، مهمان بساز
+    // 4. اگر کاربر لاگین نیست، مهمان بساز
     if (!user) {
       const guestUsername = `guest_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
       const guest = await prismaUserGetOrCreate(guestUsername);
       if (guest !== OrmState.Error) {
         user = guest;
         const newToken = await jwtSignUser({ userName: guestUsername });
+        // تنظیم کوکی برای مهمان (اختیاری - برای سازگاری با کلاینت‌های قدیمی)
         ctx.header(
           "Set-Cookie",
           `${keyUser}=${newToken}; Path=/; HttpOnly; Max-Age=${60 * 60 * 24 * 365}`,

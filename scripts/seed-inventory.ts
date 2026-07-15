@@ -1,25 +1,48 @@
-// ============================================================
-// فایل: prisma/seed-inventory.ts
-// ============================================================
-// این فایل برای ایجاد آیتم‌های پایه کلکسیون (InventoryItem) استفاده می‌شود
+// prisma/seed-inventory.ts
 
 import { prisma } from "../src/components/prisma";
+import { UsageType } from "@prisma/client"; // ✅ ایمپورت Enum از Prisma Client
 
-const inventoryItems = [
+// تعریف آرایه با تایپ صریح
+const inventoryItems: Array<{
+  name: string;
+  visualCode: string;
+  usageType: UsageType; // ✅ استفاده از Enum به‌جای string
+}> = [
   // ===== تاس‌ها (Dice) =====
-  { name: "تاس کلاسیک سفید", visualCode: "dice_classic_white", usageType: "dice" },
-  { name: "تاس کلاسیک مشکی", visualCode: "dice_classic_black", usageType: "dice" },
+  {
+    name: "تاس کلاسیک سفید",
+    visualCode: "dice_classic_white",
+    usageType: "dice",
+  },
+  {
+    name: "تاس کلاسیک مشکی",
+    visualCode: "dice_classic_black",
+    usageType: "dice",
+  },
   { name: "تاس طلایی", visualCode: "dice_gold", usageType: "dice" },
   { name: "تاس نقره‌ای", visualCode: "dice_silver", usageType: "dice" },
   { name: "تاس یاقوتی", visualCode: "dice_ruby", usageType: "dice" },
   { name: "تاس فیروزه‌ای", visualCode: "dice_turquoise", usageType: "dice" },
 
   // ===== مهره‌ها (Checker) =====
-  { name: "مهره کلاسیک سفید", visualCode: "checker_classic_white", usageType: "checker" },
-  { name: "مهره کلاسیک مشکی", visualCode: "checker_classic_black", usageType: "checker" },
+  {
+    name: "مهره کلاسیک سفید",
+    visualCode: "checker_classic_white",
+    usageType: "checker",
+  },
+  {
+    name: "مهره کلاسیک مشکی",
+    visualCode: "checker_classic_black",
+    usageType: "checker",
+  },
   { name: "مهره چوبی", visualCode: "checker_wood", usageType: "checker" },
   { name: "مهره سنگی", visualCode: "checker_stone", usageType: "checker" },
-  { name: "مهره کریستالی", visualCode: "checker_crystal", usageType: "checker" },
+  {
+    name: "مهره کریستالی",
+    visualCode: "checker_crystal",
+    usageType: "checker",
+  },
   { name: "مهره کهکشانی", visualCode: "checker_galaxy", usageType: "checker" },
 
   // ===== لیوان‌ها (Cup) =====
@@ -71,7 +94,7 @@ async function main() {
         data: {
           name: item.name,
           visualCode: item.visualCode,
-          usageType: Buffer.from(item.usageType), // تبدیل به Buffer برای Bytes
+          usageType: item.usageType, // ✅ الان TypeScript می‌داند که از نوع UsageType است
         },
       });
       console.log(`✅ InventoryItem ${item.name} created.`);

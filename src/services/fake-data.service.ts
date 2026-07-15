@@ -238,7 +238,7 @@ async function generateFakeTournamentRecords(userId: number) {
     try {
       const tournament = await prisma.tournamentPreset.create({
         data: {
-          tournamentType: Buffer.from(`tournament_${i}`),
+          tournamentType: Math.random() > 0.5 ? "WEEKLY" : "MONTHLY",
           groupCount: getRandomInt(2, 8),
           gamePerGroup: getRandomInt(1, 3),
         },

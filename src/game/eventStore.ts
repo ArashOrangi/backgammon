@@ -562,12 +562,10 @@ export async function appendGameEvent(gameId: number, event: GameEvent) {
     throw new Error(`Failed to append event: ${JSON.stringify(created)}`);
   }
 
-  // ===== اضافه شده: پردازش پایان بازی =====
+  // ===== پردازش پایان بازی (یکپارچه‌سازی با تورنمنت) =====
   if (event.type === "GAME_FINISHED") {
-    // بارگذاری state جدید برای پردازش
     const state = await loadGameState(gameId);
     if (state) {
-      // پردازش را به صورت غیرهمزمان و بدون await اجرا می‌کنیم
       processGameCompletion(gameId, state).catch((err) => {
         console.error(
           `[EventStore] Error in processGameCompletion for game ${gameId}:`,
@@ -576,7 +574,7 @@ export async function appendGameEvent(gameId: number, event: GameEvent) {
       });
     }
   }
-  // ======================================
+  // ==========================================================
 
   if (nextSequence % SNAPSHOT_INTERVAL === 0) {
     const state = await loadGameState(gameId);

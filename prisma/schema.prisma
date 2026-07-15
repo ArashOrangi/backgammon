@@ -7,27 +7,8 @@ datasource db {
 }
 
 // ============================================================
-//  مدل‌های گیم‌پلی
+//  ENUM‌ها
 // ============================================================
-
-model Games {
-  id          Int         @id @default(autoincrement())
-  status      GAMESTATUS  @default(PENDING)
-  createdAt   DateTime    @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime?   @updatedAt @db.Timestamptz(3)
-  whitePlayerId Int?
-  blackPlayerId Int?
-  whitePlayer User? @relation("WhitePlayerRelation", fields: [whitePlayerId], references: [id])
-  blackPlayer User? @relation("BlackPlayerRelation", fields: [blackPlayerId], references: [id])
-  events      GameEvents[]
-  snapshots   GameSnapshots[]
-  matchRecords MatchRecord[]
-  lbRecords   MatchLBRecord[]
-  xpHistories XPHistory[]
-
-  @@index([whitePlayerId])
-  @@index([blackPlayerId])
-}
 
 enum GAMESTATUS {
   PENDING
@@ -35,19 +16,14 @@ enum GAMESTATUS {
   FINISHED
 }
 
-model GameEvents {
-  id         Int        @id @default(autoincrement())
-  gameId     Int
-  sequence   Int
-  type       EVENTTYPE
-  payload    Json
-  createdAt  DateTime   @default(now()) @db.Timestamptz(3)
-  updatedAt  DateTime?  @updatedAt @db.Timestamptz(3)
-  isUndo     Boolean    @default(false)
-  game       Games      @relation(fields: [gameId], references: [id])
-
-  @@unique([gameId, sequence])
-  @@index([gameId, sequence])
+enum UsageType {
+  dice
+  checker
+  cup
+  board
+  sticker
+  avatar
+  frame
 }
 
 enum EVENTTYPE {
@@ -66,6 +42,130 @@ enum EVENTTYPE {
   TURN_TIMEOUT
   NETWORK_TIMEOUT
   MANUAL_END
+}
+
+enum GENDER {
+  MAN
+  WOMAN
+  OTHER
+}
+
+enum RoomType {
+  CASUAL_1
+  CASUAL_2
+  COMPETITIVE_1
+  COMPETITIVE_2
+}
+
+enum MatchResultType {
+  normal
+  gammon
+  backgammon
+  timer
+  doublingcube
+  leave
+  forfeit   
+  loss      
+}
+
+enum ShopItemType {
+  ITEM
+  PACKAGE
+  CURRENCY
+}
+
+enum CurrencyType {
+  COIN
+  DIAMOND
+  REAL
+}
+
+// ===== ENUM‌های جدید تورنمنت =====
+
+enum TournamentType {
+  WEEKLY
+  MONTHLY
+}
+
+enum TournamentStatus {
+  ACTIVE
+  FINALIZED
+}
+
+enum SeriesStatus {
+  ACTIVE
+  COMPLETED
+  CLOSED_BY_PLAYER
+  EXPIRED
+}
+
+enum TournamentQueueState {
+  IN_QUEUE
+  MATCH_FOUND
+  IN_GAME
+  COMPLETED
+  FORFEITED
+  REJECTED
+}
+
+// ===== ENUM‌های گزارش و پرچم =====
+
+enum ReportType {
+  CHEAT
+  ABUSE
+  SPAM
+  OTHER
+}
+
+enum FlagType {
+  MANUAL_BAN
+  AUTO_BAN
+  SUSPICIOUS
+  GAME_RESTRICT
+  TOURNAMENT_RESTRICT
+  CHAT_RESTRICT
+}
+
+// ============================================================
+//  مدل‌های گیم‌پلی
+// ============================================================
+
+model Games {
+  id          Int         @id @default(autoincrement())
+  status      GAMESTATUS  @default(PENDING)
+  createdAt   DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime?   @updatedAt @db.Timestamptz(3)
+  whitePlayerId Int?
+  blackPlayerId Int?
+  whitePlayer User? @relation("WhitePlayerRelation", fields: [whitePlayerId], references: [id])
+  blackPlayer User? @relation("BlackPlayerRelation", fields: [blackPlayerId], references: [id])
+  events      GameEvents[]
+  snapshots   GameSnapshots[]
+  matchRecords MatchRecord[]
+  lbRecords   MatchLBRecord[]
+  xpHistories XPHistory[]
+
+  // روابط تورنمنت
+  tournamentGames  TournamentGame[]
+  weeklyGameResults WeeklyGameResult[]
+
+  @@index([whitePlayerId])
+  @@index([blackPlayerId])
+}
+
+model GameEvents {
+  id         Int        @id @default(autoincrement())
+  gameId     Int
+  sequence   Int
+  type       EVENTTYPE
+  payload    Json
+  createdAt  DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime?  @updatedAt @db.Timestamptz(3)
+  isUndo     Boolean    @default(false)
+  game       Games      @relation(fields: [gameId], references: [id])
+
+  @@unique([gameId, sequence])
+  @@index([gameId, sequence])
 }
 
 model GameSnapshots {
@@ -121,9 +221,9 @@ model User {
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
   // ===== فیلدهای پروفایل =====
-  avatar        String?   // تصویر پروفایل
-  frame         String?   // قاب عکس
-  title         String?   // لقب
+  avatar        String?
+  frame         String?
+  title         String?
 
   // ===== فیلدهای شخصی‌سازی (انتخاب آیتم‌ها) =====
   selectedDiceId     Int?
@@ -131,8 +231,8 @@ model User {
   selectedCupId      Int?
   selectedBoardId    Int?
   selectedStickerId  Int?
-  selectedAvatarId   Int?   // جدید
-  selectedFrameId    Int?   // جدید
+  selectedAvatarId   Int?
+  selectedFrameId    Int?
 
   // ===== آمار بازی =====
   totalWins     Int     @default(0)
@@ -174,13 +274,16 @@ model User {
   xpHistories         XPHistory[]
   shopTransactions    ShopTransaction[]
 
-  @@map("User")
-}
+  // روابط تورنمنت
+  ticket         UserTicket?
+  tournamentSeries TournamentSeries[]
+  weeklyGameResults WeeklyGameResult[]
+  leaderboardEntries TournamentLeaderboard[]
+  tournamentMMR   TournamentMMR[]
+  queueEntries    TournamentQueueEntry[]
+  tieBreakerCache TournamentTieBreakerCache[]
 
-enum GENDER {
-  MAN
-  WOMAN
-  OTHER
+  @@map("User")
 }
 
 // ============================================================
@@ -231,20 +334,18 @@ model InventoryItem {
   id         Int     @id @default(autoincrement())
   name       String  @db.VarChar(255)
   visualCode String  @db.VarChar(255) @map("VisualCode")
-  usageType  Bytes   @db.ByteA @map("UsageType") // dice, checker, cup, board, sticker, frame, avatar
+  usageType   UsageType
   
   userItems  UserInventoryItem[]
   
-  // روابط انتخاب‌شده توسط کاربران (یک‌به‌یک)
   selectedByDice    User[] @relation("SelectedDice")
   selectedByChecker User[] @relation("SelectedChecker")
   selectedByCup     User[] @relation("SelectedCup")
   selectedByBoard   User[] @relation("SelectedBoard")
   selectedBySticker User[] @relation("SelectedSticker")
-  selectedByAvatar  User[] @relation("SelectedAvatar")   // جدید
-  selectedByFrame   User[] @relation("SelectedFrame")    // جدید
+  selectedByAvatar  User[] @relation("SelectedAvatar")
+  selectedByFrame   User[] @relation("SelectedFrame")
 
-  // آیتم‌های فروشگاه مرتبط (برای آیتم‌های تکی)
   shopItems         ShopItem[]
 
   @@map("InventoryItem")
@@ -301,13 +402,6 @@ model LevelIntrepeter {
 // ============================================================
 //  مدل‌های اتاق‌ها و مچ‌میکینگ
 // ============================================================
-
-enum RoomType {
-  CASUAL_1
-  CASUAL_2
-  COMPETITIVE_1
-  COMPETITIVE_2
-}
 
 model RoomPreset {
   id             Int     @id @default(autoincrement())
@@ -370,15 +464,6 @@ model MatchParticipent {
   @@map("MatchParticipent")
 }
 
-enum MatchResultType {
-  normal
-  gammon
-  backgammon
-  timer
-  doublingcube
-  leave
-}
-
 model MatchTimline {
   id            Int           @id @default(autoincrement())
   matchRecordId Int?          @map("MatchRecord_Id")
@@ -404,12 +489,12 @@ model MatchParticipentDisconnect {
 }
 
 // ============================================================
-//  مدل‌های تورنومنت‌ها
+//  مدل‌های قدیمی تورنومنت (برای سازگاری – در صورت استفاده)
 // ============================================================
 
 model TournamentPreset {
   id                Int     @id @default(autoincrement())
-  tournamentType    Bytes   @db.ByteA @map("TournamentType")
+  tournamentType    TournamentType  // تغییر از Bytes به Enum
   groupCount        Int     @map("GroupCount")
   gamePerGroup      Int     @map("GamePerGroup")
 
@@ -433,13 +518,13 @@ model TournamentParticipentRecord {
 // ============================================================
 
 model UserReport {
-  id          Int     @id @default(autoincrement())
-  reporterId  Int     @map("Reporter_Id")
-  reporter    User    @relation("Reporter", fields: [reporterId], references: [id])
-  profileId   Int     @map("Profile_Id")
-  profile     User    @relation("ReportedProfile", fields: [profileId], references: [id])
-  type        Bytes   @db.ByteA
-  info        String? @db.VarChar(255) @map("Info")
+  id          Int        @id @default(autoincrement())
+  reporterId  Int        @map("Reporter_Id")
+  reporter    User       @relation("Reporter", fields: [reporterId], references: [id])
+  profileId   Int        @map("Profile_Id")
+  profile     User       @relation("ReportedProfile", fields: [profileId], references: [id])
+  type        ReportType // تغییر از Bytes به Enum جدید
+  info        String?    @db.VarChar(255) @map("Info")
 
   @@map("UserReport")
 }
@@ -448,7 +533,7 @@ model UserFlag {
   id                Int      @id @default(autoincrement())
   userId            Int      @map("User_Id")
   user              User     @relation(fields: [userId], references: [id])
-  type              Bytes    @db.ByteA
+  type              FlagType // تغییر از Bytes به Enum جدید
   checked           Boolean
   restrict          Boolean
   gameRestrict      Boolean  @map("GameRestrict")
@@ -525,7 +610,7 @@ model StaticMessages {
 }
 
 // ============================================================
-//  مدل‌های جدید برای سیستم‌های Progression, Economy, Leaderboard
+//  مدل‌های Progression, Economy, Leaderboard
 // ============================================================
 
 model MatchLBRecord {
@@ -577,43 +662,27 @@ model XPHistory {
 //  مدل‌های فروشگاه (Shop) و کلکسیون (Collection)
 // ============================================================
 
-enum ShopItemType {
-  ITEM      // یک آیتم تکی از InventoryItem
-  PACKAGE   // ترکیبی از چند آیتم و/یا ارز
-  CURRENCY  // صرفاً خرید ارز (سکه یا الماس)
-}
-
-enum CurrencyType {
-  COIN
-  DIAMOND
-  REAL
-}
-
 model ShopItem {
   id                  Int            @id @default(autoincrement())
   name                String         @db.VarChar(255)
   description         String?        @db.Text
   type                ShopItemType   @default(ITEM)
 
-  // برای آیتم‌های تکی (type = ITEM)
   inventoryItemId     Int?           @map("inventory_item_id")
   inventoryItem       InventoryItem? @relation(fields: [inventoryItemId], references: [id])
 
-  // قیمت‌ها
   coinPrice           Int?           @map("coin_price")
   diamondPrice        Int?           @map("diamond_price")
   realPrice           Float?         @map("real_price")
-  realCurrency        String?        @map("real_currency") // e.g., "IRR", "USD"
+  realCurrency        String?        @map("real_currency")
 
-  // تخفیف‌ها
   discountCoinPrice   Int?           @map("discount_coin_price")
   discountDiamondPrice Int?          @map("discount_diamond_price")
   discountRealPrice   Float?         @map("discount_real_price")
   discountStartDate   DateTime?      @map("discount_start_date") @db.Timestamptz(3)
   discountEndDate     DateTime?      @map("discount_end_date") @db.Timestamptz(3)
 
-  // برای پکیج‌ها (type = PACKAGE یا CURRENCY)
-  packageItems        Json?          @map("package_items") // آرایه‌ای از {inventoryItemId, amount}
+  packageItems        Json?          @map("package_items")
   packageCoin         Int?           @map("package_coin")
   packageDiamond      Int?           @map("package_diamond")
 
@@ -637,9 +706,9 @@ model ShopTransaction {
   user        User         @relation(fields: [userId], references: [id])
   shopItemId  Int          @map("shop_item_id")
   shopItem    ShopItem     @relation(fields: [shopItemId], references: [id])
-  pricePaid   Int?         @map("price_paid") // مبلغ پرداختی (به واحد ارز مربوطه)
+  pricePaid   Int?         @map("price_paid")
   currencyType CurrencyType @default(COIN) @map("currency_type")
-  realAmount  Float?       @map("real_amount") // در صورت خرید با پول واقعی
+  realAmount  Float?       @map("real_amount")
   realCurrency String?     @map("real_currency")
   createdAt   DateTime     @default(now()) @db.Timestamptz(3)
 
@@ -647,4 +716,196 @@ model ShopTransaction {
   @@index([shopItemId])
   @@index([createdAt])
   @@map("shop_transactions")
+}
+
+// ============================================================
+//  ===== مدل‌های جدید سیستم تورنمنت (هفتگی + ماهانه) =====
+// ============================================================
+
+// ---------- بلیط طلایی (ماهانه) ----------
+model UserTicket {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique
+  balance   Int      @default(0)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+// ---------- فصل تورنمنت ----------
+model TournamentSeason {
+  id              Int            @id @default(autoincrement())
+  type            TournamentType
+  startDate       DateTime       @db.Timestamptz(3)
+  endDate         DateTime       @db.Timestamptz(3)
+  status          TournamentStatus @default(ACTIVE)
+  ticketPrice     Int            @default(1)          // قیمت ورود (قابل تنظیم)
+  minGamesForRanking Int         @default(5)          // حداقل بازی برای ورود به لیدربورد (هفتگی)
+  bestCount          Int         @default(20)         // تعداد بهترین نتایج (هفتگی=۲۰، ماهانه=۵)
+  prizePool         Json?                             // { first: 1000, top10: {...}, milestone10: {...} }
+
+  createdAt       DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime       @updatedAt @db.Timestamptz(3)
+
+  series         TournamentSeries[]
+  weeklyGames    WeeklyGameResult[]
+  leaderboard    TournamentLeaderboard[]
+  mmrRecords     TournamentMMR[]
+  queueEntries   TournamentQueueEntry[]
+  tieBreakerCache TournamentTieBreakerCache[]
+}
+
+// ---------- سری بازی (ماهانه) ----------
+model TournamentSeries {
+  id                  Int            @id @default(autoincrement())
+  playerId            Int
+  seasonId            Int
+  status              SeriesStatus   @default(ACTIVE)
+  startedAt           DateTime       @default(now()) @db.Timestamptz(3)
+  expiresAt           DateTime       @db.Timestamptz(3)   // startedAt + 24h
+  closedAt            DateTime?      @db.Timestamptz(3)
+
+  totalScore          Int            @default(0)
+  isRecorded          Boolean        @default(false)     // آیا در لیدربورد ثبت شده؟
+  gamesCount          Int            @default(0)
+  bestSingleScore     Int?                               // بالاترین امتیاز یک مسابقه در این سری
+  totalBackgammonWins Int            @default(0)
+  totalMarsWins       Int            @default(0)
+  totalPipAdvantage   Int            @default(0)
+  totalForfeits       Int            @default(0)
+  achievedAt          DateTime?      @db.Timestamptz(3)  // زمان رسیدن به امتیاز فعلی
+
+  createdAt           DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime       @updatedAt @db.Timestamptz(3)
+
+  season TournamentSeason @relation(fields: [seasonId], references: [id])
+  player User             @relation(fields: [playerId], references: [id])
+  games  TournamentGame[]
+
+  @@unique([playerId, seasonId, status])   // فقط یک سری فعال در هر فصل
+}
+
+// ---------- مسابقه تورنمنت (داخل سری ماهانه) ----------
+model TournamentGame {
+  id              Int            @id @default(autoincrement())
+  seriesId        Int
+  matchIndex      Int            // ۰, ۱, ۲
+  gameId          Int?           // ارجاع به Games.id
+  result          MatchResultType?  // از enum موجود
+  baseScore       Int
+  pipBonus        Int            @default(0)
+  cleanBonus      Int            @default(0)
+  totalScore      Int
+  isForfeit       Boolean        @default(false)
+  isValid         Boolean        @default(true)
+  finishedAt      DateTime?      @db.Timestamptz(3)
+
+  createdAt       DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime       @updatedAt @db.Timestamptz(3)
+
+  series TournamentSeries @relation(fields: [seriesId], references: [id])
+  game   Games?           @relation(fields: [gameId], references: [id])
+}
+
+// ---------- نتیجه بازی هفتگی (بدون سری) ----------
+model WeeklyGameResult {
+  id            Int            @id @default(autoincrement())
+  playerId      Int
+  seasonId      Int
+  gameId        Int
+  result        MatchResultType
+  baseScore     Int
+  pipBonus      Int            @default(0)
+  cleanBonus    Int            @default(0)
+  totalScore    Int
+  isForfeit     Boolean        @default(false)
+  isLocked      Boolean        @default(false)   // برای Forfeit‌های دوم به بعد
+  finishedAt    DateTime       @db.Timestamptz(3)
+
+  createdAt     DateTime       @default(now()) @db.Timestamptz(3)
+
+  player User             @relation(fields: [playerId], references: [id])
+  season TournamentSeason @relation(fields: [seasonId], references: [id])
+  game   Games            @relation(fields: [gameId], references: [id])
+
+  @@index([playerId, seasonId])
+  @@index([seasonId])
+}
+
+// ---------- لیدربورد تورنمنت (برای هر دو نوع) ----------
+model TournamentLeaderboard {
+  id                  Int      @id @default(autoincrement())
+  seasonId            Int
+  playerId            Int
+  finalScore          Int      @default(0)           // مجموع بهترین سری‌ها (ماهانه) یا Best 20 (هفتگی)
+  bestSeriesIds       Json     @default("[]")        // آرایه‌ای از id سری‌ها (ماهانه) — مقدار JSON خالی
+  bestSingleScore     Int      @default(0)           // بالاترین امتیاز یک سری (ماهانه)
+  totalBackgammonWins Int      @default(0)           // در ۵ سری برتر (ماهانه)
+  totalMarsWins       Int      @default(0)
+  avgPipAdvantage     Float    @default(0)
+  totalForfeits       Int      @default(0)           // کل انصراف‌ها در ماه
+  seriesCount         Int      @default(0)           // تعداد سری‌های ثبت‌شده (ماهانه) یا تعداد بازی (هفتگی)
+  achievedAt          DateTime? @db.Timestamptz(3)
+
+  rank                Int?
+
+  createdAt           DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime @updatedAt @db.Timestamptz(3)
+
+  season TournamentSeason @relation(fields: [seasonId], references: [id])
+  player User             @relation(fields: [playerId], references: [id])
+
+  @@unique([seasonId, playerId])
+  @@index([seasonId, finalScore(sort: Desc)])
+}
+
+// ---------- MMR تورنمنت (مستقل از MMR اصلی) ----------
+model TournamentMMR {
+  id           Int      @id @default(autoincrement())
+  playerId     Int
+  seasonId     Int
+  mmr          Int      @default(1000)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  player User             @relation(fields: [playerId], references: [id])
+  season TournamentSeason @relation(fields: [seasonId], references: [id])
+
+  @@unique([playerId, seasonId])
+}
+
+// ---------- صف مچ‌میکینگ (در دیتابیس) ----------
+model TournamentQueueEntry {
+  id           Int      @id @default(autoincrement())
+  playerId     Int
+  seasonId     Int
+  state        TournamentQueueState @default(IN_QUEUE)
+  enqueuedAt   DateTime @default(now()) @db.Timestamptz(3)
+  matchedAt    DateTime? @db.Timestamptz(3)
+  gameId       Int?     // بازی پیدا شده
+  expiresAt    DateTime? @db.Timestamptz(3)
+
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  player User             @relation(fields: [playerId], references: [id])
+  season TournamentSeason @relation(fields: [seasonId], references: [id])
+}
+
+// ---------- کش Tie‑breaker (برای سرعت) ----------
+model TournamentTieBreakerCache {
+  id           Int      @id @default(autoincrement())
+  seasonId     Int
+  playerId     Int
+  bestSeriesIds Json     @default("[]")      // مقدار JSON خالی
+  totalBackgammonWins Int @default(0)
+  totalMarsWins       Int @default(0)
+  avgPipAdvantage     Float @default(0)
+  totalForfeits       Int @default(0)
+  seriesCount         Int @default(0)
+  achievedAt          DateTime? @db.Timestamptz(3)
+
+  season TournamentSeason @relation(fields: [seasonId], references: [id])
+  player User             @relation(fields: [playerId], references: [id])
+
+  @@unique([seasonId, playerId])
 }

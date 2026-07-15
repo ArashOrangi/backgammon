@@ -15,13 +15,14 @@ export async function getUserCollection(userId: number) {
   // گروه‌بندی بر اساس usageType
   const grouped: Record<string, any[]> = {};
   for (const item of userItems) {
-    const type = item.inventoryItem.usageType.toString(); // usageType از نوع Bytes است، تبدیل به رشته
+    // usageType اکنون از نوع Enum (رشته) است، نیازی به toString نیست
+    const type = item.inventoryItem.usageType;
     if (!grouped[type]) grouped[type] = [];
     grouped[type].push({
       ...item,
       inventoryItem: {
         ...item.inventoryItem,
-        usageType: type,
+        usageType: type, // مقدار رشته‌ای را نگه می‌داریم
       },
     });
   }
@@ -48,6 +49,10 @@ export async function selectItem(
     throw new Error("Item not owned");
   }
 
+  // (اختیاری) می‌توان اعتبارسنجی کرد که category با usageType آیتم همخوانی دارد
+  // const item = await prisma.inventoryItem.findUnique({ where: { id: inventoryItemId } });
+  // if (item?.usageType !== category) throw new Error("Category mismatch");
+
   // ۲. به‌روزرسانی فیلد مربوطه در User
   const updateData: any = {};
   switch (category) {
@@ -68,8 +73,6 @@ export async function selectItem(
       break;
     case "avatar":
       updateData.selectedAvatarId = inventoryItemId;
-      // همچنین می‌توان avatar را به‌روز کرد (اگر می‌خواهیم مستقیماً آدرس را ذخیره کنیم)
-      // ولی بهتر است avatar را از visualCode بگیریم
       break;
     case "frame":
       updateData.selectedFrameId = inventoryItemId;

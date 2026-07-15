@@ -1,5 +1,6 @@
 import { GameState } from "@/game/types";
 import { IDataResponse } from "@/responses/ResponseStates";
+import { TournamentGame } from "@prisma/client";
 
 // ---------- Client Messages ----------
 export type ClientMessage =
@@ -102,6 +103,34 @@ export type ServerMessage =
         reason: string;
         score?: number;
       }>;
+    }
+  | {
+      type: "tournament.monthly.series_started";
+      payload: IDataResponse<{ seriesId: number; expiresAt: Date }>;
+    }
+  | {
+      type: "tournament.monthly.game_recorded";
+      payload: IDataResponse<TournamentGame>;
+    }
+  | {
+      type: "tournament.monthly.series_closed";
+      payload: IDataResponse<{ success: boolean }>;
+    }
+  | {
+      type: "tournament.weekly.game_recorded";
+      payload: IDataResponse<{
+        matchScore: number;
+        weeklyScore: number;
+        forfeitLocked: boolean;
+      }>;
+    }
+  | {
+      type: "tournament.matchmaking.joined";
+      payload: IDataResponse<{ status: string }>;
+    }
+  | {
+      type: "tournament.matchmaking.cancelled";
+      payload: IDataResponse<{ status: string }>;
     };
 
 // تعریف نوع MovePayload در همان فایل یا فایل جداگانه

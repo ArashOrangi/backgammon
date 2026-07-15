@@ -82,7 +82,6 @@ export async function applyStarterPackToUser(userId: number, packId?: string) {
 
   // ۱. اعطای آیتم‌ها به کاربر
   for (const item of pack.items) {
-    // دریافت inventoryItemId بر اساس visualCode
     const inventoryItem = await prisma.inventoryItem.findFirst({
       where: { visualCode: item.visualCode },
     });
@@ -93,12 +92,8 @@ export async function applyStarterPackToUser(userId: number, packId?: string) {
       continue;
     }
 
-    // بررسی آیا کاربر این آیتم را قبلاً دارد
     const existing = await prisma.userInventoryItem.findFirst({
-      where: {
-        userId,
-        inventoryItemId: inventoryItem.id,
-      },
+      where: { userId, inventoryItemId: inventoryItem.id },
     });
 
     if (existing) {
@@ -112,7 +107,7 @@ export async function applyStarterPackToUser(userId: number, packId?: string) {
           userId,
           inventoryItemId: inventoryItem.id,
           amount: item.amount,
-          expirationDate: null, // دائمی
+          expirationDate: null,
         },
       });
     }
@@ -132,7 +127,7 @@ export async function applyStarterPackToUser(userId: number, packId?: string) {
         },
       });
     } else {
-      // اگر UserStats وجود نداشته باشد (که نباید)، آن را ایجاد می‌کنیم
+      // در صورت نبودن UserStats (که نباید رخ دهد)
       await prisma.userStats.create({
         data: {
           userId,
@@ -145,9 +140,7 @@ export async function applyStarterPackToUser(userId: number, packId?: string) {
     }
   }
 
-  // ۳. انتخاب خودکار برخی آیتم‌ها (اولین آیتم از هر دسته)
-  // بهترین کار این است که آیتم‌های انتخابی را به‌روز کنیم
-  // برای سادگی، اولین آیتم از هر دسته را به‌عنوان انتخاب شده تنظیم می‌کنیم
+  // ۳. انتخاب خودکار اولین آیتم از هر دسته
   await autoSelectItemsForUser(userId, pack.items);
 
   console.log(
@@ -170,7 +163,8 @@ async function autoSelectItemsForUser(
       where: { visualCode: item.visualCode },
     });
     if (!inventoryItem) continue;
-    const usageType = inventoryItem.usageType.toString();
+    // usageType اکنون از نوع Enum است و مستقیماً به‌صورت رشته در دسترس است
+    const usageType = inventoryItem.usageType;
     if (!grouped[usageType]) grouped[usageType] = [];
     grouped[usageType].push(item.visualCode);
   }

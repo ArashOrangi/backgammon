@@ -45,7 +45,6 @@ accountRoute.post("/register", async (ctx) => {
     const hashedPassword = await myCrypt.hashed({ password });
     const user = await createUserWithProfile({
       userName,
-      // fullName,
       phoneNumber,
       gender,
     });
@@ -60,12 +59,15 @@ accountRoute.post("/register", async (ctx) => {
     // به‌روزرسانی پسورد
     await updateUserProfile(user.id, { password: hashedPassword });
 
-    // تولید توکن
+    // تولید توکن JWT
     const token = await jwtSignUser({ userName });
-    ctx.header(
-      "Set-Cookie",
-      `${keyUser}=${token}; Path=/; HttpOnly; Max-Age=${60 * 60 * 24 * 30}`,
-    );
+
+    // ⚠️ دیگر کوکی تنظیم نمی‌شود – کلاینت باید توکن را در هدر Authorization ارسال کند
+    // این خط برای سازگاری با کلاینت‌های قدیمی (کوکی) کامنت شده است
+    // ctx.header(
+    //   "Set-Cookie",
+    //   `${keyUser}=${token}; Path=/; HttpOnly; Max-Age=${60 * 60 * 24 * 30}`,
+    // );
 
     return onOkRestResponse({
       ctx,
@@ -111,10 +113,12 @@ accountRoute.post("/login", async (ctx) => {
     }
 
     const token = await jwtSignUser({ userName });
-    ctx.header(
-      "Set-Cookie",
-      `${keyUser}=${token}; Path=/; HttpOnly; Max-Age=${60 * 60 * 24 * 30}`,
-    );
+
+    // ⚠️ دیگر کوکی تنظیم نمی‌شود – کلاینت باید توکن را در هدر Authorization ارسال کند
+    // ctx.header(
+    //   "Set-Cookie",
+    //   `${keyUser}=${token}; Path=/; HttpOnly; Max-Age=${60 * 60 * 24 * 30}`,
+    // );
 
     return onOkRestResponse({
       ctx,
@@ -129,13 +133,22 @@ accountRoute.post("/login", async (ctx) => {
 // خروج از حساب
 accountRoute.post("/logout", async (ctx) => {
   try {
-    ctx.header("Set-Cookie", `${keyUser}=; Path=/; HttpOnly; Max-Age=0`);
-    return onOkRestResponse({ ctx, data: {}, message: "Logged out" });
+    // اگر کوکی تنظیم شده بود، آن را حذف می‌کردیم:
+    // ctx.header("Set-Cookie", `${keyUser}=; Path=/; HttpOnly; Max-Age=0`);
+
+    // با سیستم Bearer، خروج صرفاً به معنی حذف توکن در سمت کلاینت است
+    // سرور کاری انجام نمی‌دهد (توکن‌ها stateless هستند)
+    return onOkRestResponse({
+      ctx,
+      data: {},
+      message: "Logged out successfully",
+    });
   } catch (error) {
     return onErrorRestResponse({ ctx, errorMessage: messageError.user.logout });
   }
 });
 
+// تغییر رمز عبور
 accountRoute.post("/password/change", async (ctx) => {
   try {
     const user = ctx.get("user");
