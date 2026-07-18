@@ -51,10 +51,15 @@ enum GENDER {
 }
 
 enum RoomType {
-  CASUAL_1
-  CASUAL_2
-  COMPETITIVE_1
-  COMPETITIVE_2
+  ROOM1
+  ROOM2
+  ROOM3
+  ROOM4
+  ROOM5
+  ROOM6
+  ROOM7
+  ROOM8
+  ROOM9
 }
 
 enum MatchResultType {
@@ -404,19 +409,20 @@ model LevelIntrepeter {
 // ============================================================
 
 model RoomPreset {
-  id             Int     @id @default(autoincrement())
-  minXp          Int?    @map("minimum required XP")
-  matchmakingQueue Int?  @map("matchmaking queue")
-  coinBuyIn      Int?    @map("coin buy in")
-  coinReward     Int?    @map("coin reward")
+  id             Int      @id @default(autoincrement())
+  roomType       RoomType @unique 
+  minXp          Int?     @map("minimum required XP")
+  coinBuyIn      Int?     @map("coin buy in")
+  coinReward     Int?     @map("coin reward")
   timer          Int?
-  doublingCube   Int?    @map("doubling cube")
+  doublingCube   Boolean? @map("doubling cube")
   undo           Int?
-  rewardXp       Int?    @map("reward xp")
-  leaderboardPoint Int?  @map("leaderboard point")
-  baseWinXP      Int?    @map("base_win_xp")
-  baseLoseXP     Int?    @map("base_lose_xp")
-  spread         Int?    @map("spread")
+  rewardXp       Int?     @map("reward xp")
+  leaderboardPoint Int?   @map("leaderboard point")
+  baseWinXP      Int?     @map("base_win_xp")
+  baseLoseXP     Int?     @map("base_lose_xp")
+  spread         Int?     @map("spread")
+  bonusCap       Int?     @default(8) @map("bonus_cap") // حداکثر Bonus XP
 
   matchRecords   MatchRecord[]
 

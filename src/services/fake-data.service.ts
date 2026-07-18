@@ -99,16 +99,19 @@ async function createFakeGame(
 
 async function generateFakeLeaderboardRecords(userId: number) {
   const roomTypes = [
-    RoomType.CASUAL_1,
-    RoomType.CASUAL_2,
-    RoomType.COMPETITIVE_1,
-    RoomType.COMPETITIVE_2,
+    RoomType.ROOM1,
+    RoomType.ROOM2,
+    RoomType.ROOM3,
+    RoomType.ROOM4,
+    RoomType.ROOM5,
+    RoomType.ROOM6,
+    RoomType.ROOM7,
+    RoomType.ROOM8,
+    RoomType.ROOM9,
   ];
   const winTypes = ["normal", "mars", "backgammon"];
-  // افزایش تعداد رکوردها
-  const count = getRandomInt(15, 30); // قبلاً ۵-۱۵ بود
+  const count = getRandomInt(15, 30);
 
-  // یک حریف و یک بازی ایجاد می‌کنیم
   const opponentId = await createFakeUser();
   const gameId = await createFakeGame(userId, opponentId);
 
@@ -125,8 +128,6 @@ async function generateFakeLeaderboardRecords(userId: number) {
     const totalLBPoints = Math.floor(
       (basePoints + bonusPoints) * repetitionMultiplier,
     );
-
-    // تاریخ‌های پراکنده در ۳۰ روز گذشته
     const daysAgo = getRandomInt(0, 30);
     const createdAt = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
 
@@ -154,10 +155,15 @@ async function generateFakeLeaderboardRecords(userId: number) {
 
 async function generateFakeMatchRecords(userId: number) {
   const roomTypes = [
-    RoomType.CASUAL_1,
-    RoomType.CASUAL_2,
-    RoomType.COMPETITIVE_1,
-    RoomType.COMPETITIVE_2,
+    RoomType.ROOM1,
+    RoomType.ROOM2,
+    RoomType.ROOM3,
+    RoomType.ROOM4,
+    RoomType.ROOM5,
+    RoomType.ROOM6,
+    RoomType.ROOM7,
+    RoomType.ROOM8,
+    RoomType.ROOM9,
   ];
   const resultTypes = [
     MatchResultType.normal,
@@ -168,7 +174,7 @@ async function generateFakeMatchRecords(userId: number) {
   const count = getRandomInt(3, 10);
 
   for (let i = 0; i < count; i++) {
-    const opponentId = await createFakeUser(); // ایجاد حریف جدید برای هر مسابقه
+    const opponentId = await createFakeUser();
     const isWin = Math.random() > 0.4;
     const resultType = isWin
       ? resultTypes[Math.floor(Math.random() * resultTypes.length)]
@@ -181,7 +187,6 @@ async function generateFakeMatchRecords(userId: number) {
     const roomType = roomTypes[Math.floor(Math.random() * roomTypes.length)];
 
     try {
-      // ایجاد MatchRecord (بدون نیاز به gameId)
       const match = await prisma.matchRecord.create({
         data: {
           roomPresetId: getRoomPresetId(roomType),
@@ -194,7 +199,6 @@ async function generateFakeMatchRecords(userId: number) {
         },
       });
 
-      // ایجاد MatchParticipent برای کاربر
       await prisma.matchParticipent.create({
         data: {
           matchRecordId: match.id,
@@ -209,7 +213,6 @@ async function generateFakeMatchRecords(userId: number) {
         },
       });
 
-      // ایجاد MatchParticipent برای حریف
       await prisma.matchParticipent.create({
         data: {
           matchRecordId: match.id,
@@ -249,7 +252,7 @@ async function generateFakeTournamentRecords(userId: number) {
       );
       const match = await prisma.matchRecord.create({
         data: {
-          roomPresetId: getRoomPresetId(RoomType.COMPETITIVE_1),
+          roomPresetId: getRoomPresetId(RoomType.ROOM5),
           diceRecord: getRandomInt(1, 6),
           startMatch,
           endMatch: new Date(
@@ -293,10 +296,15 @@ function getRandomInt(min: number, max: number): number {
 
 function getRoomPresetId(roomType: RoomType): number | null {
   const mapping: Record<RoomType, number> = {
-    [RoomType.CASUAL_1]: 1,
-    [RoomType.CASUAL_2]: 2,
-    [RoomType.COMPETITIVE_1]: 3,
-    [RoomType.COMPETITIVE_2]: 4,
+    [RoomType.ROOM1]: 1,
+    [RoomType.ROOM2]: 2,
+    [RoomType.ROOM3]: 3,
+    [RoomType.ROOM4]: 4,
+    [RoomType.ROOM5]: 5,
+    [RoomType.ROOM6]: 6,
+    [RoomType.ROOM7]: 7,
+    [RoomType.ROOM8]: 8,
+    [RoomType.ROOM9]: 9,
   };
   return mapping[roomType] || null;
 }

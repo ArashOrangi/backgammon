@@ -165,7 +165,7 @@ export async function handleJoin(
       // 2. تلاش برای پیدا کردن حریف (همگام) - rooms را هم پاس می‌دهیم
       const matchedGameId = await addToMatchmaking(
         userId,
-        roomType || RoomType.CASUAL_1,
+        roomType || RoomType.ROOM1,
         rooms,
       );
 
@@ -301,8 +301,8 @@ export async function handleJoin(
     let game = getGame(gameId);
     if (!game) {
       game = await createInitialGameState(gameId);
-      game.roomType = roomType || RoomType.CASUAL_1;
-      game.doublingCubeEnabled = game.roomType !== RoomType.CASUAL_1;
+      game.roomType = roomType || RoomType.ROOM1;
+      game.doublingCubeEnabled = game.roomType !== RoomType.ROOM1;
       saveGame(game);
       await applyTimerSettingsToGame(game);
     } else {

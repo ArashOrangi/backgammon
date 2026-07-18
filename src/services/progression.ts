@@ -1,5 +1,6 @@
 import { prisma } from "@/components/prisma";
 import { GameState } from "@/game/types";
+import { RoomType } from "@prisma/client";
 
 /**
  * محاسبه و اعمال XP برای هر دو بازیکن پس از پایان بازی
@@ -62,8 +63,11 @@ export async function calculateAndApplyXP(gameId: number, state: GameState) {
     const winnerActionBonus = actionBonuses.winner;
     const loserActionBonus = actionBonuses.loser;
 
-    // ۶. اعمال Cap بر اساس اتاق
-    const cap = getCapByRoom(roomPreset.id);
+    // ۶. اعمال Cap بر اساس اتاق (با استفاده از roomType)
+    // const cap = getCapByRoom(roomPreset.roomType);
+    // const cappedWinnerActionBonus = Math.min(winnerActionBonus, cap);
+    // const cappedLoserActionBonus = Math.min(loserActionBonus, cap);
+    const cap = roomPreset.bonusCap ?? 8; // اگر مقدار null بود، پیش‌فرض 8
     const cappedWinnerActionBonus = Math.min(winnerActionBonus, cap);
     const cappedLoserActionBonus = Math.min(loserActionBonus, cap);
 
@@ -182,14 +186,20 @@ function calculateActionBonuses(
 }
 
 /**
- * دریافت Cap بر اساس اتاق
+ * دریافت Cap بر اساس اتاق (مطابق مستندات)
+ * - Room1: 4
+ * - Room2: 6
+ * - Room3 به بالا: 8
  */
-function getCapByRoom(roomPresetId: number): number {
-  // Room 1 = 1, Room 2 = 2, Room 3+ = 3
-  // برای سادگی، از روی id حدس می‌زنیم (در عمل باید از دیتابیس بخوانیم)
-  if (roomPresetId <= 1) return 1;
-  if (roomPresetId === 2) return 2;
-  return 3;
+function getCapByRoom(roomType: RoomType): number {
+  switch (roomType) {
+    case RoomType.ROOM1:
+      return 4;
+    case RoomType.ROOM2:
+      return 6;
+    default:
+      return 8; // ROOM3 تا ROOM9
+  }
 }
 
 /**

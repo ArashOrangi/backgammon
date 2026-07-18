@@ -25,13 +25,15 @@ import { cors } from "hono/cors";
 dotenv.config();
 
 const app = new Hono();
+
 app.use(
   "*",
   cors({
-    origin: "*", // یا دامنهٔ خاص خود را مشخص کنید
+    // برای توسعه، هر اریجینی را می‌پذیرد (با credentials)
+    origin: (origin) => origin || null,
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization", "Cookie"],
-    credentials: true, // اگر کوکی ارسال می‌کنید
+    credentials: true,
   }),
 );
 

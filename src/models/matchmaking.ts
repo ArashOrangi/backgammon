@@ -18,33 +18,68 @@ export interface RoomConfig {
 }
 
 export const ROOM_CONFIGS: Record<RoomType, RoomConfig> = {
-  [RoomType.CASUAL_1]: {
-    id: RoomType.CASUAL_1,
-    name: "Casual 1",
+  [RoomType.ROOM1]: {
+    id: RoomType.ROOM1,
+    name: "Room 1",
     initialRange: 150,
     maxRange: 300,
     botTimeoutSeconds: 6,
   },
-  [RoomType.CASUAL_2]: {
-    id: RoomType.CASUAL_2,
-    name: "Casual 2",
-    initialRange: 120,
+  [RoomType.ROOM2]: {
+    id: RoomType.ROOM2,
+    name: "Room 2",
+    initialRange: 140,
     maxRange: 280,
+    botTimeoutSeconds: 7,
+  },
+  [RoomType.ROOM3]: {
+    id: RoomType.ROOM3,
+    name: "Room 3",
+    initialRange: 130,
+    maxRange: 260,
     botTimeoutSeconds: 8,
   },
-  [RoomType.COMPETITIVE_1]: {
-    id: RoomType.COMPETITIVE_1,
-    name: "Competitive 1",
-    initialRange: 100,
+  [RoomType.ROOM4]: {
+    id: RoomType.ROOM4,
+    name: "Room 4",
+    initialRange: 120,
     maxRange: 250,
+    botTimeoutSeconds: 9,
+  },
+  [RoomType.ROOM5]: {
+    id: RoomType.ROOM5,
+    name: "Room 5",
+    initialRange: 100,
+    maxRange: 220,
     botTimeoutSeconds: 10,
   },
-  [RoomType.COMPETITIVE_2]: {
-    id: RoomType.COMPETITIVE_2,
-    name: "Competitive 2",
+  [RoomType.ROOM6]: {
+    id: RoomType.ROOM6,
+    name: "Room 6",
+    initialRange: 90,
+    maxRange: 200,
+    botTimeoutSeconds: 11,
+  },
+  [RoomType.ROOM7]: {
+    id: RoomType.ROOM7,
+    name: "Room 7",
     initialRange: 80,
-    maxRange: 220,
+    maxRange: 180,
     botTimeoutSeconds: 12,
+  },
+  [RoomType.ROOM8]: {
+    id: RoomType.ROOM8,
+    name: "Room 8",
+    initialRange: 70,
+    maxRange: 160,
+    botTimeoutSeconds: 13,
+  },
+  [RoomType.ROOM9]: {
+    id: RoomType.ROOM9,
+    name: "Room 9",
+    initialRange: 60,
+    maxRange: 140,
+    botTimeoutSeconds: 14,
   },
 };
 
@@ -285,7 +320,7 @@ function scheduleBotCheck(
  */
 export async function addToMatchmaking(
   userId: number,
-  roomType: RoomType = RoomType.CASUAL_1,
+  roomType: RoomType = RoomType.ROOM1,
   rooms?: RoomManager,
 ): Promise<number> {
   // حذف کاربر از هر صف دیگری (در صورت وجود)

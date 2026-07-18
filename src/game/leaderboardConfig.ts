@@ -15,10 +15,15 @@ const ROOM_BASE_POINTS: Record<number, { win: number; loss: number }> = {
 
 // نگاشت اتاق‌های برنامه به اعداد R
 export const ROOM_TO_R_MAP: Record<RoomType, number> = {
-  [RoomType.CASUAL_1]: 1,
-  [RoomType.CASUAL_2]: 3,
-  [RoomType.COMPETITIVE_1]: 5,
-  [RoomType.COMPETITIVE_2]: 7,
+  [RoomType.ROOM1]: 1,
+  [RoomType.ROOM2]: 2,
+  [RoomType.ROOM3]: 3,
+  [RoomType.ROOM4]: 4,
+  [RoomType.ROOM5]: 5,
+  [RoomType.ROOM6]: 6,
+  [RoomType.ROOM7]: 7,
+  [RoomType.ROOM8]: 8,
+  [RoomType.ROOM9]: 9,
 };
 
 export function getBasePoints(roomType: RoomType, isWin: boolean): number {
