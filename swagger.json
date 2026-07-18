@@ -1,0 +1,2614 @@
+openapi: 3.0.0
+info:
+  title: Backgammon Game API
+  description: |
+    API for a real‑time multiplayer backgammon game.
+    - REST endpoints for account management, matchmaking, history, shop, tournament, etc.
+    - WebSocket connection for live game events (see WebSocket section).
+    - Admin endpoints for managing inventory, shop, starter packs and user inventory.
+  version: 1.0.0
+  contact:
+    name: Support
+    url: https://example.com
+servers:
+  - url: http://localhost:8080
+    description: Development server
+  - url: http://37.255.218.236:5208
+    description: Production server
+
+tags:
+  - name: Account
+    description: Registration, login, logout, and password management.
+  - name: Users
+    description: User profiles and public data.
+  - name: Games
+    description: Game creation and matchmaking.
+  - name: History
+    description: Game history, replay, and timeline.
+  - name: Timer Presets
+    description: Manage timer configurations.
+  - name: Mini Chat
+    description: Static chat categories and messages.
+  - name: Location
+    description: Provinces and cities.
+  - name: Shop
+    description: Shop items and purchases (public).
+  - name: Collection
+    description: User inventory and selected items.
+  - name: Leaderboard
+    description: Global and period‑based leaderboards.
+  - name: Tournament
+    description: Weekly and Monthly tournament management, leaderboards, series.
+  - name: Admin
+    description: Administrative endpoints for managing inventory, shop, starter packs and user inventory (requires admin privileges).
+  - name: WebSocket
+    description: Real‑time game protocol (see separate documentation).
+
+paths:
+  # ===================== ACCOUNT =====================
+  /api/account/register:
+    post:
+      tags: [Account]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '200':
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Validation error
+        '500':
+          description: Server error
+
+  /api/account/login:
+    post:
+      tags: [Account]
+      summary: Log in with username and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid credentials or validation error
+        '500':
+          description: Server error
+
+  /api/account/logout:
+    post:
+      tags: [Account]
+      summary: Log out current user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logged out successfully
+        '401':
+          description: Not authenticated
+        '500':
+          description: Server error
+
+  /api/account/password/change:
+    post:
+      tags: [Account]
+      summary: Change user password
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Password changed
+        '400':
+          description: Validation error or old password incorrect
+        '401':
+          description: Not authenticated
+        '500':
+          description: Server error
+
+  # ===================== USERS =====================
+  /api/users:
+    post:
+      tags: [Users]
+      summary: Create a simple user (legacy)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimpleUserRequest'
+      responses:
+        '200':
+          description: User created or found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Validation error
+        '500':
+          description: Server error
+
+  /api/users/profile/{userId}:
+    get:
+      tags: [Users]
+      summary: Get user profile with stats and common matches
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Profile data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+        '404':
+          description: User not found
+        '500':
+          description: Server error
+
+    put:
+      tags: [Users]
+      summary: Update user profile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Validation error
+        '401':
+          description: Not authenticated
+        '500':
+          description: Server error
+
+  /api/users/me:
+    get:
+      tags: [Users]
+      summary: Get current authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current user data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Not authenticated
+        '500':
+          description: Server error
+
+  # ===================== GAMES =====================
+  /api/games:
+    post:
+      tags: [Games]
+      summary: Create a new game
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                whitePlayerId:
+                  type: integer
+                  description: ID of the white player
+      responses:
+        '200':
+          description: Game created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Game'
+        '400':
+          description: Missing whitePlayerId
+        '401':
+          description: Not authenticated
+        '500':
+          description: Server error
+
+  /api/games/join:
+    post:
+      tags: [Games]
+      summary: Join matchmaking queue
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId:
+                  type: integer
+                roomType:
+                  $ref: '#/components/schemas/RoomType'
+      responses:
+        '200':
+          description: Queued or matched
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      status:
+                        type: string
+                        enum: [waiting]
+                      message:
+                        type: string
+                  - type: object
+                    properties:
+                      gameId:
+                        type: integer
+                      status:
+                        type: string
+                        enum: [matched]
+                      message:
+                        type: string
+        '401':
+          description: Not authenticated
+        '500':
+          description: Matchmaking failed
+
+  # ===================== HISTORY =====================
+  /api/history/{gameId}:
+    get:
+      tags: [History]
+      summary: Get raw events of a game
+      parameters:
+        - name: gameId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of game events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  gameId:
+                    type: integer
+                  events:
+                    type: array
+                    items:
+                      type: object
+        '404':
+          description: Game not found
+        '500':
+          description: Server error
+
+  /api/history/{gameId}/replay:
+    get:
+      tags: [History]
+      summary: Replay game state up to a specific sequence
+      parameters:
+        - name: gameId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: until
+          in: query
+          required: false
+          schema:
+            type: integer
+            description: Event sequence number to replay until
+      responses:
+        '200':
+          description: Game state at requested point
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameState'
+        '404':
+          description: Game state not found
+        '500':
+          description: Server error
+
+  /api/history/{gameId}/timeline:
+    get:
+      tags: [History]
+      summary: Get human‑readable timeline of events
+      parameters:
+        - name: gameId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Timeline entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    time:
+                      type: integer
+                    roomId:
+                      type: integer
+                    seq:
+                      type: integer
+                    revert:
+                      type: boolean
+                    initiator:
+                      type: integer
+                      nullable: true
+                    event:
+                      type: string
+                    details:
+                      type: string
+                      nullable: true
+        '404':
+          description: Game not found
+        '500':
+          description: Server error
+
+  # ===================== TIMER PRESETS =====================
+  /api/timer-presets:
+    get:
+      tags: [Timer Presets]
+      summary: Get all timer presets
+      responses:
+        '200':
+          description: List of presets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TimerPreset'
+        '500':
+          description: Server error
+
+    post:
+      tags: [Timer Presets]
+      summary: Create a new timer preset (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TimerPresetInput'
+      responses:
+        '200':
+          description: Preset created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimerPreset'
+        '400':
+          description: Invalid input
+        '500':
+          description: Server error
+
+  /api/timer-presets/{id}:
+    put:
+      tags: [Timer Presets]
+      summary: Update a timer preset (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TimerPresetInput'
+      responses:
+        '200':
+          description: Preset updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimerPreset'
+        '500':
+          description: Server error
+
+    delete:
+      tags: [Timer Presets]
+      summary: Delete a timer preset (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Preset deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '500':
+          description: Server error
+
+  # ===================== MINI CHAT =====================
+  /api/miniChat/categories:
+    get:
+      tags: [Mini Chat]
+      summary: Get all message categories (active only)
+      responses:
+        '200':
+          description: List of categories with their messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChatCategory'
+        '500':
+          description: Server error
+
+    post:
+      tags: [Mini Chat]
+      summary: Create a new category (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatCategoryInput'
+      responses:
+        '200':
+          description: Category created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatCategory'
+        '400':
+          description: Validation error
+        '500':
+          description: Server error
+
+  /api/miniChat/categories/{id}:
+    get:
+      tags: [Mini Chat]
+      summary: Get a category by ID with messages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Category data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatCategory'
+        '404':
+          description: Category not found
+        '500':
+          description: Server error
+
+    put:
+      tags: [Mini Chat]
+      summary: Update a category (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatCategoryInput'
+      responses:
+        '200':
+          description: Category updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatCategory'
+        '500':
+          description: Server error
+
+    delete:
+      tags: [Mini Chat]
+      summary: Delete a category (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Category deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+        '500':
+          description: Server error
+
+  /api/miniChat/categories/{categoryId}/messages:
+    get:
+      tags: [Mini Chat]
+      summary: Get messages of a specific category
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChatMessage'
+        '500':
+          description: Server error
+
+  /api/miniChat/messages:
+    post:
+      tags: [Mini Chat]
+      summary: Create a new message (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatMessageInput'
+      responses:
+        '200':
+          description: Message created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessage'
+        '500':
+          description: Server error
+
+  /api/miniChat/messages/{id}:
+    put:
+      tags: [Mini Chat]
+      summary: Update a message (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatMessageInput'
+      responses:
+        '200':
+          description: Message updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessage'
+        '500':
+          description: Server error
+
+    delete:
+      tags: [Mini Chat]
+      summary: Delete a message (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Message deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+        '500':
+          description: Server error
+
+  # ===================== LOCATION =====================
+  /api/location/provinces:
+    get:
+      tags: [Location]
+      summary: Get all provinces
+      responses:
+        '200':
+          description: List of provinces
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Province'
+        '500':
+          description: Server error
+
+  /api/location/provinces/{provinceId}/cities:
+    get:
+      tags: [Location]
+      summary: Get cities of a province
+      parameters:
+        - name: provinceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of cities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/City'
+        '400':
+          description: Invalid provinceId
+        '500':
+          description: Server error
+
+  # ===================== SHOP (public) =====================
+  /api/shop/items:
+    get:
+      tags: [Shop]
+      summary: Get active shop items
+      responses:
+        '200':
+          description: List of shop items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ShopItem'
+        '500':
+          description: Server error
+
+  /api/shop/purchase:
+    post:
+      tags: [Shop]
+      summary: Purchase a shop item
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseRequest'
+      responses:
+        '200':
+          description: Purchase successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopTransaction'
+        '400':
+          description: Invalid request or insufficient balance
+        '401':
+          description: Not authenticated
+        '500':
+          description: Server error
+
+  # ===================== COLLECTION =====================
+  /api/collection/items:
+    get:
+      tags: [Collection]
+      summary: Get user's collection (owned items grouped by type)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Collection data
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/UserInventoryItem'
+        '401':
+          description: Not authenticated
+        '500':
+          description: Server error
+
+  /api/collection/select:
+    post:
+      tags: [Collection]
+      summary: Select an item to use
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                inventoryItemId:
+                  type: integer
+                category:
+                  type: string
+                  enum: [dice, checker, cup, board, sticker, avatar, frame]
+      responses:
+        '200':
+          description: Item selected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          description: Invalid category or item not owned
+        '401':
+          description: Not authenticated
+        '500':
+          description: Server error
+
+  /api/collection/selected:
+    get:
+      tags: [Collection]
+      summary: Get currently selected items
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Selected items by category
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dice:
+                    $ref: '#/components/schemas/InventoryItem'
+                  checker:
+                    $ref: '#/components/schemas/InventoryItem'
+                  cup:
+                    $ref: '#/components/schemas/InventoryItem'
+                  board:
+                    $ref: '#/components/schemas/InventoryItem'
+                  sticker:
+                    $ref: '#/components/schemas/InventoryItem'
+                  avatar:
+                    $ref: '#/components/schemas/InventoryItem'
+                  frame:
+                    $ref: '#/components/schemas/InventoryItem'
+        '401':
+          description: Not authenticated
+        '500':
+          description: Server error
+
+  # ===================== LEADERBOARD =====================
+  /api/leaderboard/weekly:
+    get:
+      tags: [Leaderboard]
+      summary: Get weekly leaderboard (last 7 days)
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+      responses:
+        '200':
+          description: Leaderboard entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeaderboardEntry'
+        '500':
+          description: Server error (returns empty array)
+
+  /api/leaderboard/monthly:
+    get:
+      tags: [Leaderboard]
+      summary: Get monthly leaderboard (last 30 days)
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+      responses:
+        '200':
+          description: Leaderboard entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeaderboardEntry'
+        '500':
+          description: Server error (returns empty array)
+
+  /api/leaderboard/alltime:
+    get:
+      tags: [Leaderboard]
+      summary: Get all‑time leaderboard
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+      responses:
+        '200':
+          description: Leaderboard entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeaderboardEntry'
+        '500':
+          description: Server error (returns empty array)
+
+  # ===================== TOURNAMENT =====================
+  /api/tournament/current/{type}:
+    get:
+      tags: [Tournament]
+      summary: Get current tournament season
+      description: Returns active season for given type (WEEKLY or MONTHLY)
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/TournamentType'
+      responses:
+        '200':
+          description: Current season data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TournamentSeason'
+        '404':
+          description: No active season found
+        '500':
+          description: Server error
+
+  /api/tournament/monthly/leaderboard/{seasonId}:
+    get:
+      tags: [Tournament]
+      summary: Get monthly tournament leaderboard
+      description: Returns leaderboard for a given monthly season with tie‑breakers applied.
+      parameters:
+        - name: seasonId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+      responses:
+        '200':
+          description: Leaderboard entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TournamentLeaderboardEntry'
+        '500':
+          description: Server error
+
+  /api/tournament/weekly/leaderboard/{seasonId}:
+    get:
+      tags: [Tournament]
+      summary: Get weekly tournament leaderboard
+      description: Returns leaderboard for a given weekly season. Only players with at least 5 games are included.
+      parameters:
+        - name: seasonId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+      responses:
+        '200':
+          description: Leaderboard entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TournamentLeaderboardEntry'
+        '500':
+          description: Server error
+
+  /api/tournament/monthly/active:
+    get:
+      tags: [Tournament]
+      summary: Get current user's active monthly series
+      description: Returns the active series (24h window) for the authenticated user, or null if none.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Active series or null
+          content:
+            application/json:
+              schema:
+                nullable: true
+                allOf:
+                  - $ref: '#/components/schemas/TournamentSeries'
+        '401':
+          description: Not authenticated
+        '500':
+          description: Server error
+
+  /api/tournament/monthly/history/{playerId}:
+    get:
+      tags: [Tournament]
+      summary: Get monthly series history for a player
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: seasonId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of recorded series
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TournamentSeries'
+        '500':
+          description: Server error
+
+  /api/tournament/ticket/balance:
+    get:
+      tags: [Tournament]
+      summary: Get current user's golden ticket balance
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ticket balance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  balance:
+                    type: integer
+                    example: 5
+        '401':
+          description: Not authenticated
+        '500':
+          description: Server error
+
+  # ===================== ADMIN =====================
+  /api/admin/inventory:
+    get:
+      tags: [Admin]
+      summary: Get all inventory items (admin)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of all inventory items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InventoryItem'
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin access required
+        '500':
+          description: Server error
+
+    post:
+      tags: [Admin]
+      summary: Create a new inventory item (admin)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryItemInput'
+      responses:
+        '200':
+          description: Inventory item created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryItem'
+        '400':
+          description: Validation error
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin access required
+        '500':
+          description: Server error
+
+  /api/admin/inventory/{id}:
+    get:
+      tags: [Admin]
+      summary: Get an inventory item by ID (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Inventory item details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryItem'
+        '404':
+          description: Item not found
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin access required
+        '500':
+          description: Server error
+
+    put:
+      tags: [Admin]
+      summary: Update an inventory item (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryItemInput'
+      responses:
+        '200':
+          description: Inventory item updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryItem'
+        '400':
+          description: Validation error
+        '404':
+          description: Item not found
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin access required
+        '500':
+          description: Server error
+
+    delete:
+      tags: [Admin]
+      summary: Delete an inventory item (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Item deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          description: Cannot delete if linked to shop or user inventory
+        '404':
+          description: Item not found
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin access required
+        '500':
+          description: Server error
+
+  /api/admin/shop:
+    get:
+      tags: [Admin]
+      summary: Get all shop items (admin, including inactive)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: includeInactive
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: List of shop items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ShopItem'
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin access required
+        '500':
+          description: Server error
+
+    post:
+      tags: [Admin]
+      summary: Create a new shop item (admin)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShopItemInput'
+      responses:
+        '200':
+          description: Shop item created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopItem'
+        '400':
+          description: Validation error
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin access required
+        '500':
+          description: Server error
+
+  /api/admin/shop/{id}:
+    get:
+      tags: [Admin]
+      summary: Get a shop item by ID (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Shop item details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopItem'
+        '404':
+          description: Item not found
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin access required
+        '500':
+          description: Server error
+
+    put:
+      tags: [Admin]
+      summary: Update a shop item (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShopItemInput'
+      responses:
+        '200':
+          description: Shop item updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopItem'
+        '400':
+          description: Validation error
+        '404':
+          description: Item not found
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin access required
+        '500':
+          description: Server error
+
+    delete:
+      tags: [Admin]
+      summary: Delete a shop item (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Shop item deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '404':
+          description: Item not found
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin access required
+        '500':
+          description: Server error
+
+  /api/admin/shop/{id}/toggle:
+    patch:
+      tags: [Admin]
+      summary: Toggle active status of a shop item (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                isActive:
+                  type: boolean
+              required:
+                - isActive
+      responses:
+        '200':
+          description: Status toggled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopItem'
+        '404':
+          description: Item not found
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin access required
+        '500':
+          description: Server error
+
+  /api/admin/starter-packs:
+    get:
+      tags: [Admin]
+      summary: Get all starter packs (admin)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of starter packs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StarterPack'
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin access required
+        '500':
+          description: Server error
+
+  /api/admin/starter-packs/{id}:
+    get:
+      tags: [Admin]
+      summary: Get a starter pack by ID (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Starter pack details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StarterPack'
+        '404':
+          description: Pack not found
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin access required
+        '500':
+          description: Server error
+
+  /api/admin/starter-packs/apply:
+    post:
+      tags: [Admin]
+      summary: Apply a starter pack to a user (admin)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId:
+                  type: integer
+                packId:
+                  type: string
+              required:
+                - userId
+                - packId
+      responses:
+        '200':
+          description: Pack applied successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '400':
+          description: Invalid input
+        '404':
+          description: User or pack not found
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin access required
+        '500':
+          description: Server error
+
+  /api/admin/user-inventory/{userId}:
+    get:
+      tags: [Admin]
+      summary: Get inventory of a specific user (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: User inventory
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserInventoryItem'
+        '404':
+          description: User not found
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin access required
+        '500':
+          description: Server error
+
+  /api/admin/user-inventory/{userId}/add:
+    post:
+      tags: [Admin]
+      summary: Add an item to a user's inventory (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                inventoryItemId:
+                  type: integer
+                amount:
+                  type: integer
+                  default: 1
+              required:
+                - inventoryItemId
+      responses:
+        '200':
+          description: Item added to user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserInventoryItem'
+        '400':
+          description: Validation error
+        '404':
+          description: User or item not found
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin access required
+        '500':
+          description: Server error
+
+  /api/admin/user-inventory/{userId}/remove:
+    post:
+      tags: [Admin]
+      summary: Remove an item from a user's inventory (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                inventoryItemId:
+                  type: integer
+                amount:
+                  type: integer
+                  default: 1
+              required:
+                - inventoryItemId
+      responses:
+        '200':
+          description: Item removed from user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserInventoryItem'
+        '400':
+          description: Validation error or insufficient amount
+        '404':
+          description: User or item not found
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin access required
+        '500':
+          description: Server error
+
+  /api/admin/user-inventory/{userId}/add-coin:
+    post:
+      tags: [Admin]
+      summary: Add coins to a user (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: integer
+              required:
+                - amount
+      responses:
+        '200':
+          description: Coins added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserStats'
+        '400':
+          description: Invalid amount
+        '404':
+          description: User not found
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin access required
+        '500':
+          description: Server error
+
+  /api/admin/user-inventory/{userId}/add-diamond:
+    post:
+      tags: [Admin]
+      summary: Add diamonds to a user (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: integer
+              required:
+                - amount
+      responses:
+        '200':
+          description: Diamonds added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserStats'
+        '400':
+          description: Invalid amount
+        '404':
+          description: User not found
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin access required
+        '500':
+          description: Server error
+
+  # ===================== WEB SOCKET =====================
+  /:
+    get:
+      tags: [WebSocket]
+      summary: WebSocket endpoint (upgrade to WS)
+      description: |
+        Connect using `ws://localhost:8080` (or `wss://`).
+        All messages are JSON with `type` and `payload` fields.
+
+        **Client → Server events:**
+        - `game.join` – `{ gameId: number, userId: number, roomType?: string }`
+        - `game.roll` – `{ gameId: number }`
+        - `game.move` – `{ gameId: number, from: number, to: number, die?: number, isUndo?: boolean }`
+        - `player.leave` – `{ gameId: number }`
+        - `player.ready` – `{ gameId: number }`
+        - `game.endTurn` – `{ gameId: number }`
+        - `game.cube.offer` – `{ gameId: number }`
+        - `game.cube.respond` – `{ gameId: number, accept: boolean }`
+        - `game.practice.bearoff` – `{ gameId: number }`
+        - `game.practice.rearrange` – `{ gameId: number, points: Array<{index, count}> }`
+        - `game.practice.setup_board` – `{ gameId: number, board: { points, bar, borneOff } }`
+        - `tournament.monthly.start` – `{ seasonId: number }`
+        - `tournament.monthly.record` – `{ seriesId: number, gameId: number, matchIndex: number, result: "normal"|"gammon"|"backgammon"|"loss"|"forfeit", pipAdvantage?: number, cleanPlay?: boolean }`
+        - `tournament.monthly.close` – `{ seriesId: number }`
+        - `tournament.matchmaking.join` – `{ seasonId: number, type: "WEEKLY"|"MONTHLY" }`
+        - `tournament.matchmaking.cancel` – `{ type: "WEEKLY"|"MONTHLY" }`
+
+        **Server → Client events:**
+        - `game.state` – full `GameState`
+        - `game.error` – `{ message: string }`
+        - `game.turn` – `{ playerId, color }`
+        - `dice.result` – `{ dice, playerId, type? }`
+        - `player.move` – array of move objects
+        - `game.cube.offer`, `game.cube.accepted`, `game.cube.rejected`
+        - `turn.timeout`, `network.timeout`
+        - `game.result` – `{ winner, winType, reason, score }`
+        - `timer.started` – `{ playerId, primaryTime, secondaryTime, turnStartedAt }`
+        - `timer.warning` – `{ remaining, playerId }`
+        - `tournament.series_started` – `{ seriesId: number, expiresAt: string }`
+        - `tournament.game_recorded` – tournament game data
+        - `tournament.series_closed` – `{ success: true }`
+        - `tournament.matchmaking_started` – `{ status: "searching" }`
+        - `tournament.matchmaking_cancelled` – `{ status: "cancelled" }`
+        - `tournament.match_found` – `{ gameId: number, opponent: { id, userName, avatar } }`
+
+      responses:
+        '101':
+          description: WebSocket upgrade
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # ---------- USER ----------
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        userName:
+          type: string
+        phoneNumber:
+          type: string
+          nullable: true
+        lastOnline:
+          type: string
+          format: date-time
+        isLocked:
+          type: boolean
+        winRate:
+          type: number
+        mmr:
+          type: integer
+        winStreak:
+          type: integer
+        lossStreak:
+          type: integer
+        recentResults:
+          type: array
+          items:
+            type: boolean
+        recentOpponents:
+          type: array
+          items:
+            type: object
+            properties:
+              opponentId:
+                type: integer
+              timestamp:
+                type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        gender:
+          type: string
+          enum: [MAN, WOMAN, OTHER]
+          nullable: true
+        level:
+          type: integer
+          nullable: true
+        provinceId:
+          type: integer
+          nullable: true
+        cityId:
+          type: integer
+          nullable: true
+        avatar:
+          type: string
+          nullable: true
+        frame:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        selectedDiceId:
+          type: integer
+          nullable: true
+        selectedCheckerId:
+          type: integer
+          nullable: true
+        selectedCupId:
+          type: integer
+          nullable: true
+        selectedBoardId:
+          type: integer
+          nullable: true
+        selectedStickerId:
+          type: integer
+          nullable: true
+        totalWins:
+          type: integer
+        totalMars:
+          type: integer
+        totalBackgammon:
+          type: integer
+        totalMatches:
+          type: integer
+
+    ProfileResponse:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          properties:
+            xp:
+              type: integer
+            coin:
+              type: integer
+            gem:
+              type: integer
+            commonMatches:
+              type: integer
+            lastMatchDate:
+              type: string
+              format: date-time
+              nullable: true
+            lastMatchResult:
+              type: string
+              nullable: true
+
+    # ---------- AUTH ----------
+    RegisterRequest:
+      type: object
+      required:
+        - userName
+        - password
+      properties:
+        userName:
+          type: string
+          minLength: 3
+          maxLength: 50
+        password:
+          type: string
+          minLength: 8
+          maxLength: 100
+        phoneNumber:
+          type: string
+          pattern: '^[0-9]{11}$'
+        gender:
+          type: string
+          enum: [MAN, WOMAN, OTHER]
+
+    LoginRequest:
+      type: object
+      required:
+        - userName
+        - password
+      properties:
+        userName:
+          type: string
+        password:
+          type: string
+
+    ChangePasswordRequest:
+      type: object
+      required:
+        - newPassword
+      properties:
+        oldPassword:
+          type: string
+        newPassword:
+          type: string
+          minLength: 6
+          maxLength: 16
+
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        token:
+          type: string
+
+    SimpleUserRequest:
+      type: object
+      required:
+        - userName
+      properties:
+        userName:
+          type: string
+          minLength: 1
+          maxLength: 100
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        provinceId:
+          type: integer
+          minimum: 1
+        cityId:
+          type: integer
+          minimum: 1
+        image:
+          type: string
+          maxLength: 500
+        phoneNumber:
+          type: string
+          pattern: '^[0-9]{11}$'
+
+    # ---------- GAME ----------
+    Game:
+      type: object
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+          enum: [waiting, ready, starting, in-progress, finished]
+        whitePlayerId:
+          type: integer
+          nullable: true
+        blackPlayerId:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    # ---------- ROOM TYPE (UPDATED) ----------
+    RoomType:
+      type: string
+      enum:
+        - ROOM1
+        - ROOM2
+        - ROOM3
+        - ROOM4
+        - ROOM5
+        - ROOM6
+        - ROOM7
+        - ROOM8
+        - ROOM9
+
+    GameState:
+      type: object
+      description: Full game state (simplified for documentation)
+      properties:
+        id:
+          type: integer
+        players:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              color:
+                type: string
+                enum: [white, black]
+        turn:
+          type: integer
+          nullable: true
+        status:
+          type: string
+        board:
+          type: object
+        dice:
+          type: array
+          items:
+            type: integer
+        cubeValue:
+          type: integer
+        cubeOwner:
+          type: integer
+          nullable: true
+        winType:
+          type: string
+          enum: [normal, mars, backgammon]
+        score:
+          type: integer
+
+    # ---------- TIMER PRESET ----------
+    TimerPreset:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        primarySeconds:
+          type: integer
+        secondarySeconds:
+          type: integer
+        leagueLevel:
+          type: integer
+          nullable: true
+        gameType:
+          type: string
+          nullable: true
+        isDefault:
+          type: boolean
+
+    TimerPresetInput:
+      type: object
+      required:
+        - name
+        - primarySeconds
+        - secondarySeconds
+      properties:
+        name:
+          type: string
+        primarySeconds:
+          type: integer
+        secondarySeconds:
+          type: integer
+        leagueLevel:
+          type: integer
+          nullable: true
+        gameType:
+          type: string
+          nullable: true
+        isDefault:
+          type: boolean
+
+    # ---------- CHAT ----------
+    ChatCategory:
+      type: object
+      properties:
+        id:
+          type: integer
+        nameFa:
+          type: string
+        nameEn:
+          type: string
+          nullable: true
+        isFree:
+          type: boolean
+        conditions:
+          type: object
+          nullable: true
+        lock:
+          type: boolean
+        isActive:
+          type: boolean
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+
+    ChatCategoryInput:
+      type: object
+      required:
+        - nameFa
+      properties:
+        nameFa:
+          type: string
+        nameEn:
+          type: string
+        isFree:
+          type: boolean
+        conditions:
+          type: object
+        lock:
+          type: boolean
+        isActive:
+          type: boolean
+
+    ChatMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+        message:
+          type: string
+        categoryId:
+          type: integer
+        order:
+          type: integer
+          nullable: true
+        isActive:
+          type: boolean
+
+    ChatMessageInput:
+      type: object
+      required:
+        - message
+        - categoryId
+      properties:
+        message:
+          type: string
+        categoryId:
+          type: integer
+        order:
+          type: integer
+        isActive:
+          type: boolean
+
+    # ---------- LOCATION ----------
+    Province:
+      type: object
+      properties:
+        id:
+          type: integer
+        faName:
+          type: string
+        enName:
+          type: string
+        isCapital:
+          type: boolean
+
+    City:
+      type: object
+      properties:
+        id:
+          type: integer
+        faName:
+          type: string
+        enName:
+          type: string
+        isCapital:
+          type: boolean
+        latitude:
+          type: number
+          nullable: true
+        longitude:
+          type: number
+          nullable: true
+
+    # ---------- SHOP ----------
+    ShopItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        inventoryItemId:
+          type: integer
+        type:
+          type: string
+          enum: [ITEM, PACKAGE, CURRENCY]
+        coinPrice:
+          type: integer
+          nullable: true
+        diamondPrice:
+          type: integer
+          nullable: true
+        realPrice:
+          type: number
+          nullable: true
+        discountCoinPrice:
+          type: integer
+          nullable: true
+        discountDiamondPrice:
+          type: integer
+          nullable: true
+        discountRealPrice:
+          type: number
+          nullable: true
+        discountStartDate:
+          type: string
+          format: date-time
+          nullable: true
+        discountEndDate:
+          type: string
+          format: date-time
+          nullable: true
+        packageCoin:
+          type: integer
+          nullable: true
+        packageDiamond:
+          type: integer
+          nullable: true
+        packageItems:
+          type: array
+          items:
+            type: object
+            properties:
+              inventoryItemId:
+                type: integer
+              amount:
+                type: integer
+        isActive:
+          type: boolean
+        sortOrder:
+          type: integer
+
+    ShopItemInput:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        type:
+          $ref: '#/components/schemas/ShopItemType'
+        inventoryItemId:
+          type: integer
+        coinPrice:
+          type: integer
+        diamondPrice:
+          type: integer
+        realPrice:
+          type: number
+        realCurrency:
+          type: string
+        discountCoinPrice:
+          type: integer
+        discountDiamondPrice:
+          type: integer
+        discountRealPrice:
+          type: number
+        discountStartDate:
+          type: string
+          format: date-time
+        discountEndDate:
+          type: string
+          format: date-time
+        packageItems:
+          type: array
+          items:
+            type: object
+            properties:
+              inventoryItemId:
+                type: integer
+              amount:
+                type: integer
+        packageCoin:
+          type: integer
+        packageDiamond:
+          type: integer
+        isActive:
+          type: boolean
+        sortOrder:
+          type: integer
+        displayImage:
+          type: string
+
+    ShopItemType:
+      type: string
+      enum: [ITEM, PACKAGE, CURRENCY]
+
+    PurchaseRequest:
+      type: object
+      required:
+        - shopItemId
+        - currencyType
+      properties:
+        shopItemId:
+          type: integer
+        currencyType:
+          type: string
+          enum: [COIN, DIAMOND, REAL]
+        realAmount:
+          type: number
+        realCurrency:
+          type: string
+
+    ShopTransaction:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        shopItemId:
+          type: integer
+        pricePaid:
+          type: integer
+        currencyType:
+          type: string
+        realAmount:
+          type: number
+          nullable: true
+        realCurrency:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    # ---------- COLLECTION ----------
+    InventoryItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        visualCode:
+          type: string
+        usageType:
+          type: string
+          enum: [dice, checker, cup, board, sticker, avatar, frame]
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        rarity:
+          type: string
+          nullable: true
+
+    InventoryItemInput:
+      type: object
+      required:
+        - name
+        - visualCode
+        - usageType
+      properties:
+        name:
+          type: string
+        visualCode:
+          type: string
+        usageType:
+          type: string
+          enum: [dice, checker, cup, board, sticker, avatar, frame]
+
+    UserInventoryItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        inventoryItemId:
+          type: integer
+        amount:
+          type: integer
+        expirationDate:
+          type: string
+          format: date-time
+          nullable: true
+        inventoryItem:
+          $ref: '#/components/schemas/InventoryItem'
+
+    # ---------- STARTER PACK ----------
+    StarterPack:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              visualCode:
+                type: string
+              amount:
+                type: integer
+        coin:
+          type: integer
+        diamond:
+          type: integer
+
+    # ---------- LEADERBOARD ----------
+    LeaderboardEntry:
+      type: object
+      properties:
+        userId:
+          type: integer
+        userName:
+          type: string
+        mmr:
+          type: integer
+        winRate:
+          type: number
+        avatar:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        totalLBPoints:
+          type: integer
+
+    # ---------- TOURNAMENT ----------
+    TournamentType:
+      type: string
+      enum: [WEEKLY, MONTHLY]
+
+    TournamentStatus:
+      type: string
+      enum: [ACTIVE, FINALIZED]
+
+    SeriesStatus:
+      type: string
+      enum: [ACTIVE, COMPLETED, CLOSED_BY_PLAYER, EXPIRED]
+
+    TournamentSeason:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          $ref: '#/components/schemas/TournamentType'
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/TournamentStatus'
+        ticketPrice:
+          type: integer
+          description: Entry cost in golden tickets
+        minGamesForRanking:
+          type: integer
+          description: Minimum games required for weekly leaderboard eligibility
+        bestCount:
+          type: integer
+          description: Number of best results counted (weekly=20, monthly=5)
+        prizePool:
+          type: object
+          description: JSON with prize distribution (first, top10, milestones)
+          example: { first: 1000, top10: 100, milestone10: 50, milestone15: 75 }
+
+    TournamentGame:
+      type: object
+      properties:
+        id:
+          type: integer
+        seriesId:
+          type: integer
+        matchIndex:
+          type: integer
+        gameId:
+          type: integer
+          nullable: true
+        result:
+          $ref: '#/components/schemas/MatchResultType'
+        baseScore:
+          type: integer
+        pipBonus:
+          type: integer
+        cleanBonus:
+          type: integer
+        totalScore:
+          type: integer
+        isForfeit:
+          type: boolean
+        isValid:
+          type: boolean
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    MatchResultType:
+      type: string
+      enum: [normal, gammon, backgammon, timer, doublingcube, leave, forfeit, loss]
+
+    TournamentSeries:
+      type: object
+      properties:
+        id:
+          type: integer
+        playerId:
+          type: integer
+        seasonId:
+          type: integer
+        status:
+          $ref: '#/components/schemas/SeriesStatus'
+        startedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: string
+          format: date-time
+          nullable: true
+        totalScore:
+          type: integer
+        isRecorded:
+          type: boolean
+        gamesCount:
+          type: integer
+        bestSingleScore:
+          type: integer
+          nullable: true
+        totalBackgammonWins:
+          type: integer
+        totalMarsWins:
+          type: integer
+        totalPipAdvantage:
+          type: integer
+        totalForfeits:
+          type: integer
+        achievedAt:
+          type: string
+          format: date-time
+          nullable: true
+        games:
+          type: array
+          items:
+            $ref: '#/components/schemas/TournamentGame'
+
+    TournamentLeaderboardEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        seasonId:
+          type: integer
+        playerId:
+          type: integer
+        finalScore:
+          type: integer
+        bestSeriesIds:
+          type: array
+          items:
+            type: integer
+        bestSingleScore:
+          type: integer
+        totalBackgammonWins:
+          type: integer
+        totalMarsWins:
+          type: integer
+        avgPipAdvantage:
+          type: number
+        totalForfeits:
+          type: integer
+        seriesCount:
+          type: integer
+        achievedAt:
+          type: string
+          format: date-time
+          nullable: true
+        rank:
+          type: integer
+          nullable: true
+        player:
+          type: object
+          properties:
+            id:
+              type: integer
+            userName:
+              type: string
+            avatar:
+              type: string
+              nullable: true
+            title:
+              type: string
+              nullable: true
+
+    # ---------- USER STATS ----------
+    UserStats:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        xp:
+          type: integer
+          nullable: true
+        level:
+          type: integer
+          nullable: true
+        coin:
+          type: integer
+          nullable: true
+        gem:
+          type: integer
+          nullable: true
