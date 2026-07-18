@@ -1,4 +1,3 @@
-// src/routes/admin/inventory.ts
 import { Hono } from "hono";
 import {
   onOkRestResponse,
@@ -9,6 +8,10 @@ import { middlewareAuth } from "@/middlewares/middlewareAuth";
 import { adminGuard } from "@/middlewares/adminGuard";
 import { InventoryAdminService } from "@/services/admin/inventory-admin.service";
 import { validator } from "@/components/validator";
+import {
+  InventoryItemCreateSchema,
+  InventoryItemUpdateSchema,
+} from "@/validations/admin.schema";
 
 const inventoryAdminRoutes = new Hono();
 const service = new InventoryAdminService();
@@ -29,6 +32,13 @@ inventoryAdminRoutes.get("/", middlewareAuth, adminGuard, async (c) => {
 // ===== دریافت آیتم با ID =====
 inventoryAdminRoutes.get("/:id", middlewareAuth, adminGuard, async (c) => {
   const id = Number(c.req.param("id"));
+  if (isNaN(id) || id < 1) {
+    return onValidationsRestResponse({
+      ctx: c,
+      validations: { id: ["Must be a positive integer"] },
+    });
+  }
+
   try {
     const item = await service.getItem(id);
     if (!item) {
@@ -46,21 +56,19 @@ inventoryAdminRoutes.get("/:id", middlewareAuth, adminGuard, async (c) => {
 // ===== ایجاد آیتم جدید =====
 inventoryAdminRoutes.post("/", middlewareAuth, adminGuard, async (c) => {
   const body = await c.req.json();
-  const { name, visualCode, usageType } = body;
-
-  if (!name || !visualCode || !usageType) {
+  const validation = validator({
+    data: body,
+    schema: InventoryItemCreateSchema,
+  });
+  if (!validation.isValid) {
     return onValidationsRestResponse({
       ctx: c,
-      validations: {
-        name: ["Required"],
-        visualCode: ["Required"],
-        usageType: ["Required"],
-      },
+      validations: validation.errors,
     });
   }
 
   try {
-    const item = await service.createItem({ name, visualCode, usageType });
+    const item = await service.createItem(validation.data);
     return onOkRestResponse({
       ctx: c,
       data: item,
@@ -77,10 +85,27 @@ inventoryAdminRoutes.post("/", middlewareAuth, adminGuard, async (c) => {
 // ===== بروزرسانی آیتم =====
 inventoryAdminRoutes.put("/:id", middlewareAuth, adminGuard, async (c) => {
   const id = Number(c.req.param("id"));
+  if (isNaN(id) || id < 1) {
+    return onValidationsRestResponse({
+      ctx: c,
+      validations: { id: ["Must be a positive integer"] },
+    });
+  }
+
   const body = await c.req.json();
+  const validation = validator({
+    data: body,
+    schema: InventoryItemUpdateSchema,
+  });
+  if (!validation.isValid) {
+    return onValidationsRestResponse({
+      ctx: c,
+      validations: validation.errors,
+    });
+  }
 
   try {
-    const item = await service.updateItem(id, body);
+    const item = await service.updateItem(id, validation.data);
     return onOkRestResponse({
       ctx: c,
       data: item,
@@ -97,6 +122,12 @@ inventoryAdminRoutes.put("/:id", middlewareAuth, adminGuard, async (c) => {
 // ===== حذف آیتم =====
 inventoryAdminRoutes.delete("/:id", middlewareAuth, adminGuard, async (c) => {
   const id = Number(c.req.param("id"));
+  if (isNaN(id) || id < 1) {
+    return onValidationsRestResponse({
+      ctx: c,
+      validations: { id: ["Must be a positive integer"] },
+    });
+  }
 
   try {
     await service.deleteItem(id);

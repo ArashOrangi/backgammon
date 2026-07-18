@@ -36,5 +36,8 @@ export const CategoryMessagesSchema = Type.Object({
 
 export type CategoryCreateInput = Static<typeof CategoryCreateSchema>;
 export type CategoryUpdateInput = Static<typeof CategoryUpdateSchema>;
+export type CategoryIdInput = Static<typeof CategoryIdSchema>;
 export type MessageCreateInput = Static<typeof MessageCreateSchema>;
 export type MessageUpdateInput = Static<typeof MessageUpdateSchema>;
+export type MessageIdInput = Static<typeof MessageIdSchema>;
+export type CategoryMessagesInput = Static<typeof CategoryMessagesSchema>;

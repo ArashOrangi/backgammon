@@ -1,4 +1,3 @@
-//
 import { Hono } from "hono";
 import { IMiddlewareAuth } from "@/models/middleware";
 import {
@@ -8,7 +7,8 @@ import {
 } from "@/responses/response-builder";
 import { middlewareAuth } from "@/middlewares/middlewareAuth";
 import { getShopItems, purchaseShopItem } from "@/services/shop";
-import { CurrencyType } from "@prisma/client";
+import { validator } from "@/components/validator";
+import { PurchaseRequestSchema } from "@/validations/shop.schema";
 
 export const shopRoutes = new Hono<IMiddlewareAuth>();
 
@@ -41,25 +41,16 @@ shopRoutes.post("/purchase", middlewareAuth, async (c) => {
 
   try {
     const body = await c.req.json();
-    const { shopItemId, currencyType, realAmount, realCurrency } = body;
-
-    if (!shopItemId || !currencyType) {
+    const validation = validator({ data: body, schema: PurchaseRequestSchema });
+    if (!validation.isValid) {
       return onValidationsRestResponse({
         ctx: c,
-        validations: {
-          shopItemId: ["Required"],
-          currencyType: ["Required"],
-        },
+        validations: validation.errors,
       });
     }
 
-    // اعتبارسنجی نوع ارز
-    if (!Object.values(CurrencyType).includes(currencyType)) {
-      return onValidationsRestResponse({
-        ctx: c,
-        validations: { currencyType: ["Invalid currency type"] },
-      });
-    }
+    const { shopItemId, currencyType, realAmount, realCurrency } =
+      validation.data;
 
     const transaction = await purchaseShopItem(
       user.id,

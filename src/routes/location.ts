@@ -6,36 +6,58 @@ import {
 } from "@/responses/response-builder";
 import { getAllProvinces, getCitiesByProvince } from "@/models/location";
 import { OrmState } from "@/models/enums";
+import { validator } from "@/components/validator";
+import { ProvinceIdSchema } from "@/validations/location.schema";
 
 export const locationRoutes = new Hono();
 
-// دریافت لیست استان‌ها
+// ===== دریافت لیست استان‌ها =====
 locationRoutes.get("/provinces", async (c) => {
-  const provinces = await getAllProvinces();
-  if (provinces === OrmState.Error) {
+  try {
+    const provinces = await getAllProvinces();
+    if (provinces === OrmState.Error) {
+      return onErrorRestResponse({
+        ctx: c,
+        errorMessage: "Failed to fetch provinces",
+      });
+    }
+    return onOkRestResponse({ ctx: c, data: provinces });
+  } catch (error) {
     return onErrorRestResponse({
       ctx: c,
       errorMessage: "Failed to fetch provinces",
     });
   }
-  return onOkRestResponse({ ctx: c, data: provinces });
 });
 
-// دریافت شهرهای یک استان
+// ===== دریافت شهرهای یک استان =====
 locationRoutes.get("/provinces/:provinceId/cities", async (c) => {
-  const provinceId = Number(c.req.param("provinceId"));
-  if (isNaN(provinceId)) {
-    return onValidationsRestResponse({
-      ctx: c,
-      validations: { provinceId: ["Must be a number"] },
+  try {
+    const provinceIdRaw = c.req.param("provinceId");
+    const validation = validator({
+      data: { provinceId: Number(provinceIdRaw) },
+      schema: ProvinceIdSchema,
     });
-  }
-  const cities = await getCitiesByProvince(provinceId);
-  if (cities === OrmState.Error) {
+    if (!validation.isValid) {
+      return onValidationsRestResponse({
+        ctx: c,
+        validations: validation.errors,
+      });
+    }
+
+    const provinceId = validation.data.provinceId;
+    const cities = await getCitiesByProvince(provinceId);
+    if (cities === OrmState.Error) {
+      return onErrorRestResponse({
+        ctx: c,
+        errorMessage: "Failed to fetch cities",
+      });
+    }
+    return onOkRestResponse({ ctx: c, data: cities });
+  } catch (error) {
     return onErrorRestResponse({
       ctx: c,
       errorMessage: "Failed to fetch cities",
     });
   }
-  return onOkRestResponse({ ctx: c, data: cities });
 });

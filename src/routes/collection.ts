@@ -1,7 +1,4 @@
-// ============================================================
-// فایل: routes/collection.ts
-// ============================================================
-
+// src/routes/collection.ts
 import { Hono } from "hono";
 import { IMiddlewareAuth } from "@/models/middleware";
 import {
@@ -15,6 +12,8 @@ import {
   selectItem,
   getUserSelectedItems,
 } from "@/services/collection";
+import { validator } from "@/components/validator";
+import { SelectItemSchema } from "@/validations/collection.schema";
 
 export const collectionRoutes = new Hono<IMiddlewareAuth>();
 
@@ -52,33 +51,15 @@ collectionRoutes.post("/select", middlewareAuth, async (c) => {
 
   try {
     const body = await c.req.json();
-    const { inventoryItemId, category } = body;
-
-    if (!inventoryItemId || !category) {
+    const validation = validator({ data: body, schema: SelectItemSchema });
+    if (!validation.isValid) {
       return onValidationsRestResponse({
         ctx: c,
-        validations: {
-          inventoryItemId: ["Required"],
-          category: ["Required"],
-        },
+        validations: validation.errors,
       });
     }
 
-    const validCategories = [
-      "dice",
-      "checker",
-      "cup",
-      "board",
-      "sticker",
-      "avatar",
-      "frame",
-    ];
-    if (!validCategories.includes(category)) {
-      return onValidationsRestResponse({
-        ctx: c,
-        validations: { category: ["Invalid category"] },
-      });
-    }
+    const { inventoryItemId, category } = validation.data;
 
     await selectItem(user.id, inventoryItemId, category);
     return onOkRestResponse({

@@ -8,7 +8,24 @@ export const GetCurrentSeasonSchema = Type.Object({
 
 export const GetLeaderboardSchema = Type.Object({
   seasonId: Type.Integer({ minimum: 1 }),
-  limit: Type.Optional(Type.Integer({ minimum: 1, default: 100 })),
+  limit: Type.Optional(
+    Type.Integer({ minimum: 1, maximum: 500, default: 100 }),
+  ),
+});
+
+export const GetMonthlyHistorySchema = Type.Object({
+  playerId: Type.Integer({ minimum: 1 }),
+  seasonId: Type.Optional(Type.Integer({ minimum: 1 })),
+});
+
+// ---------- WebSocket ----------
+export const TournamentMatchmakingJoinSchema = Type.Object({
+  seasonId: Type.Integer({ minimum: 1 }),
+  type: Type.Enum(TournamentType),
+});
+
+export const TournamentMatchmakingCancelSchema = Type.Object({
+  type: Type.Enum(TournamentType),
 });
 
 export const StartMonthlySeriesSchema = Type.Object({
@@ -28,26 +45,9 @@ export const CloseMonthlySeriesSchema = Type.Object({
   seriesId: Type.Integer({ minimum: 1 }),
 });
 
-export const GetMonthlyHistorySchema = Type.Object({
-  playerId: Type.Integer({ minimum: 1 }),
-  seasonId: Type.Optional(Type.Integer({ minimum: 1 })),
-});
-
-// ---------- WebSocket (برای استفاده در socket.ts) ----------
-export const TournamentMatchmakingJoinSchema = Type.Object({
-  seasonId: Type.Integer({ minimum: 1 }),
-  type: Type.Enum(TournamentType),
-});
-
-export const TournamentMatchmakingCancelSchema = Type.Object({
-  type: Type.Enum(TournamentType),
-});
-
+// Types
 export type GetCurrentSeasonInput = Static<typeof GetCurrentSeasonSchema>;
 export type GetLeaderboardInput = Static<typeof GetLeaderboardSchema>;
-export type StartMonthlySeriesInput = Static<typeof StartMonthlySeriesSchema>;
-export type RecordMonthlyGameInput = Static<typeof RecordMonthlyGameSchema>;
-export type CloseMonthlySeriesInput = Static<typeof CloseMonthlySeriesSchema>;
 export type GetMonthlyHistoryInput = Static<typeof GetMonthlyHistorySchema>;
 export type TournamentMatchmakingJoinInput = Static<
   typeof TournamentMatchmakingJoinSchema
@@ -55,3 +55,6 @@ export type TournamentMatchmakingJoinInput = Static<
 export type TournamentMatchmakingCancelInput = Static<
   typeof TournamentMatchmakingCancelSchema
 >;
+export type StartMonthlySeriesInput = Static<typeof StartMonthlySeriesSchema>;
+export type RecordMonthlyGameInput = Static<typeof RecordMonthlyGameSchema>;
+export type CloseMonthlySeriesInput = Static<typeof CloseMonthlySeriesSchema>;

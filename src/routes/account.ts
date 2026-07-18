@@ -9,7 +9,11 @@ import { IMiddlewareAuth } from "@/models/middleware";
 import { messageError } from "@/static/messageError";
 import { messagesValidation } from "@/static/messageValidation";
 import { validator } from "@/components/validator";
-import { RegisterSchema, LoginSchema } from "@/validations/userSchema";
+import {
+  RegisterSchema,
+  LoginSchema,
+  ChangePasswordSchema,
+} from "@/validations/userSchema";
 import {
   prismaUserGetByUsername,
   createUserWithProfile,
@@ -22,7 +26,7 @@ import { OrmState } from "@/models/enums";
 
 export const accountRoute = new Hono<IMiddlewareAuth>();
 
-// ثبت‌نام کاربر جدید
+// ===== ثبت‌نام کاربر جدید =====
 accountRoute.post("/register", async (ctx) => {
   try {
     const body = await ctx.req.json();
@@ -82,7 +86,7 @@ accountRoute.post("/register", async (ctx) => {
   }
 });
 
-// ورود با نام کاربری و رمز عبور
+// ===== ورود با نام کاربری و رمز عبور =====
 accountRoute.post("/login", async (ctx) => {
   try {
     const body = await ctx.req.json();
@@ -130,7 +134,7 @@ accountRoute.post("/login", async (ctx) => {
   }
 });
 
-// خروج از حساب
+// ===== خروج از حساب =====
 accountRoute.post("/logout", async (ctx) => {
   try {
     // اگر کوکی تنظیم شده بود، آن را حذف می‌کردیم:
@@ -148,7 +152,7 @@ accountRoute.post("/logout", async (ctx) => {
   }
 });
 
-// تغییر رمز عبور
+// ===== تغییر رمز عبور =====
 accountRoute.post("/password/change", async (ctx) => {
   try {
     const user = ctx.get("user");
@@ -156,15 +160,13 @@ accountRoute.post("/password/change", async (ctx) => {
       return onErrorRestResponse({ ctx, errorMessage: "Not authenticated" });
     }
 
-    const { oldPassword, newPassword } = await ctx.req.json();
-
-    // بررسی وجود رمز عبور جدید
-    if (!newPassword || newPassword.length < 4) {
-      return onErrorRestResponse({
-        ctx,
-        errorMessage: "رمز عبور جدید باید حداقل ۴ کاراکتر باشد",
-      });
+    const body = await ctx.req.json();
+    const validation = validator({ data: body, schema: ChangePasswordSchema });
+    if (!validation.isValid) {
+      return onValidationsRestResponse({ ctx, validations: validation.errors });
     }
+
+    const { oldPassword, newPassword } = validation.data;
 
     // اگر کاربر رمز عبور نداشته باشد (مهمان)، اجازه تغییر نمی‌دهیم
     if (!user.password) {

@@ -6,6 +6,8 @@ import {
 import { middlewareAuth } from "@/middlewares/middlewareAuth";
 import { adminGuard } from "@/middlewares/adminGuard";
 import { StarterPackAdminService } from "@/services/admin/starter-pack-admin.service";
+import { validator } from "@/components/validator";
+import { ApplyStarterPackSchema } from "@/validations/admin.schema";
 
 const starterPackAdminRoutes = new Hono();
 const service = new StarterPackAdminService();
@@ -26,8 +28,6 @@ starterPackAdminRoutes.get("/", middlewareAuth, adminGuard, async (c) => {
 // ===== دریافت یک پکیج با ID =====
 starterPackAdminRoutes.get("/:id", middlewareAuth, adminGuard, async (c) => {
   const id = c.req.param("id");
-
-  // ✅ بررسی وجود id
   if (!id) {
     return onErrorRestResponse({ ctx: c, errorMessage: "Pack ID is required" });
   }
@@ -48,21 +48,21 @@ starterPackAdminRoutes.get("/:id", middlewareAuth, adminGuard, async (c) => {
 
 // ===== اعمال پکیج به کاربر =====
 starterPackAdminRoutes.post("/apply", middlewareAuth, adminGuard, async (c) => {
-  const { userId, packId } = await c.req.json();
-
-  if (!userId || !packId) {
-    return onErrorRestResponse({
-      ctx: c,
-      errorMessage: "userId and packId are required",
-    });
+  const body = await c.req.json();
+  const validation = validator({ data: body, schema: ApplyStarterPackSchema });
+  if (!validation.isValid) {
+    return onErrorRestResponse({ ctx: c, errorMessage: "Invalid input" });
   }
 
   try {
-    const result = await service.applyPackToUser(userId, packId);
+    const result = await service.applyPackToUser(
+      validation.data.userId,
+      validation.data.packId,
+    );
     return onOkRestResponse({
       ctx: c,
       data: result,
-      message: `Starter pack applied to user ${userId} successfully`,
+      message: `Starter pack applied to user ${validation.data.userId} successfully`,
     });
   } catch (error: any) {
     return onErrorRestResponse({

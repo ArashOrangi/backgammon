@@ -6,4 +6,11 @@ export const LeaderboardQuerySchema = Type.Object({
   ),
 });
 
+export const TournamentLeaderboardSchema = Type.Object({
+  tournamentId: Type.Integer({ minimum: 1 }),
+});
+
 export type LeaderboardQueryInput = Static<typeof LeaderboardQuerySchema>;
+export type TournamentLeaderboardInput = Static<
+  typeof TournamentLeaderboardSchema
+>;

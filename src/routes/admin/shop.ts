@@ -7,6 +7,12 @@ import {
 import { middlewareAuth } from "@/middlewares/middlewareAuth";
 import { adminGuard } from "@/middlewares/adminGuard";
 import { ShopAdminService } from "@/services/admin/shop-admin.service";
+import { validator } from "@/components/validator";
+import {
+  ShopItemCreateSchema,
+  ShopItemUpdateSchema,
+  ShopItemToggleSchema,
+} from "@/validations/admin.schema";
 
 const shopAdminRoutes = new Hono();
 const service = new ShopAdminService();
@@ -28,6 +34,13 @@ shopAdminRoutes.get("/", middlewareAuth, adminGuard, async (c) => {
 // ===== دریافت آیتم فروشگاهی با ID =====
 shopAdminRoutes.get("/:id", middlewareAuth, adminGuard, async (c) => {
   const id = Number(c.req.param("id"));
+  if (isNaN(id) || id < 1) {
+    return onValidationsRestResponse({
+      ctx: c,
+      validations: { id: ["Must be a positive integer"] },
+    });
+  }
+
   try {
     const item = await service.getItem(id);
     if (!item) {
@@ -48,21 +61,27 @@ shopAdminRoutes.get("/:id", middlewareAuth, adminGuard, async (c) => {
 // ===== ایجاد آیتم فروشگاهی =====
 shopAdminRoutes.post("/", middlewareAuth, adminGuard, async (c) => {
   const body = await c.req.json();
-  const { name, type, inventoryItemId, coinPrice, diamondPrice, realPrice } =
-    body;
-
-  if (!name || !type) {
+  const validation = validator({ data: body, schema: ShopItemCreateSchema });
+  if (!validation.isValid) {
     return onValidationsRestResponse({
       ctx: c,
-      validations: {
-        name: ["Required"],
-        type: ["Required"],
-      },
+      validations: validation.errors,
     });
   }
 
+  // تبدیل تاریخ‌ها از string به Date
+  const data = {
+    ...validation.data,
+    discountStartDate: validation.data.discountStartDate
+      ? new Date(validation.data.discountStartDate)
+      : undefined,
+    discountEndDate: validation.data.discountEndDate
+      ? new Date(validation.data.discountEndDate)
+      : undefined,
+  };
+
   try {
-    const item = await service.createItem(body);
+    const item = await service.createItem(data);
     return onOkRestResponse({
       ctx: c,
       data: item,
@@ -79,10 +98,35 @@ shopAdminRoutes.post("/", middlewareAuth, adminGuard, async (c) => {
 // ===== بروزرسانی آیتم فروشگاهی =====
 shopAdminRoutes.put("/:id", middlewareAuth, adminGuard, async (c) => {
   const id = Number(c.req.param("id"));
+  if (isNaN(id) || id < 1) {
+    return onValidationsRestResponse({
+      ctx: c,
+      validations: { id: ["Must be a positive integer"] },
+    });
+  }
+
   const body = await c.req.json();
+  const validation = validator({ data: body, schema: ShopItemUpdateSchema });
+  if (!validation.isValid) {
+    return onValidationsRestResponse({
+      ctx: c,
+      validations: validation.errors,
+    });
+  }
+
+  // تبدیل تاریخ‌ها از string به Date
+  const data = {
+    ...validation.data,
+    discountStartDate: validation.data.discountStartDate
+      ? new Date(validation.data.discountStartDate)
+      : undefined,
+    discountEndDate: validation.data.discountEndDate
+      ? new Date(validation.data.discountEndDate)
+      : undefined,
+  };
 
   try {
-    const item = await service.updateItem(id, body);
+    const item = await service.updateItem(id, data);
     return onOkRestResponse({
       ctx: c,
       data: item,
@@ -99,6 +143,12 @@ shopAdminRoutes.put("/:id", middlewareAuth, adminGuard, async (c) => {
 // ===== حذف آیتم فروشگاهی =====
 shopAdminRoutes.delete("/:id", middlewareAuth, adminGuard, async (c) => {
   const id = Number(c.req.param("id"));
+  if (isNaN(id) || id < 1) {
+    return onValidationsRestResponse({
+      ctx: c,
+      validations: { id: ["Must be a positive integer"] },
+    });
+  }
 
   try {
     await service.deleteItem(id);
@@ -118,14 +168,28 @@ shopAdminRoutes.delete("/:id", middlewareAuth, adminGuard, async (c) => {
 // ===== تغییر وضعیت فعال/غیرفعال =====
 shopAdminRoutes.patch("/:id/toggle", middlewareAuth, adminGuard, async (c) => {
   const id = Number(c.req.param("id"));
-  const { isActive } = await c.req.json();
+  if (isNaN(id) || id < 1) {
+    return onValidationsRestResponse({
+      ctx: c,
+      validations: { id: ["Must be a positive integer"] },
+    });
+  }
+
+  const body = await c.req.json();
+  const validation = validator({ data: body, schema: ShopItemToggleSchema });
+  if (!validation.isValid) {
+    return onValidationsRestResponse({
+      ctx: c,
+      validations: validation.errors,
+    });
+  }
 
   try {
-    const item = await service.toggleActive(id, isActive);
+    const item = await service.toggleActive(id, validation.data.isActive);
     return onOkRestResponse({
       ctx: c,
       data: item,
-      message: `Shop item ${isActive ? "activated" : "deactivated"} successfully`,
+      message: `Shop item ${validation.data.isActive ? "activated" : "deactivated"} successfully`,
     });
   } catch (error) {
     return onErrorRestResponse({

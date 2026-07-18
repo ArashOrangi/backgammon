@@ -7,7 +7,6 @@ export const SimpleUserSchema = Type.Object({
 export const RegisterSchema = Type.Object({
   userName: Type.String({ minLength: 3, maxLength: 50 }),
   password: Type.String({ minLength: 8, maxLength: 100 }),
-  // fullName: Type.Optional(Type.String({ maxLength: 200 })),
   phoneNumber: Type.Optional(Type.String({ pattern: "^[0-9]{11}$" })),
   gender: Type.Optional(
     Type.Union([
@@ -24,9 +23,8 @@ export const LoginSchema = Type.Object({
 });
 
 export const UpdateProfileSchema = Type.Object({
-  // fullName: Type.Optional(Type.String({ maxLength: 200 })),
-  provinceId: Type.Optional(Type.Number({ minimum: 1 })),
-  cityId: Type.Optional(Type.Number({ minimum: 1 })),
+  provinceId: Type.Optional(Type.Integer({ minimum: 1 })),
+  cityId: Type.Optional(Type.Integer({ minimum: 1 })),
   image: Type.Optional(Type.String({ maxLength: 500 })),
   phoneNumber: Type.Optional(Type.String({ pattern: "^[0-9]{11}$" })),
 });
@@ -36,7 +34,13 @@ export const ChangePasswordSchema = Type.Object({
   newPassword: Type.String({ minLength: 6, maxLength: 16 }),
 });
 
+export const UserIdSchema = Type.Object({
+  userId: Type.Integer({ minimum: 1 }),
+});
+
 export type SimpleUserInput = Static<typeof SimpleUserSchema>;
 export type RegisterInput = Static<typeof RegisterSchema>;
 export type LoginInput = Static<typeof LoginSchema>;
 export type UpdateProfileInput = Static<typeof UpdateProfileSchema>;
+export type ChangePasswordInput = Static<typeof ChangePasswordSchema>;
+export type UserIdInput = Static<typeof UserIdSchema>;

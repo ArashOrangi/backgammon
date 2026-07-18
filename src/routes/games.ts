@@ -5,13 +5,16 @@ import { addToMatchmaking } from "@/models/matchmaking";
 import {
   onOkRestResponse,
   onErrorRestResponse,
+  onValidationsRestResponse,
 } from "@/responses/response-builder";
 import { OrmState } from "@/models/enums";
 import { middlewareAuth } from "@/middlewares/middlewareAuth";
+import { validator } from "@/components/validator";
+import { CreateGameSchema, JoinGameSchema } from "@/validations/game.schema";
 
 export const gameRoutes = new Hono<IMiddlewareAuth>();
 
-// ایجاد بازی (با middlewareAuth)
+// ===== ایجاد بازی (با middlewareAuth) =====
 gameRoutes.post("/", middlewareAuth, async (c) => {
   const user = c.get("user");
   if (!user) {
@@ -21,13 +24,16 @@ gameRoutes.post("/", middlewareAuth, async (c) => {
     });
   }
 
-  const { whitePlayerId } = await c.req.json();
-  if (!whitePlayerId) {
-    return onErrorRestResponse({
+  const body = await c.req.json();
+  const validation = validator({ data: body, schema: CreateGameSchema });
+  if (!validation.isValid) {
+    return onValidationsRestResponse({
       ctx: c,
-      errorMessage: "whitePlayerId required",
+      validations: validation.errors,
     });
   }
+
+  const { whitePlayerId } = validation.data;
 
   const result = await prismaGameCreate(whitePlayerId);
   if (!result || result === OrmState.Error) {
@@ -41,7 +47,7 @@ gameRoutes.post("/", middlewareAuth, async (c) => {
   return onOkRestResponse({ ctx: c, data: result, extra: { isWhite } });
 });
 
-// پیوستن به صف مچ‌میکینگ
+// ===== پیوستن به صف مچ‌میکینگ =====
 gameRoutes.post("/join", middlewareAuth, async (c) => {
   const user = c.get("user");
   if (!user) {
@@ -51,13 +57,19 @@ gameRoutes.post("/join", middlewareAuth, async (c) => {
     });
   }
 
-  const { userId } = await c.req.json();
-  if (!userId) {
-    return onErrorRestResponse({ ctx: c, errorMessage: "userId required" });
+  const body = await c.req.json();
+  const validation = validator({ data: body, schema: JoinGameSchema });
+  if (!validation.isValid) {
+    return onValidationsRestResponse({
+      ctx: c,
+      validations: validation.errors,
+    });
   }
 
+  const { userId, roomType } = validation.data;
+
   try {
-    const gameId = await addToMatchmaking(userId);
+    const gameId = await addToMatchmaking(userId, roomType);
     if (gameId === 0) {
       return onOkRestResponse({
         ctx: c,

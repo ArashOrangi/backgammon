@@ -7,9 +7,24 @@ import {
 import { middlewareAuth } from "@/middlewares/middlewareAuth";
 import { adminGuard } from "@/middlewares/adminGuard";
 import { UserInventoryAdminService } from "@/services/admin/user-inventory-admin.service";
+import { validator } from "@/components/validator";
+import {
+  UserInventoryAddSchema,
+  UserInventoryRemoveSchema,
+  AddCoinSchema,
+  AddDiamondSchema,
+} from "@/validations/admin.schema";
 
 const userInventoryAdminRoutes = new Hono();
 const service = new UserInventoryAdminService();
+
+// Helper to validate userId parameter (accepts undefined)
+function validateUserId(userIdParam: string | undefined): number | null {
+  if (!userIdParam) return null;
+  const userId = Number(userIdParam);
+  if (isNaN(userId) || userId < 1) return null;
+  return userId;
+}
 
 // ===== دریافت موجودی کاربر =====
 userInventoryAdminRoutes.get(
@@ -17,7 +32,13 @@ userInventoryAdminRoutes.get(
   middlewareAuth,
   adminGuard,
   async (c) => {
-    const userId = Number(c.req.param("userId"));
+    const userId = validateUserId(c.req.param("userId"));
+    if (!userId) {
+      return onValidationsRestResponse({
+        ctx: c,
+        validations: { userId: ["Must be a positive integer"] },
+      });
+    }
 
     try {
       const inventory = await service.getUserInventory(userId);
@@ -37,21 +58,31 @@ userInventoryAdminRoutes.post(
   middlewareAuth,
   adminGuard,
   async (c) => {
-    const userId = Number(c.req.param("userId"));
-    const { inventoryItemId, amount } = await c.req.json();
-
-    if (!inventoryItemId) {
+    const userId = validateUserId(c.req.param("userId"));
+    if (!userId) {
       return onValidationsRestResponse({
         ctx: c,
-        validations: { inventoryItemId: ["Required"] },
+        validations: { userId: ["Must be a positive integer"] },
+      });
+    }
+
+    const body = await c.req.json();
+    const validation = validator({
+      data: body,
+      schema: UserInventoryAddSchema,
+    });
+    if (!validation.isValid) {
+      return onValidationsRestResponse({
+        ctx: c,
+        validations: validation.errors,
       });
     }
 
     try {
       const result = await service.addItemToUser(
         userId,
-        inventoryItemId,
-        amount || 1,
+        validation.data.inventoryItemId,
+        validation.data.amount || 1,
       );
       return onOkRestResponse({
         ctx: c,
@@ -73,21 +104,31 @@ userInventoryAdminRoutes.post(
   middlewareAuth,
   adminGuard,
   async (c) => {
-    const userId = Number(c.req.param("userId"));
-    const { inventoryItemId, amount } = await c.req.json();
-
-    if (!inventoryItemId) {
+    const userId = validateUserId(c.req.param("userId"));
+    if (!userId) {
       return onValidationsRestResponse({
         ctx: c,
-        validations: { inventoryItemId: ["Required"] },
+        validations: { userId: ["Must be a positive integer"] },
+      });
+    }
+
+    const body = await c.req.json();
+    const validation = validator({
+      data: body,
+      schema: UserInventoryRemoveSchema,
+    });
+    if (!validation.isValid) {
+      return onValidationsRestResponse({
+        ctx: c,
+        validations: validation.errors,
       });
     }
 
     try {
       const result = await service.removeItemFromUser(
         userId,
-        inventoryItemId,
-        amount || 1,
+        validation.data.inventoryItemId,
+        validation.data.amount || 1,
       );
       return onOkRestResponse({
         ctx: c,
@@ -109,22 +150,29 @@ userInventoryAdminRoutes.post(
   middlewareAuth,
   adminGuard,
   async (c) => {
-    const userId = Number(c.req.param("userId"));
-    const { amount } = await c.req.json();
-
-    if (!amount || amount <= 0) {
+    const userId = validateUserId(c.req.param("userId"));
+    if (!userId) {
       return onValidationsRestResponse({
         ctx: c,
-        validations: { amount: ["Must be a positive number"] },
+        validations: { userId: ["Must be a positive integer"] },
+      });
+    }
+
+    const body = await c.req.json();
+    const validation = validator({ data: body, schema: AddCoinSchema });
+    if (!validation.isValid) {
+      return onValidationsRestResponse({
+        ctx: c,
+        validations: validation.errors,
       });
     }
 
     try {
-      const result = await service.addCoin(userId, amount);
+      const result = await service.addCoin(userId, validation.data.amount);
       return onOkRestResponse({
         ctx: c,
         data: result,
-        message: `Added ${amount} coin to user ${userId}`,
+        message: `Added ${validation.data.amount} coin to user ${userId}`,
       });
     } catch (error) {
       return onErrorRestResponse({
@@ -141,22 +189,29 @@ userInventoryAdminRoutes.post(
   middlewareAuth,
   adminGuard,
   async (c) => {
-    const userId = Number(c.req.param("userId"));
-    const { amount } = await c.req.json();
-
-    if (!amount || amount <= 0) {
+    const userId = validateUserId(c.req.param("userId"));
+    if (!userId) {
       return onValidationsRestResponse({
         ctx: c,
-        validations: { amount: ["Must be a positive number"] },
+        validations: { userId: ["Must be a positive integer"] },
+      });
+    }
+
+    const body = await c.req.json();
+    const validation = validator({ data: body, schema: AddDiamondSchema });
+    if (!validation.isValid) {
+      return onValidationsRestResponse({
+        ctx: c,
+        validations: validation.errors,
       });
     }
 
     try {
-      const result = await service.addDiamond(userId, amount);
+      const result = await service.addDiamond(userId, validation.data.amount);
       return onOkRestResponse({
         ctx: c,
         data: result,
-        message: `Added ${amount} diamond to user ${userId}`,
+        message: `Added ${validation.data.amount} diamond to user ${userId}`,
       });
     } catch (error) {
       return onErrorRestResponse({
