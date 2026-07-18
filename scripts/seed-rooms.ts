@@ -15,7 +15,6 @@ async function main() {
       id: 1,
       roomType: RoomType.ROOM1,
       minXp: 1,
-      matchmakingQueue: 10,
       coinBuyIn: 100,
       coinReward: 180,
       timer: 1,
@@ -32,7 +31,6 @@ async function main() {
       id: 2,
       roomType: RoomType.ROOM2,
       minXp: 3,
-      matchmakingQueue: 12,
       coinBuyIn: 500,
       coinReward: 900,
       timer: 1,
@@ -49,7 +47,6 @@ async function main() {
       id: 3,
       roomType: RoomType.ROOM3,
       minXp: 6,
-      matchmakingQueue: 14,
       coinBuyIn: 2000,
       coinReward: 3600,
       timer: 1,
@@ -66,7 +63,6 @@ async function main() {
       id: 4,
       roomType: RoomType.ROOM4,
       minXp: 11,
-      matchmakingQueue: 16,
       coinBuyIn: 8000,
       coinReward: 14400,
       timer: 1,
@@ -83,7 +79,6 @@ async function main() {
       id: 5,
       roomType: RoomType.ROOM5,
       minXp: 17,
-      matchmakingQueue: 18,
       coinBuyIn: 30000,
       coinReward: 54000,
       timer: 1,
@@ -100,7 +95,6 @@ async function main() {
       id: 6,
       roomType: RoomType.ROOM6,
       minXp: 23,
-      matchmakingQueue: 20,
       coinBuyIn: 100000,
       coinReward: 180000,
       timer: 1,
@@ -117,7 +111,6 @@ async function main() {
       id: 7,
       roomType: RoomType.ROOM7,
       minXp: 29,
-      matchmakingQueue: 22,
       coinBuyIn: 350000,
       coinReward: 630000,
       timer: 1,
@@ -134,7 +127,6 @@ async function main() {
       id: 8,
       roomType: RoomType.ROOM8,
       minXp: 35,
-      matchmakingQueue: 24,
       coinBuyIn: 1200000,
       coinReward: 2160000,
       timer: 1,
@@ -151,7 +143,6 @@ async function main() {
       id: 9,
       roomType: RoomType.ROOM9,
       minXp: 41,
-      matchmakingQueue: 26,
       coinBuyIn: 4000000,
       coinReward: 7200000,
       timer: 1,
@@ -167,13 +158,13 @@ async function main() {
   ];
 
   for (const room of rooms) {
-    // حذف id از داده‌های ایجاد (برای upsert)
+    // جدا کردن id برای استفاده در create (چون autoincrement است)
     const { id, ...createData } = room;
 
     await prisma.roomPreset.upsert({
-      where: { id: room.id },
-      update: room, // برای بروزرسانی، id مجاز است (اما در update هم می‌توانیم از createData استفاده کنیم)
-      create: createData, // بدون id
+      where: { id },
+      update: room, // برای بروزرسانی، کل شیء (با id) ارسال می‌شود
+      create: createData, // برای ایجاد، id حذف شده است
     });
 
     console.log(`✅ RoomPreset ${room.id} (${room.roomType}) upserted.`);
