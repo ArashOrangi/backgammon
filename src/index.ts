@@ -33,9 +33,20 @@ const app = new Hono();
 app.use(
   "*",
   cors({
-    // برای توسعه، هر اریجینی را می‌پذیرد (با credentials)
-    origin: (origin) => origin || null,
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    origin: (origin) => {
+      // لیست دامنه‌های مجاز (برای توسعه)
+      const allowedOrigins = [
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "http://37.255.218.236:5208",
+        undefined, // درخواست‌های بدون Origin (مثل curl)
+      ];
+      if (allowedOrigins.includes(origin)) {
+        return origin;
+      }
+      return null; // یا false
+    },
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization", "Cookie"],
     credentials: true,
   }),
