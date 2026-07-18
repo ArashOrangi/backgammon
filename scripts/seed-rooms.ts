@@ -1,5 +1,4 @@
-// ============================================================
-// فایل: prisma/seed-rooms.ts
+// scripts/seed-rooms.ts
 // ============================================================
 // این فایل برای مقداردهی اولیه RoomPreset ها استفاده می‌شود
 // اتاق‌ها: ROOM1 تا ROOM9 (طبق مستندات)
@@ -15,19 +14,19 @@ async function main() {
     {
       id: 1,
       roomType: RoomType.ROOM1,
-      minXp: 1, // سطح مورد نیاز برای باز شدن
+      minXp: 1,
       matchmakingQueue: 10,
       coinBuyIn: 100,
       coinReward: 180,
       timer: 1,
-      doublingCube: false, // غیرفعال
+      doublingCube: false,
       undo: 1,
       rewardXp: 0,
       leaderboardPoint: 0,
       baseWinXP: 14,
       baseLoseXP: 10,
       spread: 4,
-      bonusCap: 4, // Cap برای Bonus XP
+      bonusCap: 4,
     },
     {
       id: 2,
@@ -168,24 +167,16 @@ async function main() {
   ];
 
   for (const room of rooms) {
-    const existing = await prisma.roomPreset.findUnique({
+    // حذف id از داده‌های ایجاد (برای upsert)
+    const { id, ...createData } = room;
+
+    await prisma.roomPreset.upsert({
       where: { id: room.id },
+      update: room, // برای بروزرسانی، id مجاز است (اما در update هم می‌توانیم از createData استفاده کنیم)
+      create: createData, // بدون id
     });
 
-    if (existing) {
-      // به‌روزرسانی
-      await prisma.roomPreset.update({
-        where: { id: room.id },
-        data: room,
-      });
-      console.log(`✅ RoomPreset ${room.id} (${room.roomType}) updated.`);
-    } else {
-      // ایجاد جدید
-      await prisma.roomPreset.create({
-        data: room,
-      });
-      console.log(`✅ RoomPreset ${room.id} (${room.roomType}) created.`);
-    }
+    console.log(`✅ RoomPreset ${room.id} (${room.roomType}) upserted.`);
   }
 
   console.log("🌱 Seeding RoomPreset completed.");
