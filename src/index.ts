@@ -21,6 +21,10 @@ import { shopRoutes } from "./routes/shop";
 import { collectionRoutes } from "./routes/collection";
 import { leaderboardRoutes } from "./routes/leaderboard";
 import { cors } from "hono/cors";
+import { inventoryAdminRoutes } from "./routes/admin/inventory";
+import { userInventoryAdminRoutes } from "./routes/admin/user-inventory";
+import { shopAdminRoutes } from "./routes/admin/shop";
+import { starterPackAdminRoutes } from "./routes/admin/starter-packs";
 
 dotenv.config();
 
@@ -52,6 +56,11 @@ app.route("/api/location", locationRoutes);
 app.route("/api/shop", shopRoutes);
 app.route("/api/collection", collectionRoutes);
 app.route("/api/leaderboard", leaderboardRoutes);
+
+app.route("/api/inventory", userInventoryAdminRoutes);
+app.route("/api/shop", shopAdminRoutes);
+app.route("/api/starter-packs", starterPackAdminRoutes);
+app.route("/api/user-inventory", userInventoryAdminRoutes);
 
 const PORT = Number(process.env.PORT) || 8080;
 
