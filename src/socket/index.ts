@@ -1,3 +1,4 @@
+// src/socket/index.ts
 import { WebSocketServer } from "ws";
 import { SocketContext } from "./socket-context";
 import { MessageRouter } from "./message-router";
@@ -14,13 +15,20 @@ import {
   onOkSocketResponse,
 } from "@/responses/response-builder";
 import { handleReady } from "./handlers/ready";
-import { logWSMessage } from "@/utils/wsLogger"; // <-- اضافه شده
+import { logWSMessage } from "@/utils/wsLogger";
 import { handleCubeOffer, handleCubeRespond } from "./handlers/doublingCube";
 import {
   handlePracticeBearOff,
   handlePracticeRearrange,
   handlePracticeSetupBoard,
 } from "./handlers/practice";
+import {
+  handleTournamentMonthlyStart,
+  handleTournamentMonthlyRecord,
+  handleTournamentMonthlyClose,
+  handleTournamentMatchmakingJoin,
+  handleTournamentMatchmakingCancel,
+} from "./handlers/tournament";
 
 export function registerSocketHandlers(
   wss: WebSocketServer,
@@ -28,6 +36,7 @@ export function registerSocketHandlers(
 ) {
   const router = new MessageRouter(rooms);
 
+  // ===== رویدادهای اصلی بازی =====
   router.register("game.join", handleJoin);
   router.register("player.ready", handleReady);
   router.register("game.roll", handleRoll);
@@ -39,11 +48,26 @@ export function registerSocketHandlers(
   router.register("game.practice.bearoff", handlePracticeBearOff);
   router.register("game.practice.rearrange", handlePracticeRearrange);
   router.register("game.practice.setup_board", handlePracticeSetupBoard);
+
+  // ===== رویدادهای تورنمنت (با نام‌گذاری یکسان) =====
+  // کلاینت → سرور (درخواست)
+  router.register("tournament.monthly.start", handleTournamentMonthlyStart);
+  router.register("tournament.monthly.record", handleTournamentMonthlyRecord);
+  router.register("tournament.monthly.close", handleTournamentMonthlyClose);
+  router.register(
+    "tournament.matchmaking.join",
+    handleTournamentMatchmakingJoin,
+  );
+  router.register(
+    "tournament.matchmaking.cancel",
+    handleTournamentMatchmakingCancel,
+  );
+
+  // ===== WebSocket connection =====
   wss.on("connection", (ws) => {
     const ctx = new SocketContext(ws);
     console.log(`[Socket] Player connected: ${ctx.id}`);
 
-    // ذخیره متد اصلی send با bind برای حفظ context
     const originalSend = ws.send.bind(ws);
     ws.send = function (data: any) {
       const raw = typeof data === "string" ? data : JSON.stringify(data);
@@ -55,7 +79,6 @@ export function registerSocketHandlers(
         type = parsed.type;
       } catch (e) {}
       logWSMessage("out", raw, gameId, type);
-      // فراخوانی متد اصلی با یک آرگومان (مابقی اختیاری)
       return originalSend(data);
     };
 

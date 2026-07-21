@@ -1,3 +1,4 @@
+// src/socket/message-router.ts
 import { ClientMessage } from "./protocol";
 import { SocketContext } from "./socket-context";
 import { RoomManager } from "./room-manager";
@@ -12,8 +13,7 @@ import {
 } from "@/validations/socket";
 import { validateMove } from "@/game/ruleValidator";
 import { Value } from "@sinclair/typebox/value";
-import { MoveArraySchema, MovePieceSchema } from "@/validations/game.move";
-
+import { MoveArraySchema } from "@/validations/game.move";
 import {
   onValidationSocketResponse,
   onErrorSocketResponse,
@@ -67,15 +67,19 @@ export class MessageRouter {
         });
       }
 
-      const gameId = message.payload.gameId;
+      // استخراج gameId (در صورت وجود)
+      const payload = message.payload as any;
+      const gameId = payload.gameId;
 
-      if (!gameId) {
-        return handler(ctx, message.payload as any, this.rooms);
+      // اگر gameId وجود دارد، در صف قرار بده؛ در غیر این صورت مستقیم اجرا کن
+      if (gameId) {
+        this.queue.enqueue(gameId, async () => {
+          await handler(ctx, payload, this.rooms);
+        });
+      } else {
+        // برای رویدادهای تورنمنت که gameId ندارند
+        handler(ctx, payload, this.rooms);
       }
-
-      this.queue.enqueue(gameId, async () => {
-        await handler(ctx, message.payload as any, this.rooms);
-      });
     } catch (error) {
       console.error("MessageRouter Error:", error);
 
@@ -104,8 +108,9 @@ export class MessageRouter {
         return validateCubeOffer(message.payload);
       case "game.cube.respond":
         return validateCubeRespond(message.payload);
+      // رویدادهای تورنمنت اعتبارسنجی‌شان در خود هندلر انجام می‌شود
       default:
-        return false;
+        return true; // برای رویدادهای تورنمنت، اعتبارسنجی در هندلر انجام می‌شود
     }
   }
 }

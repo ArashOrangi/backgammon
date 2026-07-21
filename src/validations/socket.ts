@@ -1,3 +1,4 @@
+// src/validations/socket.ts
 import Ajv from "ajv";
 import {
   RollPayload,
@@ -22,7 +23,7 @@ export const validateEndTurn = ajv.compile(EndTurnPayload);
 export const validateCubeOffer = ajv.compile(CubeOfferPayload);
 export const validateCubeRespond = ajv.compile(CubeRespondPayload);
 
-// ===== اعتبارسنجی رویدادهای تورنمنت =====
+// ===== اعتبارسنجی رویدادهای تورنمنت (با نام‌گذاری جدید) =====
 
 // 1. شروع سری ماهانه
 const tournamentMonthlyStartSchema = {
@@ -46,16 +47,7 @@ const tournamentMonthlyRecordSchema = {
     matchIndex: { type: "integer", minimum: 0, maximum: 2 },
     result: {
       type: "string",
-      enum: [
-        "normal",
-        "gammon",
-        "backgammon",
-        "timer",
-        "doublingcube",
-        "leave",
-        "forfeit",
-        "loss",
-      ],
+      enum: ["normal", "gammon", "backgammon", "loss", "forfeit"],
     },
     pipAdvantage: { type: "number", minimum: 0 },
     cleanPlay: { type: "boolean" },
@@ -80,7 +72,7 @@ export const validateTournamentMonthlyClose = ajv.compile(
   tournamentMonthlyCloseSchema,
 );
 
-// 4. ورود به صف مچ‌میکینگ تورنمنت
+// 4. ورود به صف مچ‌میکینگ
 const tournamentMatchmakingJoinSchema = {
   type: "object",
   properties: {
@@ -94,7 +86,7 @@ export const validateTournamentMatchmakingJoin = ajv.compile(
   tournamentMatchmakingJoinSchema,
 );
 
-// 5. لغو صف مچ‌میکینگ تورنمنت
+// 5. لغو صف مچ‌میکینگ
 const tournamentMatchmakingCancelSchema = {
   type: "object",
   properties: {

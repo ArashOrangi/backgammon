@@ -1,7 +1,8 @@
+// src/validations/tournament.schema.ts
 import { Type, Static } from "@sinclair/typebox";
 import { TournamentType, MatchResultType } from "@prisma/client";
 
-// ---------- REST ----------
+// ===== REST API Schemas =====
 export const GetCurrentSeasonSchema = Type.Object({
   type: Type.Enum(TournamentType),
 });
@@ -18,16 +19,7 @@ export const GetMonthlyHistorySchema = Type.Object({
   seasonId: Type.Optional(Type.Integer({ minimum: 1 })),
 });
 
-// ---------- WebSocket ----------
-export const TournamentMatchmakingJoinSchema = Type.Object({
-  seasonId: Type.Integer({ minimum: 1 }),
-  type: Type.Enum(TournamentType),
-});
-
-export const TournamentMatchmakingCancelSchema = Type.Object({
-  type: Type.Enum(TournamentType),
-});
-
+// ===== WebSocket Schemas (با نام‌گذاری یکسان) =====
 export const StartMonthlySeriesSchema = Type.Object({
   seasonId: Type.Integer({ minimum: 1 }),
 });
@@ -45,16 +37,25 @@ export const CloseMonthlySeriesSchema = Type.Object({
   seriesId: Type.Integer({ minimum: 1 }),
 });
 
-// Types
+export const TournamentMatchmakingJoinSchema = Type.Object({
+  seasonId: Type.Integer({ minimum: 1 }),
+  type: Type.Enum(TournamentType),
+});
+
+export const TournamentMatchmakingCancelSchema = Type.Object({
+  type: Type.Enum(TournamentType),
+});
+
+// ===== Types =====
 export type GetCurrentSeasonInput = Static<typeof GetCurrentSeasonSchema>;
 export type GetLeaderboardInput = Static<typeof GetLeaderboardSchema>;
 export type GetMonthlyHistoryInput = Static<typeof GetMonthlyHistorySchema>;
+export type StartMonthlySeriesInput = Static<typeof StartMonthlySeriesSchema>;
+export type RecordMonthlyGameInput = Static<typeof RecordMonthlyGameSchema>;
+export type CloseMonthlySeriesInput = Static<typeof CloseMonthlySeriesSchema>;
 export type TournamentMatchmakingJoinInput = Static<
   typeof TournamentMatchmakingJoinSchema
 >;
 export type TournamentMatchmakingCancelInput = Static<
   typeof TournamentMatchmakingCancelSchema
 >;
-export type StartMonthlySeriesInput = Static<typeof StartMonthlySeriesSchema>;
-export type RecordMonthlyGameInput = Static<typeof RecordMonthlyGameSchema>;
-export type CloseMonthlySeriesInput = Static<typeof CloseMonthlySeriesSchema>;

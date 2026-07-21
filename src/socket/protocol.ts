@@ -1,9 +1,11 @@
+// src/socket/protocol.ts
 import { GameState } from "@/game/types";
 import { IDataResponse } from "@/responses/ResponseStates";
 import { TournamentGame } from "@prisma/client";
 
 // ---------- Client Messages ----------
 export type ClientMessage =
+  // ===== بازی اصلی =====
   | { type: "game.join"; payload: { gameId: number; userId: number } }
   | { type: "game.roll"; payload: { gameId: number } }
   | {
@@ -12,18 +14,15 @@ export type ClientMessage =
         gameId: number;
         from: number;
         to: number;
-        die?: number; // عدد تاس مصرفی (در صورت نیاز)
-        isUndo?: boolean; // true اگر درخواست برگشت حرکت است
+        die?: number;
+        isUndo?: boolean;
       };
     }
   | { type: "player.leave"; payload: { gameId: number } }
   | { type: "player.ready"; payload: { gameId: number } }
   | { type: "game.endTurn"; payload: { gameId: number } }
   | { type: "game.cube.offer"; payload: { gameId: number } }
-  | {
-      type: "game.cube.respond";
-      payload: { gameId: number; accept: boolean };
-    }
+  | { type: "game.cube.respond"; payload: { gameId: number; accept: boolean } }
   | { type: "game.practice.bearoff"; payload: { gameId: number } }
   | {
       type: "game.practice.rearrange";
@@ -42,15 +41,44 @@ export type ClientMessage =
           borneOff: Record<number, number>;
         };
       };
+    }
+  // ===== تورنمنت (کلاینت → سرور) =====
+  | {
+      type: "tournament.monthly.start";
+      payload: { seasonId: number };
+    }
+  | {
+      type: "tournament.monthly.record";
+      payload: {
+        seriesId: number;
+        gameId: number;
+        matchIndex: number;
+        result: "normal" | "gammon" | "backgammon" | "loss" | "forfeit";
+        pipAdvantage?: number;
+        cleanPlay?: boolean;
+      };
+    }
+  | {
+      type: "tournament.monthly.close";
+      payload: { seriesId: number };
+    }
+  | {
+      type: "tournament.matchmaking.join";
+      payload: { seasonId: number; type: "WEEKLY" | "MONTHLY" };
+    }
+  | {
+      type: "tournament.matchmaking.cancel";
+      payload: { type: "WEEKLY" | "MONTHLY" };
     };
 
 // ---------- Server Messages ----------
 export type ServerMessage =
-  // General responses
+  // ===== پاسخ‌های عمومی =====
   | { type: "game.state"; payload: IDataResponse<GameState> }
   | { type: "game.error"; payload: IDataResponse<any> }
   | { type: "game.legalMoves"; payload: IDataResponse<any> }
-  // Game flow events (حالا همگی IDataResponse دارند)
+
+  // ===== رویدادهای جریان بازی =====
   | {
       type: "dice.result";
       payload: IDataResponse<{
@@ -63,7 +91,7 @@ export type ServerMessage =
       type: "game.turn";
       payload: IDataResponse<{ playerId: number; color?: "white" | "black" }>;
     }
-  | { type: "player.move"; payload: IDataResponse<MovePayload> } // MovePayload می‌تواند تکی یا آرایه‌ای باشد
+  | { type: "player.move"; payload: IDataResponse<MovePayload> }
   | {
       type: "game.cube.offer";
       payload: IDataResponse<{
@@ -104,36 +132,47 @@ export type ServerMessage =
         score?: number;
       }>;
     }
+
+  // ===== تورنمنت – پاسخ‌های با نام یکسان + _res =====
   | {
-      type: "tournament.monthly.series_started";
+      type: "tournament.monthly.start_res";
       payload: IDataResponse<{ seriesId: number; expiresAt: Date }>;
     }
   | {
-      type: "tournament.monthly.game_recorded";
+      type: "tournament.monthly.record_res";
       payload: IDataResponse<TournamentGame>;
     }
   | {
-      type: "tournament.monthly.series_closed";
-      payload: IDataResponse<{ success: boolean }>;
-    }
-  | {
-      type: "tournament.weekly.game_recorded";
+      type: "tournament.monthly.close_res";
       payload: IDataResponse<{
-        matchScore: number;
-        weeklyScore: number;
-        forfeitLocked: boolean;
+        success: boolean;
+        seriesId: number;
+        status: string;
       }>;
     }
   | {
-      type: "tournament.matchmaking.joined";
+      type: "tournament.matchmaking.join_res";
       payload: IDataResponse<{ status: string }>;
     }
   | {
-      type: "tournament.matchmaking.cancelled";
+      type: "tournament.matchmaking.cancel_res";
       payload: IDataResponse<{ status: string }>;
+    }
+
+  // ===== رویدادهای یک‌طرفه سرور (بدون _res) =====
+  | {
+      type: "tournament.match_found";
+      payload: IDataResponse<{
+        gameId: number;
+        opponent: { id: number; userName: string; avatar: string };
+      }>;
+    }
+  | {
+      type: "tournament.series_closed";
+      payload: IDataResponse<{ seriesId: number; status: string }>;
     };
 
-// تعریف نوع MovePayload در همان فایل یا فایل جداگانه
+// ---------- MovePayload (مشترک) ----------
 export type MovePayload =
   | {
       playerId: number;
@@ -151,4 +190,3 @@ export type MovePayload =
       ownerId: number;
       isUndo?: boolean;
     }>;
-// حذف شد: player.assign, room.ready, game.undo (چون undo از طریق game.move.isUndo=true انجام می‌شود)
