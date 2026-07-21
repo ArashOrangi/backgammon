@@ -1725,7 +1725,7 @@ paths:
         - `game.practice.rearrange` – `{ gameId: number, points: Array<{index, count}> }`
         - `game.practice.setup_board` – `{ gameId: number, board: { points, bar, borneOff } }`
         - `tournament.monthly.start` – `{ seasonId: number }`
-        - `tournament.monthly.record` – `{ seriesId: number, gameId: number, matchIndex: number, result: "normal"|"gammon"|"backgammon"|"loss"|"forfeit", pipAdvantage?: number, cleanPlay?: boolean }`
+        - `tournament.monthly.record` – `{ seriesId: number, gameId: number, matchIndex: 0|1|2, result: "normal"|"gammon"|"backgammon"|"loss"|"forfeit", pipAdvantage?: number, cleanPlay?: boolean }`
         - `tournament.monthly.close` – `{ seriesId: number }`
         - `tournament.matchmaking.join` – `{ seasonId: number, type: "WEEKLY"|"MONTHLY" }`
         - `tournament.matchmaking.cancel` – `{ type: "WEEKLY"|"MONTHLY" }`
@@ -1741,12 +1741,13 @@ paths:
         - `game.result` – `{ winner, winType, reason, score }`
         - `timer.started` – `{ playerId, primaryTime, secondaryTime, turnStartedAt }`
         - `timer.warning` – `{ remaining, playerId }`
-        - `tournament.series_started` – `{ seriesId: number, expiresAt: string }`
-        - `tournament.game_recorded` – tournament game data
-        - `tournament.series_closed` – `{ success: true }`
-        - `tournament.matchmaking_started` – `{ status: "searching" }`
-        - `tournament.matchmaking_cancelled` – `{ status: "cancelled" }`
-        - `tournament.match_found` – `{ gameId: number, opponent: { id, userName, avatar } }`
+        - `tournament.monthly.start_res` – `{ seriesId: number, expiresAt: string }`
+        - `tournament.monthly.record_res` – tournament game data (full `TournamentGame` object)
+        - `tournament.monthly.close_res` – `{ success: boolean, seriesId: number, status: "CLOSED_BY_PLAYER" | "COMPLETED" }`
+        - `tournament.matchmaking.join_res` – `{ status: "searching" }`
+        - `tournament.matchmaking.cancel_res` – `{ status: "cancelled" }`
+        - `tournament.match_found` – `{ gameId: number, opponent: { id: number, userName: string, avatar: string } }`
+        - `tournament.series_closed` – `{ seriesId: number, status: "COMPLETED" | "EXPIRED" }`
 
       responses:
         '101':
