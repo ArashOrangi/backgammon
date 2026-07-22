@@ -1,4 +1,11 @@
-import { GameState, GameSubStatus, PlayerId, SubStatus } from "./types";
+// src/game/eventStore.ts
+import {
+  GameState,
+  GameSubStatus,
+  PlayerId,
+  SubStatus,
+  TournamentGameData,
+} from "./types";
 import { $Enums, Prisma } from "@prisma/client";
 
 import {
@@ -26,6 +33,8 @@ import { generateMoveSequences } from "./moveGenerator";
 import { OrmState } from "@/models/enums";
 import { prisma } from "@/components/prisma";
 import { processGameCompletion } from "@/services/gameCompletion";
+import { MonthlyTournamentService } from "@/services/tournament/monthly";
+import { WeeklyTournamentService } from "@/services/tournament/weekly";
 
 function assertNever(x: never): never {
   throw new Error(`Unhandled event type: ${(x as any).type}`);
@@ -333,7 +342,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
 
     case "TURN_PASSED": {
       switchTurn(state);
-      resetWarningState(state.id); // اضافه شد
+      resetWarningState(state.id);
       state.dice = [];
       state.rolledThisTurn = false;
       return state;
@@ -354,7 +363,7 @@ function applyEvent(state: GameState, event: GameEvent): GameState {
       state.cubeOfferedBy = null;
       state.cubeOfferedTo = null;
       state.cubeOfferedValue = null;
-
+      refreshPipCount(state);
       return state;
     }
 
@@ -562,13 +571,22 @@ export async function appendGameEvent(gameId: number, event: GameEvent) {
     throw new Error(`Failed to append event: ${JSON.stringify(created)}`);
   }
 
-  // ===== پردازش پایان بازی (یکپارچه‌سازی با تورنمنت) =====
+  // ===== پردازش پایان بازی (یکپارچه‌سازی با تورنمنت و سایر سیستم‌ها) =====
   if (event.type === "GAME_FINISHED") {
     const state = await loadGameState(gameId);
     if (state) {
+      // پردازش عمومی (لیدربورد، اکونومی، XP)
       processGameCompletion(gameId, state).catch((err) => {
         console.error(
           `[EventStore] Error in processGameCompletion for game ${gameId}:`,
+          err,
+        );
+      });
+
+      // ====== ثبت خودکار در تورنمنت ======
+      recordTournamentGameIfNeeded(gameId, state).catch((err) => {
+        console.error(
+          `[EventStore] Error in recordTournamentGameIfNeeded for game ${gameId}:`,
           err,
         );
       });
@@ -700,4 +718,80 @@ export async function forceSnapshot(gameId: number, state: GameState) {
     sequence: lastSequence,
     state: state as unknown as Prisma.InputJsonValue,
   });
+}
+
+// ============================================================================
+// Helper: Auto-record tournament game
+// ============================================================================
+async function recordTournamentGameIfNeeded(gameId: number, state: GameState) {
+  if (!state.tournamentData) {
+    return;
+  }
+
+  const { type, seasonId, players } = state.tournamentData;
+  const winnerId = state.winner;
+  if (!winnerId) return;
+
+  const loserId = state.players.find((p) => p.id !== winnerId)?.id;
+  if (!loserId) return;
+
+  // محاسبه pipAdvantage و cleanPlay
+  const winnerPip = state.pipCount?.[winnerId] ?? 0;
+  const loserPip = state.pipCount?.[loserId] ?? 0;
+  const pipAdvantage = Math.max(0, loserPip - winnerPip);
+  const cleanPlay = (state.board.bar[winnerId] ?? 0) === 0;
+
+  const winType = state.winType || "normal";
+  let result: "normal" | "gammon" | "backgammon" | "loss" | "forfeit";
+  if (winType === "mars") result = "gammon";
+  else if (winType === "backgammon") result = "backgammon";
+  else result = "normal";
+
+  if (type === "MONTHLY") {
+    const monthlyService = new MonthlyTournamentService();
+    for (const p of players) {
+      if (!p.seriesId || p.matchIndex === undefined) continue;
+      const isWinner = p.playerId === winnerId;
+      const playerResult = isWinner ? result : "loss";
+      const pPip = isWinner ? pipAdvantage : 0;
+      const pClean = isWinner ? cleanPlay : false;
+
+      await monthlyService
+        .recordGame(p.seriesId, {
+          gameId,
+          matchIndex: p.matchIndex,
+          result: playerResult,
+          pipAdvantage: pPip,
+          cleanPlay: pClean,
+        })
+        .catch((err) => {
+          console.error(
+            `[EventStore] Failed to record monthly game for series ${p.seriesId}:`,
+            err,
+          );
+        });
+    }
+  } else if (type === "WEEKLY") {
+    const weeklyService = new WeeklyTournamentService();
+    for (const p of players) {
+      const isWinner = p.playerId === winnerId;
+      const playerResult = isWinner ? result : "loss";
+      const pPip = isWinner ? pipAdvantage : 0;
+      const pClean = isWinner ? cleanPlay : false;
+
+      await weeklyService
+        .recordGame(p.playerId, seasonId, {
+          gameId,
+          result: playerResult,
+          pipAdvantage: pPip,
+          cleanPlay: pClean,
+        })
+        .catch((err) => {
+          console.error(
+            `[EventStore] Failed to record weekly game for player ${p.playerId}:`,
+            err,
+          );
+        });
+    }
+  }
 }

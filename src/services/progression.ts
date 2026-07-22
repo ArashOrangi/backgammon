@@ -239,3 +239,56 @@ async function updateUserXP(userId: number, xpGained: number, gameId: number) {
     },
   });
 }
+
+export async function getProgressionUpdate(userId: number, gameId: number) {
+  const userStats = await prisma.userStats.findUnique({
+    where: { userId },
+  });
+  if (!userStats) return null;
+
+  // Find XP history for this specific game (most recent)
+  const xpHistory = await prisma.xPHistory.findFirst({
+    where: { userId, gameId },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const gainedXP = xpHistory?.totalXP ?? 0;
+  const previousXP = (userStats.xp ?? 0) - gainedXP;
+
+  // Determine previous level using LevelIntrepeter
+  const levels = await prisma.levelIntrepeter.findMany({
+    orderBy: { xp: "asc" },
+  });
+  let previousLevel = 1;
+  for (const lv of levels) {
+    if (lv.cumulativeXP && previousXP >= lv.cumulativeXP) {
+      previousLevel = lv.level ?? 1;
+    }
+  }
+  const newLevel = userStats.level ?? 1;
+
+  // For coin and gem, we don't track delta yet, so we just send current values.
+  return {
+    userId,
+    previousStats: {
+      xp: previousXP,
+      level: previousLevel,
+      coin: userStats.coin ?? 0,
+      gem: userStats.gem ?? 0,
+    },
+    gained: {
+      xp: gainedXP,
+      coin: 0,
+      gem: 0,
+    },
+    newStats: {
+      xp: userStats.xp ?? 0,
+      level: newLevel,
+      coin: userStats.coin ?? 0,
+      gem: userStats.gem ?? 0,
+    },
+    levelUp: newLevel > previousLevel,
+    previousLevel,
+    newLevel,
+  };
+}

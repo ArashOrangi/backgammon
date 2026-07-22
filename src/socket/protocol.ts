@@ -170,6 +170,32 @@ export type ServerMessage =
   | {
       type: "tournament.series_closed";
       payload: IDataResponse<{ seriesId: number; status: string }>;
+    }
+  | {
+      type: "progression.updated";
+      payload: IDataResponse<{
+        userId: number;
+        previousStats: {
+          xp: number;
+          level: number;
+          coin: number;
+          gem: number;
+        };
+        gained: {
+          xp: number;
+          coin: number;
+          gem: number;
+        };
+        newStats: {
+          xp: number;
+          level: number;
+          coin: number;
+          gem: number;
+        };
+        levelUp: boolean;
+        previousLevel: number;
+        newLevel: number;
+      }>;
     };
 
 // ---------- MovePayload (مشترک) ----------

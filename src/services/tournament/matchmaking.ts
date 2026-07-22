@@ -1,8 +1,14 @@
 // src/services/tournament/matchmaking.service.ts
 
 import { prisma } from "@/components/prisma";
-import { TournamentType, TournamentQueueState } from "@prisma/client";
+import {
+  TournamentType,
+  TournamentQueueState,
+  SeriesStatus,
+} from "@prisma/client";
 import { TournamentService } from "./tournament";
+import { loadGameState, forceSnapshot } from "@/game/eventStore";
+import { saveGame } from "@/game/gameStore";
 
 interface MatchmakingConfig {
   initialRange: number;
@@ -56,6 +62,20 @@ export class TournamentMatchmaking {
       });
       if (!ticket || ticket.balance < 1) {
         throw new Error("Insufficient tickets for Monthly tournament");
+      }
+
+      // بررسی وجود سری فعال
+      const activeSeries = await prisma.tournamentSeries.findFirst({
+        where: {
+          playerId,
+          seasonId,
+          status: "ACTIVE",
+        },
+      });
+      if (!activeSeries) {
+        throw new Error(
+          "No active monthly series found. Please start a series first.",
+        );
       }
     }
 
@@ -181,6 +201,63 @@ export class TournamentMatchmaking {
       },
     });
 
+    // ====== ذخیره tournamentData در GameState ======
+    let state = await loadGameState(game.id);
+    if (state) {
+      let tournamentData: any = { type, seasonId, players: [] };
+
+      if (type === "MONTHLY") {
+        // پیدا کردن سری‌های فعال هر دو بازیکن
+        const seriesA = await prisma.tournamentSeries.findFirst({
+          where: {
+            playerId: playerA,
+            seasonId,
+            status: "ACTIVE",
+          },
+        });
+        const seriesB = await prisma.tournamentSeries.findFirst({
+          where: {
+            playerId: playerB,
+            seasonId,
+            status: "ACTIVE",
+          },
+        });
+
+        if (!seriesA || !seriesB) {
+          console.error(
+            `[Matchmaking] Player ${playerA} or ${playerB} has no active series`,
+          );
+          // بازی را حذف کن و خطا بده
+          await prisma.games.delete({ where: { id: game.id } });
+          throw new Error("One of the players has no active series");
+        }
+
+        // شمارش مسابقات موجود برای تعیین matchIndex
+        const gamesCountA = await prisma.tournamentGame.count({
+          where: { seriesId: seriesA.id },
+        });
+        const gamesCountB = await prisma.tournamentGame.count({
+          where: { seriesId: seriesB.id },
+        });
+
+        tournamentData.players = [
+          { playerId: playerA, seriesId: seriesA.id, matchIndex: gamesCountA },
+          { playerId: playerB, seriesId: seriesB.id, matchIndex: gamesCountB },
+        ];
+      } else {
+        // WEEKLY – فقط شناسه بازیکنان را ذخیره کن
+        tournamentData.players = [{ playerId: playerA }, { playerId: playerB }];
+      }
+
+      state.tournamentData = tournamentData;
+      saveGame(state);
+      await forceSnapshot(game.id, state);
+    } else {
+      console.error(
+        `[Matchmaking] Failed to load game state for game ${game.id}`,
+      );
+    }
+
     // ذخیره gameId در صف
     await prisma.tournamentQueueEntry.updateMany({
       where: {
@@ -191,8 +268,6 @@ export class TournamentMatchmaking {
       data: { gameId: game.id, state: "IN_GAME" },
     });
 
-    // ارسال نوتیفیکیشن به بازیکنان (از طریق WebSocket)
-    // این بخش باید از طریق سیستم پیام‌رسانی انجام شود
     console.log(
       `[Matchmaking] Match created: game ${game.id} between ${playerA} and ${playerB}`,
     );
@@ -220,7 +295,7 @@ export class TournamentMatchmaking {
       data: { state: "MATCH_FOUND", matchedAt: new Date() },
     });
 
-    // ایجاد بازی با بات (شناسه کاربری ثابت برای بات، مثلاً 0)
+    // ایجاد بازی با بات (شناسه کاربری ثابت برای بات)
     const botUserId = 0; // کاربر بات
     const game = await prisma.games.create({
       data: {
@@ -229,6 +304,44 @@ export class TournamentMatchmaking {
         blackPlayerId: botUserId,
       },
     });
+
+    // ====== ذخیره tournamentData برای بات ======
+    let state = await loadGameState(game.id);
+    if (state) {
+      let tournamentData: any = { type, seasonId, players: [] };
+
+      if (type === "MONTHLY") {
+        const activeSeries = await prisma.tournamentSeries.findFirst({
+          where: {
+            playerId,
+            seasonId,
+            status: "ACTIVE",
+          },
+        });
+        if (!activeSeries) {
+          console.error(
+            `[Matchmaking] Player ${playerId} has no active series`,
+          );
+          await prisma.games.delete({ where: { id: game.id } });
+          throw new Error("No active series found");
+        }
+
+        const gamesCount = await prisma.tournamentGame.count({
+          where: { seriesId: activeSeries.id },
+        });
+
+        tournamentData.players = [
+          { playerId, seriesId: activeSeries.id, matchIndex: gamesCount },
+        ];
+      } else {
+        // WEEKLY
+        tournamentData.players = [{ playerId }];
+      }
+
+      state.tournamentData = tournamentData;
+      saveGame(state);
+      await forceSnapshot(game.id, state);
+    }
 
     // ذخیره gameId
     await prisma.tournamentQueueEntry.updateMany({

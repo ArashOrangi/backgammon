@@ -24,6 +24,7 @@ import {
 import { saveGame } from "../../game/gameStore";
 import { SPECIAL_POSITIONS } from "@/game/types";
 import { runBotIfNeeded } from "@/game/botRunner";
+import { getProgressionUpdate } from "@/services/progression";
 
 type MoveItem = {
   gameId: number;
@@ -307,6 +308,23 @@ export async function handleMove(
             `Game finished: ${winType}`,
           ),
         });
+
+        // ===== NEW: Send progression update =====
+        try {
+          const progression = await getProgressionUpdate(playerId, gameId);
+          if (progression) {
+            rooms.broadcast(gameId, {
+              type: "progression.updated",
+              payload: onOkSocketResponse(
+                progression,
+                "Progression updated after match",
+              ),
+            });
+          }
+        } catch (err) {
+          console.error("[Move] Failed to send progression update:", err);
+        }
+        // ========================================
 
         return;
       }

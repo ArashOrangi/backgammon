@@ -24,6 +24,16 @@ export interface Board {
   borneOff: Record<PlayerId, number>;
 }
 
+export type TournamentGameData = {
+  type: "WEEKLY" | "MONTHLY";
+  seasonId: number;
+  players: Array<{
+    playerId: number;
+    seriesId?: number; // فقط برای ماهانه
+    matchIndex?: number; // فقط برای ماهانه (0,1,2)
+  }>;
+};
+
 /** وضعیت کامل یک بازی */
 export interface GameState {
   /** شناسه بازی */
@@ -76,6 +86,7 @@ export interface GameState {
   //---
   readyPlayers?: number[];
   rolledThisTurn?: boolean; // true اگر در این نوبت تاس ریخته شده باشد
+  tournamentData?: TournamentGameData;
 }
 
 export type GameStatus =

@@ -1,3 +1,4 @@
+// src/game/botRunner.ts
 import {
   loadGameState,
   appendGameEvent,
@@ -16,9 +17,9 @@ import { onOkSocketResponse } from "@/responses/response-builder";
 import { BOT_USER_ID } from "@/static/statics";
 import { saveGame } from "./gameStore";
 import { isGameOver, calculateGameScore, calculateWinType } from "./engine";
-// changesCode: ایمپورت توابع تایمر
 import { broadcastTimerStarted, resetWarningState } from "@/game/engine/timer";
 import { sleep } from "@/components/sleep";
+import { getProgressionUpdate } from "@/services/progression";
 
 const BOT_ACTION_DELAY_MS = 1600;
 
@@ -441,6 +442,26 @@ export async function runBotIfNeeded(
               legalMoves: [],
             }),
           });
+
+          // ===== NEW: Send progression update for bot match =====
+          try {
+            const progression = await getProgressionUpdate(playerId, gameId);
+            if (progression) {
+              rooms.broadcast(gameId, {
+                type: "progression.updated",
+                payload: onOkSocketResponse(
+                  progression,
+                  "Progression updated after bot match",
+                ),
+              });
+            }
+          } catch (err) {
+            console.error(
+              "[BotRunner] Failed to send progression update:",
+              err,
+            );
+          }
+          // =====================================================
         }
         return;
       }
