@@ -6,6 +6,8 @@ info:
     - REST endpoints for account management, matchmaking, history, shop, tournament, etc.
     - WebSocket connection for live game events (see WebSocket section).
     - Admin endpoints for managing inventory, shop, starter packs and user inventory.
+    
+    **Note:** Tournament game results are automatically recorded by the server; clients do not need to send `tournament.monthly.record`.
   version: 1.0.0
   contact:
     name: Support
@@ -1725,7 +1727,6 @@ paths:
         - `game.practice.rearrange` – `{ gameId: number, points: Array<{index, count}> }`
         - `game.practice.setup_board` – `{ gameId: number, board: { points, bar, borneOff } }`
         - `tournament.monthly.start` – `{ seasonId: number }`
-        - `tournament.monthly.record` – `{ seriesId: number, gameId: number, matchIndex: 0|1|2, result: "normal"|"gammon"|"backgammon"|"loss"|"forfeit", pipAdvantage?: number, cleanPlay?: boolean }`
         - `tournament.monthly.close` – `{ seriesId: number }`
         - `tournament.matchmaking.join` – `{ seasonId: number, type: "WEEKLY"|"MONTHLY" }`
         - `tournament.matchmaking.cancel` – `{ type: "WEEKLY"|"MONTHLY" }`
@@ -1742,12 +1743,12 @@ paths:
         - `timer.started` – `{ playerId, primaryTime, secondaryTime, turnStartedAt }`
         - `timer.warning` – `{ remaining, playerId }`
         - `tournament.monthly.start_res` – `{ seriesId: number, expiresAt: string }`
-        - `tournament.monthly.record_res` – tournament game data (full `TournamentGame` object)
         - `tournament.monthly.close_res` – `{ success: boolean, seriesId: number, status: "CLOSED_BY_PLAYER" | "COMPLETED" }`
         - `tournament.matchmaking.join_res` – `{ status: "searching" }`
         - `tournament.matchmaking.cancel_res` – `{ status: "cancelled" }`
         - `tournament.match_found` – `{ gameId: number, opponent: { id: number, userName: string, avatar: string } }`
         - `tournament.series_closed` – `{ seriesId: number, status: "COMPLETED" | "EXPIRED" }`
+        - `progression.updated` – `{ userId: number, previousStats: { xp: number, level: number, coin: number, gem: number }, gained: { xp: number, coin: number, gem: number }, newStats: { xp: number, level: number, coin: number, gem: number }, levelUp: boolean, previousLevel: number, newLevel: number }`
 
       responses:
         '101':
