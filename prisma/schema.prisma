@@ -287,6 +287,7 @@ model User {
   tournamentMMR   TournamentMMR[]
   queueEntries    TournamentQueueEntry[]
   tieBreakerCache TournamentTieBreakerCache[]
+  SpinHistory     SpinHistory[]
 
   @@map("User")
 }
@@ -914,4 +915,36 @@ model TournamentTieBreakerCache {
   player User             @relation(fields: [playerId], references: [id])
 
   @@unique([seasonId, playerId])
+}
+
+enum SpinPrizeType {
+  COIN
+  GEM
+  JACKPOT
+}
+
+model SpinConfig {
+  id          Int      @id @default(autoincrement())
+  name        String   // "daily_spin"
+  costCoin    Int      @default(100)  // هزینه هر چرخش به سکه
+  dailyLimit  Int      @default(5)    // تعداد چرخش رایگان در روز
+  prizes      Json     // آرایه‌ای از Prize (مطابق جدول)
+  isActive    Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+
+  @@map("spin_configs")
+}
+
+model SpinHistory {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  prizeIndex  Int      // اندیس جایزه در آرایه
+  prizeValue  Int      // مقدار سکه برنده‌شده
+  prizeType   SpinPrizeType @default(COIN)
+  spinCost    Int      @default(100)
+  spinAt      DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, spinAt])
+  @@map("spin_histories")
 }

@@ -8,6 +8,8 @@ info:
     - Admin endpoints for managing inventory, shop, starter packs and user inventory.
     
     **Note:** Tournament game results are automatically recorded by the server; clients do not need to send `tournament.monthly.record`.
+    
+    **OTP (Fake):** For development, OTP endpoints return the generated code in the response. In production, the code is sent via SMS and not returned.
   version: 1.0.0
   contact:
     name: Support
@@ -41,6 +43,10 @@ tags:
     description: Global and period‑based leaderboards.
   - name: Tournament
     description: Weekly and Monthly tournament management, leaderboards, series.
+  - name: Spin
+    description: Lucky wheel spin system with prizes and daily limits.
+  - name: OTP
+    description: One‑time password (SMS) authentication (fake for development).
   - name: Admin
     description: Administrative endpoints for managing inventory, shop, starter packs and user inventory (requires admin privileges).
   - name: WebSocket
@@ -1076,6 +1082,175 @@ paths:
                     example: 5
         '401':
           description: Not authenticated
+        '500':
+          description: Server error
+
+  # ===================== SPIN (Lucky Wheel) =====================
+  /api/spin/config:
+    get:
+      tags: [Spin]
+      summary: Get lucky wheel configuration
+      description: Returns prizes, cost per spin, and daily spin limit
+      responses:
+        '200':
+          description: Spin configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cost:
+                    type: integer
+                    example: 100
+                  dailyLimit:
+                    type: integer
+                    example: 5
+                  prizes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SpinPrize'
+        '500':
+          description: Server error
+
+  /api/spin:
+    post:
+      tags: [Spin]
+      summary: Perform a spin
+      description: Spin the lucky wheel and win a prize. Costs 100 coins per spin. Limited to 5 spins per day.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Spin result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  prize:
+                    $ref: '#/components/schemas/SpinPrize'
+                  wonCoin:
+                    type: integer
+                    description: Amount of coins won
+                  newBalance:
+                    type: integer
+                    description: New coin balance after spin
+                  spinCount:
+                    type: integer
+                    description: Number of spins used today
+        '400':
+          description: Error (insufficient coins, daily limit reached, etc.)
+        '401':
+          description: Not authenticated
+        '500':
+          description: Server error
+
+  /api/spin/history:
+    get:
+      tags: [Spin]
+      summary: Get spin history
+      description: Returns recent spin history for the authenticated user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: List of spin history entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SpinHistoryEntry'
+        '401':
+          description: Not authenticated
+        '500':
+          description: Server error
+
+  /api/spin/today:
+    get:
+      tags: [Spin]
+      summary: Get today's spin stats
+      description: Returns number of spins used today and remaining spins
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Today's spin statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  used:
+                    type: integer
+                    description: Spins used today
+                  limit:
+                    type: integer
+                    description: Daily spin limit
+                  remaining:
+                    type: integer
+                    description: Remaining spins today
+        '401':
+          description: Not authenticated
+        '500':
+          description: Server error
+
+  # ===================== OTP (Fake) =====================
+  /api/otp/send:
+    post:
+      tags: [OTP]
+      summary: Send OTP code (fake)
+      description: |
+        Generates a 6‑digit OTP and returns it in the response for development.
+        In production, this endpoint will send the code via SMS and not include it in the response.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendOtpRequest'
+      responses:
+        '200':
+          description: OTP sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendOtpResponse'
+        '400':
+          description: Validation error (invalid phone number)
+        '500':
+          description: Server error
+
+  /api/otp/verify:
+    post:
+      tags: [OTP]
+      summary: Verify OTP code and authenticate
+      description: |
+        Validates the OTP code. On success, returns a JWT token for the user.
+        If the user does not exist, a new user is created using the phone number as username.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyOtpRequest'
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid or expired OTP
         '500':
           description: Server error
 
@@ -2614,3 +2789,91 @@ components:
         gem:
           type: integer
           nullable: true
+
+    # ---------- SPIN ----------
+    SpinPrize:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Prize identifier (0-9)
+        label:
+          type: string
+          description: Display label (e.g., "سکه ۲۵", "جکپات")
+        value:
+          type: integer
+          description: Prize value in coins
+        probability:
+          type: integer
+          description: Probability percentage (e.g., 8 for 8%)
+        type:
+          type: string
+          enum: [COIN, GEM, JACKPOT]
+          description: Prize type
+
+    SpinHistoryEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        prizeIndex:
+          type: integer
+          description: Index of the prize won
+        prizeValue:
+          type: integer
+          description: Amount of coins won
+        prizeType:
+          type: string
+          enum: [COIN, GEM, JACKPOT]
+        spinCost:
+          type: integer
+          description: Cost of the spin
+        spinAt:
+          type: string
+          format: date-time
+          description: Timestamp of the spin
+
+    # ---------- OTP ----------
+    SendOtpRequest:
+      type: object
+      required:
+        - phone
+      properties:
+        phone:
+          type: string
+          pattern: '^[0-9]{11}$'
+          description: 11‑digit phone number
+
+    SendOtpResponse:
+      type: object
+      properties:
+        responseState:
+          type: integer
+          example: 200
+        data:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "کد تأیید با موفقیت ارسال شد"
+            code:
+              type: string
+              description: "OTP code (only returned in development environment)"
+              example: "123456"
+
+    VerifyOtpRequest:
+      type: object
+      required:
+        - phone
+        - code
+      properties:
+        phone:
+          type: string
+          pattern: '^[0-9]{11}$'
+          description: 11‑digit phone number
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
+          description: 6‑digit OTP code
