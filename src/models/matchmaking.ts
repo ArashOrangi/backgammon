@@ -9,6 +9,7 @@ import { RoomType } from "@prisma/client";
 import { RoomManager } from "@/socket/room-manager";
 import { notifyUserGameReady } from "@/socket/handlers/join";
 import { prismaGameCreate } from "./game";
+
 export interface RoomConfig {
   id: RoomType;
   name: string;
@@ -224,7 +225,38 @@ async function findOpponent(
   return filtered[0];
 }
 
-/** ساخت بازی بین دو بازیکن (و اعمال تنظیمات تایمر) */
+/**
+ * اطمینان از وجود RoomPreset برای یک RoomType خاص
+ * اگر وجود نداشت، با مقادیر پیش‌فرض ایجاد می‌کند
+ */
+async function ensureRoomPreset(roomType: RoomType): Promise<number> {
+  let preset = await prisma.roomPreset.findUnique({
+    where: { roomType },
+  });
+  if (!preset) {
+    preset = await prisma.roomPreset.create({
+      data: {
+        roomType,
+        baseWinXP: 10,
+        baseLoseXP: 5,
+        spread: 5,
+        bonusCap: 8,
+        coinBuyIn: 0,
+        coinReward: 0,
+        timer: 0,
+        doublingCube: true,
+        undo: 0,
+        rewardXp: 0,
+        leaderboardPoint: 0,
+        minXp: 0,
+      },
+    });
+    console.log(`[Matchmaking] Created RoomPreset for ${roomType}`);
+  }
+  return preset.id;
+}
+
+/** ساخت بازی بین دو بازیکن (و اعمال تنظیمات تایمر) و ایجاد MatchRecord */
 async function createGameBetween(
   whiteId: number,
   blackId: number,
@@ -233,6 +265,7 @@ async function createGameBetween(
   if (whiteId === blackId)
     throw new Error("Cannot create game with same player");
 
+  // 1. ایجاد بازی در جدول Games
   const game = await prismaGameCreate(whiteId);
   if (!game || game === OrmState.Error)
     throw new Error("Failed to create game");
@@ -242,6 +275,7 @@ async function createGameBetween(
     data: { blackPlayerId: blackId },
   });
 
+  // 2. ثبت رویدادهای JOIN
   await appendGameEvent(game.id, {
     type: "PLAYER_JOINED",
     payload: { playerId: whiteId, color: "white" },
@@ -251,14 +285,14 @@ async function createGameBetween(
     payload: { playerId: blackId, color: "black" },
   });
 
-  // تنظیم تایمرهای پیش‌فرض
+  // 3. تنظیم تایمرهای پیش‌فرض در GameState
   const preset = await getDefaultTimerPreset();
   let state = await import("@/game/eventStore").then((m) =>
     m.loadGameState(game.id),
   );
   if (state) {
     state.roomType = room;
-    state.doublingCubeEnabled = true; //room !== RoomType.CASUAL_1;
+    state.doublingCubeEnabled = true;
     state.primaryTimePerTurn = preset.primarySeconds;
     state.secondaryTimeBank = {
       [whiteId]: preset.secondarySeconds,
@@ -267,6 +301,43 @@ async function createGameBetween(
     await import("@/game/gameStore").then((m) => m.saveGame(state));
     await forceSnapshot(game.id, state);
   }
+
+  // 4. ایجاد یا پیدا کردن RoomPreset
+  const roomPresetId = await ensureRoomPreset(room);
+
+  // 5. ایجاد MatchRecord (برای اتصال به RoomPreset)
+  const matchRecord = await prisma.matchRecord.create({
+    data: {
+      roomPresetId,
+      gameId: game.id,
+      startMatch: new Date(),
+      // endMatch بعداً در پایان بازی به‌روز می‌شود
+    },
+  });
+
+  // 6. ایجاد شرکت‌کنندگان (MatchParticipent)
+  await prisma.matchParticipent.createMany({
+    data: [
+      {
+        matchRecordId: matchRecord.id,
+        playerId: whiteId,
+        side: true, // سفید
+        result: false, // تا پایان بازی مشخص نیست
+        hits: 0,
+      },
+      {
+        matchRecordId: matchRecord.id,
+        playerId: blackId,
+        side: false, // سیاه
+        result: false,
+        hits: 0,
+      },
+    ],
+  });
+
+  console.log(
+    `[Matchmaking] Game ${game.id} created with MatchRecord ${matchRecord.id} for room ${room}`,
+  );
   return game.id;
 }
 
@@ -352,13 +423,12 @@ export async function addToMatchmaking(
   }
 
   // در صف ماند و تایم‌اوت برای بات
-  // زمان‌بندی برای بات
   scheduleBotCheck(
     userId,
     roomType,
     queuedPlayer.queueEnterTime,
     config.botTimeoutSeconds,
-    rooms, // <-- پاس دادن rooms
+    rooms,
   );
   return 0;
 }
