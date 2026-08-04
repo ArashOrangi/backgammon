@@ -1,6 +1,7 @@
 import { prisma } from "@/components/prisma";
 import { GameState } from "@/game/types";
 import { RoomType } from "@prisma/client";
+import { BOT_USER_ID } from "@/static/statics";
 
 /**
  * محاسبه و اعمال XP برای هر دو بازیکن پس از پایان بازی
@@ -26,7 +27,7 @@ export async function calculateAndApplyXP(gameId: number, state: GameState) {
 
     const baseWinXP = roomPreset.baseWinXP ?? 10;
     const baseLoseXP = roomPreset.baseLoseXP ?? 5;
-    const spread = roomPreset.spread ?? 5;
+    const cap = roomPreset.bonusCap ?? 8;
 
     // 2. تشخیص برنده و بازنده از state
     const winnerId = state.winner;
@@ -45,7 +46,7 @@ export async function calculateAndApplyXP(gameId: number, state: GameState) {
     const winType = state.winType || "normal";
     const winTypeBonus = getWinTypeBonus(winType);
 
-    // ۴. محاسبه Base XP برای هر بازیکن
+    // ۴. Base XP
     const winnerBaseXP = baseWinXP;
     const loserBaseXP = baseLoseXP;
 
@@ -54,32 +55,24 @@ export async function calculateAndApplyXP(gameId: number, state: GameState) {
       where: {
         gameId,
         isUndo: false,
-        type: { in: ["MOVE_APPLIED", "TURN_PASSED"] },
+        type: { in: ["MOVE_APPLIED", "TURN_PASSED", "CUBE_ACCEPTED"] },
       },
       orderBy: { sequence: "asc" },
     });
 
     const actionBonuses = calculateActionBonuses(events, winnerId, loserId);
-    const winnerActionBonus = actionBonuses.winner;
-    const loserActionBonus = actionBonuses.loser;
+    const cappedWinnerActionBonus = Math.min(actionBonuses.winner, cap);
+    const cappedLoserActionBonus = Math.min(actionBonuses.loser, cap);
 
-    // ۶. اعمال Cap بر اساس اتاق (با استفاده از roomType)
-    // const cap = getCapByRoom(roomPreset.roomType);
-    // const cappedWinnerActionBonus = Math.min(winnerActionBonus, cap);
-    // const cappedLoserActionBonus = Math.min(loserActionBonus, cap);
-    const cap = roomPreset.bonusCap ?? 8; // اگر مقدار null بود، پیش‌فرض 8
-    const cappedWinnerActionBonus = Math.min(winnerActionBonus, cap);
-    const cappedLoserActionBonus = Math.min(loserActionBonus, cap);
-
-    // ۷. محاسبه XP کل برای هر بازیکن
+    // ۶. XP کل
     const winnerTotalXP = winnerBaseXP + winTypeBonus + cappedWinnerActionBonus;
     const loserTotalXP = loserBaseXP + cappedLoserActionBonus;
 
-    // ۸. به‌روزرسانی UserStats برای برنده
+    // ۷. به‌روزرسانی UserStats
     await updateUserXP(winnerId, winnerTotalXP, gameId);
     await updateUserXP(loserId, loserTotalXP, gameId);
 
-    // ۹. ذخیره در XPHistory برای برنده
+    // ۸. ذخیره در XPHistory
     await prisma.xPHistory.create({
       data: {
         userId: winnerId,
@@ -91,7 +84,6 @@ export async function calculateAndApplyXP(gameId: number, state: GameState) {
       },
     });
 
-    // 1۰. ذخیره در XPHistory برای بازنده
     await prisma.xPHistory.create({
       data: {
         userId: loserId,
@@ -136,18 +128,12 @@ function calculateActionBonuses(
 ): { winner: number; loser: number } {
   let winnerBonus = 0;
   let loserBonus = 0;
-
-  // محدودیت‌های هر نوع پاداش
   let hitCount = 0;
-  let blockCount = 0;
-  let hitAfterExitCount = 0;
   let cubeWinBonus = 0;
 
   for (const event of events) {
     if (event.type === "MOVE_APPLIED") {
       const payload = event.payload as any;
-
-      // 1. زدن مهره حریف (hit_opponent)
       if (payload.hitOpponentId) {
         const hitterId = payload.playerId;
         if (hitterId === winnerId && hitCount < 2) {
@@ -158,24 +144,10 @@ function calculateActionBonuses(
           hitCount++;
         }
       }
-
-      // 3. زدن مهره بعد از شروع خروج (hit_after_exit) - ساده‌سازی: اگر hit در خانه‌های انتهایی باشد
-      // در عمل باید بررسی شود که آیا حریف شروع به خروج کرده یا نه
-      // برای ساده‌سازی فعلاً این بخش را در نظر نمی‌گیریم
-    }
-
-    if (event.type === "TURN_PASSED") {
-      // 2. جلوگیری از تاس ریختن حریف (block_entry)
-      // نیاز به بررسی board دارد که آیا خانه‌های ورودی حریف بسته شده یا نه
-      // برای ساده‌سازی فعلاً این بخش را در نظر نمی‌گیریم
     }
 
     if (event.type === "CUBE_ACCEPTED") {
-      // ۶. پاداش تاس داو (قبول شد و برنده شدی)
-      // فقط یک بار
       if (cubeWinBonus === 0) {
-        // باید بررسی شود که آیا این بازیکن برنده شده است یا نه
-        // فعلاً به برنده داده می‌شود
         winnerBonus += 2;
         cubeWinBonus = 1;
       }
@@ -186,33 +158,35 @@ function calculateActionBonuses(
 }
 
 /**
- * دریافت Cap بر اساس اتاق (مطابق مستندات)
- * - Room1: 4
- * - Room2: 6
- * - Room3 به بالا: 8
- */
-function getCapByRoom(roomType: RoomType): number {
-  switch (roomType) {
-    case RoomType.ROOM1:
-      return 4;
-    case RoomType.ROOM2:
-      return 6;
-    default:
-      return 8; // ROOM3 تا ROOM9
-  }
-}
-
-/**
  * به‌روزرسانی XP و Level کاربر
+ * - اگر کاربر بات باشد، عملیات را نادیده می‌گیرد.
+ * - اگر UserStats وجود نداشته باشد، یک رکورد جدید با مقادیر پیش‌فرض ایجاد می‌کند.
  */
 async function updateUserXP(userId: number, xpGained: number, gameId: number) {
-  const userStats = await prisma.userStats.findUnique({
+  // اگر کاربر بات است، نیازی به XP ندارد
+  if (userId === BOT_USER_ID) {
+    console.log(`[Progression] Skipping XP for bot user ${userId}`);
+    return;
+  }
+
+  let userStats = await prisma.userStats.findUnique({
     where: { userId },
   });
 
+  // اگر UserStats وجود نداشت، یک رکورد جدید ایجاد کن
   if (!userStats) {
-    console.error(`[Progression] UserStats not found for user ${userId}`);
-    return;
+    console.warn(
+      `[Progression] UserStats not found for user ${userId}, creating new record`,
+    );
+    userStats = await prisma.userStats.create({
+      data: {
+        userId,
+        xp: 0,
+        level: 1,
+        coin: 0,
+        gem: 0,
+      },
+    });
   }
 
   const currentXP = userStats.xp || 0;
@@ -240,6 +214,9 @@ async function updateUserXP(userId: number, xpGained: number, gameId: number) {
   });
 }
 
+/**
+ * دریافت اطلاعات به‌روزرسانی پیشرفت برای ارسال به کلاینت
+ */
 export async function getProgressionUpdate(userId: number, gameId: number) {
   const userStats = await prisma.userStats.findUnique({
     where: { userId },
@@ -267,7 +244,6 @@ export async function getProgressionUpdate(userId: number, gameId: number) {
   }
   const newLevel = userStats.level ?? 1;
 
-  // For coin and gem, we don't track delta yet, so we just send current values.
   return {
     userId,
     previousStats: {

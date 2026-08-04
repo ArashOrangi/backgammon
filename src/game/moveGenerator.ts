@@ -357,7 +357,7 @@ interface GameSnapshot {
   dice: number[];
 }
 
-function takeSnapshot(game: GameState): GameSnapshot {
+export function takeSnapshot(game: GameState): GameSnapshot {
   return {
     points: game.board.points.map((p) => ({ owner: p.owner, count: p.count })),
     bar: { ...game.board.bar },
@@ -366,7 +366,7 @@ function takeSnapshot(game: GameState): GameSnapshot {
   };
 }
 
-function undoSnapshot(game: GameState, snap: GameSnapshot) {
+export function undoSnapshot(game: GameState, snap: GameSnapshot) {
   for (let i = 0; i < snap.points.length; i++) {
     game.board.points[i].owner = snap.points[i].owner;
     game.board.points[i].count = snap.points[i].count;

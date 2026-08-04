@@ -225,24 +225,116 @@ async function findOpponent(
   return filtered[0];
 }
 
+// ===== Mapping مقادیر واقعی برای هر RoomType بر اساس PDF =====
+const ROOM_PRESET_VALUES: Record<
+  RoomType,
+  {
+    baseWinXP: number;
+    baseLoseXP: number;
+    spread: number;
+    bonusCap: number;
+    coinBuyIn: number;
+    coinReward: number;
+  }
+> = {
+  [RoomType.ROOM1]: {
+    baseWinXP: 10,
+    baseLoseXP: 5,
+    spread: 5,
+    bonusCap: 4,
+    coinBuyIn: 0,
+    coinReward: 0,
+  },
+  [RoomType.ROOM2]: {
+    baseWinXP: 12,
+    baseLoseXP: 6,
+    spread: 6,
+    bonusCap: 6,
+    coinBuyIn: 10,
+    coinReward: 20,
+  },
+  [RoomType.ROOM3]: {
+    baseWinXP: 14,
+    baseLoseXP: 7,
+    spread: 7,
+    bonusCap: 8,
+    coinBuyIn: 25,
+    coinReward: 50,
+  },
+  [RoomType.ROOM4]: {
+    baseWinXP: 16,
+    baseLoseXP: 8,
+    spread: 8,
+    bonusCap: 8,
+    coinBuyIn: 50,
+    coinReward: 100,
+  },
+  [RoomType.ROOM5]: {
+    baseWinXP: 18,
+    baseLoseXP: 9,
+    spread: 9,
+    bonusCap: 8,
+    coinBuyIn: 100,
+    coinReward: 200,
+  },
+  [RoomType.ROOM6]: {
+    baseWinXP: 20,
+    baseLoseXP: 10,
+    spread: 10,
+    bonusCap: 8,
+    coinBuyIn: 200,
+    coinReward: 400,
+  },
+  [RoomType.ROOM7]: {
+    baseWinXP: 22,
+    baseLoseXP: 11,
+    spread: 11,
+    bonusCap: 8,
+    coinBuyIn: 400,
+    coinReward: 800,
+  },
+  [RoomType.ROOM8]: {
+    baseWinXP: 24,
+    baseLoseXP: 12,
+    spread: 12,
+    bonusCap: 8,
+    coinBuyIn: 800,
+    coinReward: 1600,
+  },
+  [RoomType.ROOM9]: {
+    baseWinXP: 26,
+    baseLoseXP: 13,
+    spread: 13,
+    bonusCap: 8,
+    coinBuyIn: 1600,
+    coinReward: 3200,
+  },
+};
+
 /**
  * اطمینان از وجود RoomPreset برای یک RoomType خاص
- * اگر وجود نداشت، با مقادیر پیش‌فرض ایجاد می‌کند
+ * اگر وجود نداشت، با مقادیر واقعی از mapping ایجاد می‌کند
  */
 async function ensureRoomPreset(roomType: RoomType): Promise<number> {
   let preset = await prisma.roomPreset.findUnique({
     where: { roomType },
   });
+
   if (!preset) {
+    const values = ROOM_PRESET_VALUES[roomType];
+    if (!values) {
+      throw new Error(`No preset values defined for room type: ${roomType}`);
+    }
+
     preset = await prisma.roomPreset.create({
       data: {
         roomType,
-        baseWinXP: 10,
-        baseLoseXP: 5,
-        spread: 5,
-        bonusCap: 8,
-        coinBuyIn: 0,
-        coinReward: 0,
+        baseWinXP: values.baseWinXP,
+        baseLoseXP: values.baseLoseXP,
+        spread: values.spread,
+        bonusCap: values.bonusCap,
+        coinBuyIn: values.coinBuyIn,
+        coinReward: values.coinReward,
         timer: 0,
         doublingCube: true,
         undo: 0,
@@ -251,8 +343,12 @@ async function ensureRoomPreset(roomType: RoomType): Promise<number> {
         minXp: 0,
       },
     });
-    console.log(`[Matchmaking] Created RoomPreset for ${roomType}`);
+    console.log(
+      `[Matchmaking] Created RoomPreset for ${roomType} with values:`,
+      values,
+    );
   }
+
   return preset.id;
 }
 

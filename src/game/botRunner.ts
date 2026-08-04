@@ -1,4 +1,3 @@
-// src/game/botRunner.ts
 import {
   loadGameState,
   appendGameEvent,
@@ -20,6 +19,10 @@ import { isGameOver, calculateGameScore, calculateWinType } from "./engine";
 import { broadcastTimerStarted, resetWarningState } from "@/game/engine/timer";
 import { sleep } from "@/components/sleep";
 import { getProgressionUpdate } from "@/services/progression";
+// ===== NEW IMPORTS =====
+import { selectMove, calculateDelay } from "./bot/engine";
+import { getSigmaFinal } from "./bot/config";
+import { RoomType } from "@prisma/client";
 
 const BOT_ACTION_DELAY_MS = 1600;
 
@@ -67,99 +70,13 @@ function broadcastTurnAndTimer(gameId: number, game: any, rooms: RoomManager) {
   }
 }
 
-// ========== تابع امتیازدهی ساده برای انتخاب بهترین حرکت ==========
-function scoreMove(
-  game: any,
-  playerId: number,
-  from: number,
-  to: number,
-  die: number,
-): number {
-  let score = 0;
+// ===== NEW: تابع امتیازدهی با موتور ارزیابی و نویز =====
+// (تابع scoreMove قدیمی حذف می‌شود، به‌جای آن از selectMove استفاده می‌کنیم)
+
+// ===== NEW: توابع کمکی =====
+function getPlayerStreak(game: any, playerId: number): number {
   const player = game.players.find((p: any) => p.id === playerId);
-  if (!player) return 0;
-  const dir = player.color === "white" ? -1 : 1;
-
-  // ---------- 1. ENTER FROM BAR (high priority) ----------
-  if (from === SPECIAL_POSITIONS.BAR) {
-    score += 200; // critical: get off bar immediately
-  }
-
-  // ---------- 2. HIT OPPONENT ----------
-  if (
-    to !== SPECIAL_POSITIONS.BAR &&
-    game.board.points[to]?.owner &&
-    game.board.points[to].owner !== playerId &&
-    game.board.points[to].count === 1
-  ) {
-    score += 100;
-  }
-
-  // ---------- 3. BEAR OFF ----------
-  const isBearOff =
-    to === SPECIAL_POSITIONS.BEAR_OFF_WHITE ||
-    to === SPECIAL_POSITIONS.BEAR_OFF_BLACK;
-  if (isBearOff) {
-    let bearOffScore = 80; // base
-    const distance = dir === -1 ? from + 1 : 24 - from;
-    bearOffScore += (7 - distance) * 3; // farther pieces get even more priority
-    // bonus when most checkers are already home
-    const [homeStart, homeEnd] = getHomeRange(game, playerId);
-    let homeCount = 0;
-    let totalCheckers = 0;
-    for (let i = 0; i < 24; i++) {
-      const p = game.board.points[i];
-      if (p.owner === playerId) {
-        totalCheckers += p.count;
-        if (i >= homeStart && i <= homeEnd) homeCount += p.count;
-      }
-    }
-    if (totalCheckers > 0 && homeCount / totalCheckers > 0.8) {
-      bearOffScore += 40; // almost all at home, finish quickly
-    }
-    score += bearOffScore;
-  }
-
-  // ---------- 4. MOVE TOWARD HOME (pip reduction) ----------
-  if (!isBearOff && to >= 0 && to <= 23) {
-    let pipReduction = 0;
-    if (dir === -1) {
-      // white: from > to
-      pipReduction = from - to;
-    } else {
-      // black: to > from
-      pipReduction = to - from;
-    }
-    // reward moving far checkers (higher reduction)
-    score += pipReduction * 6;
-  }
-
-  // ---------- 5. ENTER OWN HOME BOARD ----------
-  const [homeStart, homeEnd] = getHomeRange(game, playerId);
-  if (!isBearOff && to >= homeStart && to <= homeEnd) {
-    score += 20;
-  }
-
-  // ---------- 6. BUILD A BLOCK (≥2 checkers) ----------
-  const targetPoint = game.board.points[to];
-  if (targetPoint && targetPoint.owner === playerId) {
-    const newCount = (targetPoint.count || 0) + 1;
-    if (newCount >= 2) score += 15;
-  }
-
-  // ---------- 7. PENALTY for leaving a blot (single checker) ----------
-  if (from !== SPECIAL_POSITIONS.BAR) {
-    const sourcePoint = game.board.points[from];
-    if (
-      sourcePoint &&
-      sourcePoint.owner === playerId &&
-      sourcePoint.count === 1
-    ) {
-      score -= 10; // risk of being hit
-    }
-  }
-
-  return score;
+  return player?.winStreak ?? 0;
 }
 
 // ========== اعتبارسنجی اضافی برای bear off با تاس بزرگتر ==========
@@ -219,6 +136,9 @@ function canEnterFromBarWithAnyDie(game: any, playerId: number): boolean {
   return false;
 }
 
+// ============================================================
+// ===== MAIN EXPORT =====
+// ============================================================
 export async function runBotIfNeeded(
   gameId: number,
   playerId: PlayerId,
@@ -248,10 +168,8 @@ export async function runBotIfNeeded(
       const afterPass = await loadGameState(gameId);
       if (afterPass) {
         saveGame(afterPass);
-        // changesCode: جایگزینی broadcastTurnChange با broadcastTurnAndTimer و اضافه کردن resetWarningState
         resetWarningState(gameId);
         broadcastTurnAndTimer(gameId, afterPass, rooms);
-        // changesCode: ارسال game.state با همان subStatus دستی (تغییری در آن داده نشده)
         rooms.broadcast(gameId, {
           type: "game.state",
           payload: onOkSocketResponse(
@@ -301,10 +219,8 @@ export async function runBotIfNeeded(
       state = await loadGameState(gameId);
       if (state) {
         saveGame(state);
-        // changesCode: جایگزینی broadcastTurnChange با broadcastTurnAndTimer و اضافه کردن resetWarningState
         resetWarningState(gameId);
         broadcastTurnAndTimer(gameId, state, rooms);
-        // changesCode: ارسال game.state با همان subStatus دستی (تغییری در آن داده نشده)
         rooms.broadcast(gameId, {
           type: "game.state",
           payload: onOkSocketResponse(
@@ -316,36 +232,51 @@ export async function runBotIfNeeded(
       break;
     }
 
-    // انتخاب بهترین دنباله بر اساس مجموع امتیاز حرکات
-    let bestSequence: MoveSequence | null = null;
-    let bestScore = -Infinity;
-    for (const seq of sequences) {
-      let totalScore = 0;
-      let valid = true;
-      for (const move of seq.moves) {
-        if (
-          !isHigherDieBearOffLegal(
-            state,
-            playerId,
-            move.from,
-            move.to,
-            move.die,
-          )
-        ) {
-          valid = false;
-          break;
-        }
-        totalScore += scoreMove(state, playerId, move.from, move.to, move.die);
-      }
-      if (valid && totalScore > bestScore) {
-        bestScore = totalScore;
-        bestSequence = seq;
-      }
+    // ==== NEW: استفاده از موتور ارزیابی جدید با نویز و تأخیر ====
+    // 1. محاسبه σ_final بر اساس roomType و winStreak بازیکن
+    // ===== محاسبه σ_final =====
+    const roomType = state.roomType as RoomType | undefined;
+    if (!roomType) {
+      console.warn(
+        `[BotRunner] No roomType for game ${gameId}, using ROOM1 as fallback`,
+      );
+      // در صورت نیاز می‌توانید roomType را از دیتابیس یا preset بخوانید
     }
-    if (!bestSequence) bestSequence = sequences[0];
-    const movesToApply = bestSequence.moves;
+    const playerStreak = getPlayerStreak(state, playerId);
+    const sigma = getSigmaFinal(roomType || RoomType.ROOM1, playerStreak);
 
+    // 2. انتخاب بهترین دنباله با موتور جدید (جایگزین حلقه scoreMove)
+    const bestSequence = selectMove(state, playerId, sigma);
+    if (!bestSequence || bestSequence.moves.length === 0) {
+      // اگر هیچ حرکتی انتخاب نشد (خطا)، نوبت را رد کن
+      await appendGameEvent(gameId, {
+        type: "TURN_PASSED",
+        payload: { playerId, reason: "NO_LEGAL_MOVES" },
+      });
+      state = await loadGameState(gameId);
+      if (state) {
+        saveGame(state);
+        resetWarningState(gameId);
+        broadcastTurnAndTimer(gameId, state, rooms);
+        rooms.broadcast(gameId, {
+          type: "game.state",
+          payload: onOkSocketResponse(
+            { ...state, subStatus: "mustEndTurn", legalMoves: [] },
+            "Bot turn passed (no moves)",
+          ),
+        });
+      }
+      break;
+    }
+
+    // 3. محاسبه تأخیر مصنوعی
+    const delay = calculateDelay(sequences, "move");
+    await sleep(delay);
+
+    // 4. اعمال حرکات انتخاب‌شده (دقیقاً مثل قبل)
+    const movesToApply = bestSequence.moves;
     let moveSuccess = true;
+
     for (const move of movesToApply) {
       state = await loadGameState(gameId);
       if (!state || state.turn !== playerId) {
@@ -470,7 +401,7 @@ export async function runBotIfNeeded(
     if (!moveSuccess) break; // اگر دنباله ناقص ماند، نوبت را تمام کن
   }
 
-  // پایان نوبت
+  // پایان نوبت (دقیقاً مثل قبل)
   const finalState = await loadGameState(gameId);
   if (finalState && finalState.turn === playerId) {
     await new Promise((resolve) => setTimeout(resolve, BOT_ACTION_DELAY_MS));
@@ -481,10 +412,8 @@ export async function runBotIfNeeded(
     const afterPass = await loadGameState(gameId);
     if (afterPass) {
       saveGame(afterPass);
-      // changesCode: جایگزینی broadcastTurnChange با broadcastTurnAndTimer و اضافه کردن resetWarningState
       resetWarningState(gameId);
       broadcastTurnAndTimer(gameId, afterPass, rooms);
-      // changesCode: ارسال game.state با همان subStatus دستی (تغییری در آن داده نشده)
       rooms.broadcast(gameId, {
         type: "game.state",
         payload: onOkSocketResponse(

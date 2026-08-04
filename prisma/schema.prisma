@@ -948,3 +948,21 @@ model SpinHistory {
   @@index([userId, spinAt])
   @@map("spin_histories")
 }
+
+// model BotDecision {
+//   id            BigInt   @id @default(autoincrement())
+//   matchId       BigInt
+//   botId         Int
+//   turnNo        Int
+//   dice          String   @db.Char(2)
+//   nCandidates   Int
+//   bestScore     Decimal  @db.Decimal(6,3)
+//   chosenScore   Decimal  @db.Decimal(6,3)
+//   sigmaFinal    Decimal  @db.Decimal(4,2)
+//   decisionType  String   // 'move', 'double', 'take', 'pass'
+//   createdAt     DateTime @default(now())
+
+//   @@index([matchId])
+//   @@index([botId, createdAt])
+//   @@map("bot_decisions")
+// }
