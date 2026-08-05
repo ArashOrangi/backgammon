@@ -163,7 +163,7 @@ async function main() {
 
     await prisma.roomPreset.upsert({
       where: { id },
-      update: room, // برای بروزرسانی، کل شیء (با id) ارسال می‌شود
+      update: createData, // برای بروزرسانی، کل شیء (با id) ارسال می‌شود
       create: createData, // برای ایجاد، id حذف شده است
     });
 

@@ -225,7 +225,9 @@ async function findOpponent(
   return filtered[0];
 }
 
-// ===== Mapping مقادیر واقعی برای هر RoomType بر اساس PDF =====
+// ===== مقداردهی اولیه (Fallback) در صورت نبود RoomPreset در دیتابیس =====
+// این مقادیر دقیقاً مطابق با فایل seed هستند و در صورت نبود رکورد در دیتابیس،
+// به‌عنوان fallback استفاده می‌شوند و سپس در دیتابیس ذخیره می‌شوند.
 export const ROOM_PRESET_VALUES: Record<
   RoomType,
   {
@@ -243,7 +245,7 @@ export const ROOM_PRESET_VALUES: Record<
     spread: 4,
     bonusCap: 4,
     coinBuyIn: 0, // طبق PDF: Net Loss = 0
-    coinReward: 80, // طبق PDF: Net Win = 80 (با توجه به Reward=180 و Buy-in=100 ولی چون بازنده ضرر نمی‌کند، فقط سود خالص داده می‌شود)
+    coinReward: 80, // طبق PDF: Net Win = 80
   },
   [RoomType.ROOM2]: {
     baseWinXP: 19,
@@ -313,7 +315,9 @@ export const ROOM_PRESET_VALUES: Record<
 
 /**
  * اطمینان از وجود RoomPreset برای یک RoomType خاص
- * اگر وجود نداشت، با مقادیر واقعی از mapping ایجاد می‌کند
+ * - ابتدا از دیتابیس می‌خواند
+ * - اگر نبود، با مقادیر fallback (ROOM_PRESET_VALUES) ایجاد می‌کند
+ * - در نهایت ID رکورد را برمی‌گرداند
  */
 export async function ensureRoomPreset(roomType: RoomType): Promise<number> {
   let preset = await prisma.roomPreset.findUnique({
@@ -344,7 +348,7 @@ export async function ensureRoomPreset(roomType: RoomType): Promise<number> {
       },
     });
     console.log(
-      `[Matchmaking] Created RoomPreset for ${roomType} with values:`,
+      `[Matchmaking] Created RoomPreset for ${roomType} from fallback values:`,
       values,
     );
   }
