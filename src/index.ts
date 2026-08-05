@@ -30,6 +30,7 @@ import { shopAdminRoutes } from "./routes/admin/shop";
 import { starterPackAdminRoutes } from "./routes/admin/starter-packs";
 import { spinRoutes } from "./routes/spin";
 import { otpRoutes } from "./routes/otp";
+import { debugRoutes } from "./routes/debug";
 
 dotenv.config();
 
@@ -142,6 +143,7 @@ app.route("/api/starter-packs", starterPackAdminRoutes);
 app.route("/api/user-inventory", userInventoryAdminRoutes);
 app.route("/api/spin", spinRoutes);
 app.route("/api/otp", otpRoutes);
+app.route("/api/debug", debugRoutes);
 
 // ===== Debug WebSocket logs =====
 app.get("/api/debug/ws-logs", (c) => {

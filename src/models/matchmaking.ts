@@ -226,7 +226,7 @@ async function findOpponent(
 }
 
 // ===== Mapping مقادیر واقعی برای هر RoomType بر اساس PDF =====
-const ROOM_PRESET_VALUES: Record<
+export const ROOM_PRESET_VALUES: Record<
   RoomType,
   {
     baseWinXP: number;
@@ -238,76 +238,76 @@ const ROOM_PRESET_VALUES: Record<
   }
 > = {
   [RoomType.ROOM1]: {
-    baseWinXP: 10,
-    baseLoseXP: 5,
-    spread: 5,
+    baseWinXP: 14,
+    baseLoseXP: 10,
+    spread: 4,
     bonusCap: 4,
-    coinBuyIn: 0,
-    coinReward: 0,
+    coinBuyIn: 0, // طبق PDF: Net Loss = 0
+    coinReward: 80, // طبق PDF: Net Win = 80 (با توجه به Reward=180 و Buy-in=100 ولی چون بازنده ضرر نمی‌کند، فقط سود خالص داده می‌شود)
   },
   [RoomType.ROOM2]: {
-    baseWinXP: 12,
-    baseLoseXP: 6,
+    baseWinXP: 19,
+    baseLoseXP: 13,
     spread: 6,
     bonusCap: 6,
-    coinBuyIn: 10,
-    coinReward: 20,
+    coinBuyIn: 500,
+    coinReward: 900,
   },
   [RoomType.ROOM3]: {
-    baseWinXP: 14,
-    baseLoseXP: 7,
-    spread: 7,
-    bonusCap: 8,
-    coinBuyIn: 25,
-    coinReward: 50,
-  },
-  [RoomType.ROOM4]: {
-    baseWinXP: 16,
-    baseLoseXP: 8,
+    baseWinXP: 23,
+    baseLoseXP: 15,
     spread: 8,
     bonusCap: 8,
-    coinBuyIn: 50,
-    coinReward: 100,
+    coinBuyIn: 2000,
+    coinReward: 3600,
+  },
+  [RoomType.ROOM4]: {
+    baseWinXP: 26,
+    baseLoseXP: 18,
+    spread: 8,
+    bonusCap: 8,
+    coinBuyIn: 8000,
+    coinReward: 14400,
   },
   [RoomType.ROOM5]: {
-    baseWinXP: 18,
-    baseLoseXP: 9,
-    spread: 9,
+    baseWinXP: 29,
+    baseLoseXP: 21,
+    spread: 8,
     bonusCap: 8,
-    coinBuyIn: 100,
-    coinReward: 200,
+    coinBuyIn: 30000,
+    coinReward: 54000,
   },
   [RoomType.ROOM6]: {
-    baseWinXP: 20,
-    baseLoseXP: 10,
-    spread: 10,
+    baseWinXP: 32,
+    baseLoseXP: 24,
+    spread: 8,
     bonusCap: 8,
-    coinBuyIn: 200,
-    coinReward: 400,
+    coinBuyIn: 100000,
+    coinReward: 180000,
   },
   [RoomType.ROOM7]: {
-    baseWinXP: 22,
-    baseLoseXP: 11,
-    spread: 11,
+    baseWinXP: 36,
+    baseLoseXP: 28,
+    spread: 8,
     bonusCap: 8,
-    coinBuyIn: 400,
-    coinReward: 800,
+    coinBuyIn: 350000,
+    coinReward: 630000,
   },
   [RoomType.ROOM8]: {
-    baseWinXP: 24,
-    baseLoseXP: 12,
-    spread: 12,
+    baseWinXP: 40,
+    baseLoseXP: 32,
+    spread: 8,
     bonusCap: 8,
-    coinBuyIn: 800,
-    coinReward: 1600,
+    coinBuyIn: 1200000,
+    coinReward: 2160000,
   },
   [RoomType.ROOM9]: {
-    baseWinXP: 26,
-    baseLoseXP: 13,
-    spread: 13,
+    baseWinXP: 44,
+    baseLoseXP: 36,
+    spread: 8,
     bonusCap: 8,
-    coinBuyIn: 1600,
-    coinReward: 3200,
+    coinBuyIn: 4000000,
+    coinReward: 7200000,
   },
 };
 
@@ -315,7 +315,7 @@ const ROOM_PRESET_VALUES: Record<
  * اطمینان از وجود RoomPreset برای یک RoomType خاص
  * اگر وجود نداشت، با مقادیر واقعی از mapping ایجاد می‌کند
  */
-async function ensureRoomPreset(roomType: RoomType): Promise<number> {
+export async function ensureRoomPreset(roomType: RoomType): Promise<number> {
   let preset = await prisma.roomPreset.findUnique({
     where: { roomType },
   });

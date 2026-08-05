@@ -10,6 +10,8 @@ info:
     **Note:** Tournament game results are automatically recorded by the server; clients do not need to send `tournament.monthly.record`.
     
     **OTP (Fake):** For development, OTP endpoints return the generated code in the response. In production, the code is sent via SMS and not returned.
+    
+    **Debug API:** A special endpoint `/api/debug/simulate-game` is available only in development environment to simulate game results for testing progression and economy without playing a full match.
   version: 1.0.0
   contact:
     name: Support
@@ -47,6 +49,8 @@ tags:
     description: Lucky wheel spin system with prizes and daily limits.
   - name: OTP
     description: One‑time password (SMS) authentication (fake for development).
+  - name: Debug
+    description: Development‑only debugging endpoints.
   - name: Admin
     description: Administrative endpoints for managing inventory, shop, starter packs and user inventory (requires admin privileges).
   - name: WebSocket
@@ -1251,6 +1255,79 @@ paths:
                 $ref: '#/components/schemas/AuthResponse'
         '400':
           description: Invalid or expired OTP
+        '500':
+          description: Server error
+
+  # ===================== DEBUG (Development only) =====================
+  /api/debug/simulate-game:
+    post:
+      tags: [Debug]
+      summary: Simulate a game result for testing (dev only)
+      description: |
+        **🔧 Development‑only endpoint.**  
+        Simulates a complete game result for a given user and room type, applying all progression, economy, and leaderboard logic without playing a full match.
+        
+        This is useful for testing XP, coin rewards, leaderboard points, and MatchRecord creation in different scenarios.
+        
+        **⚠️ Returns 403 Forbidden when NODE_ENV is production.**
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userId
+                - roomType
+                - result
+              properties:
+                userId:
+                  type: integer
+                  description: ID of the user to simulate the result for
+                roomType:
+                  $ref: '#/components/schemas/RoomType'
+                  description: Room type to use for XP and economy values
+                result:
+                  type: string
+                  enum: [win, loss]
+                  description: Result for the given user
+                winType:
+                  type: string
+                  enum: [normal, mars, backgammon]
+                  default: normal
+                  description: Type of win (only used when result is 'win')
+      responses:
+        '200':
+          description: Simulation completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  gameId:
+                    type: integer
+                  userId:
+                    type: integer
+                  result:
+                    type: string
+                  winType:
+                    type: string
+                  stats:
+                    $ref: '#/components/schemas/UserStats'
+                  xpHistory:
+                    $ref: '#/components/schemas/XPHistory'
+                  lbRecords:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MatchLBRecord'
+        '400':
+          description: Validation error (missing fields or invalid values)
+        '403':
+          description: Not available in production environment
+        '404':
+          description: User not found
         '500':
           description: Server error
 
@@ -2789,6 +2866,59 @@ components:
         gem:
           type: integer
           nullable: true
+
+    # ---------- XP HISTORY ----------
+    XPHistory:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        gameId:
+          type: integer
+        baseXP:
+          type: integer
+        winBonus:
+          type: integer
+        actionBonus:
+          type: integer
+        totalXP:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    # ---------- MATCH LB RECORD ----------
+    MatchLBRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        opponentId:
+          type: integer
+        gameId:
+          type: integer
+        roomType:
+          $ref: '#/components/schemas/RoomType'
+        isWin:
+          type: boolean
+        winType:
+          type: string
+          nullable: true
+        repetitionMultiplier:
+          type: number
+        basePoints:
+          type: integer
+        bonusPoints:
+          type: integer
+        totalLBPoints:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
 
     # ---------- SPIN ----------
     SpinPrize:
