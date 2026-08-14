@@ -16,6 +16,7 @@ import { GameState } from "@/game/types";
 import { RoomType } from "@prisma/client";
 import { markBotReady } from "./ready";
 import { BOT_USER_ID } from "@/static/statics";
+import { registerUserSocket } from "../socketRegistry";
 
 type JoinPayload = { gameId: number; userId: number; roomType?: RoomType };
 
@@ -129,6 +130,7 @@ export async function handleJoin(
 ) {
   let { gameId, userId, roomType } = payload;
   ctx.userId = userId;
+  registerUserSocket(userId, ctx);
 
   try {
     // ---------- حالت مچ‌میکینگ (خودکار) ----------

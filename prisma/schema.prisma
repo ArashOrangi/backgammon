@@ -735,7 +735,7 @@ model UserTicket {
   userId    Int      @unique
   balance   Int      @default(0)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
-
+  lastRegenAt DateTime @default(now()) @db.Timestamptz(3)
   user User @relation(fields: [userId], references: [id])
 }
 

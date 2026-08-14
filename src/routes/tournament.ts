@@ -15,6 +15,7 @@ import {
   GetLeaderboardSchema,
   GetMonthlyHistorySchema,
 } from "@/validations/tournament.schema";
+import { getTicketInfo } from "@/services/tournament/ticket.service";
 
 const tournamentRoutes = new Hono();
 const monthlyService = new MonthlyTournamentService();
@@ -196,6 +197,48 @@ tournamentRoutes.get("/ticket/balance", middlewareAuth, async (c) => {
     return onErrorRestResponse({
       ctx: c,
       errorMessage: "Failed to fetch ticket balance",
+    });
+  }
+});
+
+tournamentRoutes.get("/ticket/info", middlewareAuth, async (c) => {
+  const user = c.get("user");
+  if (!user) {
+    return onErrorRestResponse({ ctx: c, errorMessage: "Unauthorized" });
+  }
+  try {
+    const info = await getTicketInfo(user.id);
+    return onOkRestResponse({ ctx: c, data: info });
+  } catch (error) {
+    return onErrorRestResponse({
+      ctx: c,
+      errorMessage: "Failed to fetch ticket info",
+    });
+  }
+});
+
+tournamentRoutes.get("/weekly/stats", middlewareAuth, async (c) => {
+  const user = c.get("user");
+  if (!user) {
+    return onErrorRestResponse({ ctx: c, errorMessage: "Unauthorized" });
+  }
+
+  try {
+    // دریافت فصل فعال هفتگی
+    const season = await weeklyService.getCurrentSeason("WEEKLY");
+    if (!season) {
+      return onErrorRestResponse({
+        ctx: c,
+        errorMessage: "No active weekly season",
+      });
+    }
+
+    const stats = await weeklyService.getPlayerStats(user.id, season.id);
+    return onOkRestResponse({ ctx: c, data: stats });
+  } catch (error) {
+    return onErrorRestResponse({
+      ctx: c,
+      errorMessage: "Failed to fetch weekly stats",
     });
   }
 });

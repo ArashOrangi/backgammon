@@ -167,4 +167,47 @@ export class WeeklyTournamentService extends TournamentService {
       },
     });
   }
+
+  async getPlayerStats(playerId: number, seasonId: number) {
+    // دریافت ۲۰ بازی برتر (غیر Forfeit)
+    const bestGames = await prisma.weeklyGameResult.findMany({
+      where: {
+        playerId,
+        seasonId,
+        isForfeit: false,
+      },
+      orderBy: { totalScore: "desc" },
+      take: 20,
+      select: {
+        gameId: true,
+        result: true,
+        totalScore: true,
+        finishedAt: true,
+      },
+    });
+
+    const totalGames = await prisma.weeklyGameResult.count({
+      where: {
+        playerId,
+        seasonId,
+        isForfeit: false,
+      },
+    });
+
+    const bestScore = bestGames.reduce((sum, g) => sum + g.totalScore, 0);
+    const requiredGames = 5; // طبق مستندات
+    const remaining = Math.max(0, requiredGames - totalGames);
+
+    return {
+      totalGames,
+      bestScore,
+      bestGames,
+      eligibility: {
+        requiredGames,
+        played: totalGames,
+        remaining,
+        isEligible: totalGames >= requiredGames,
+      },
+    };
+  }
 }

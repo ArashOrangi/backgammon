@@ -9,6 +9,8 @@ import {
 import { TournamentService } from "./tournament";
 import { loadGameState, forceSnapshot } from "@/game/eventStore";
 import { saveGame } from "@/game/gameStore";
+import { getUserSocket } from "@/socket/socketRegistry";
+import { onOkSocketResponse } from "@/responses/response-builder";
 
 interface MatchmakingConfig {
   initialRange: number;
@@ -55,16 +57,10 @@ export class TournamentMatchmaking {
     seasonId: number,
     type: TournamentType,
   ): Promise<void> {
-    // ۱. بررسی بلیط (برای ماهانه)
+    // ۱. بررسی سری فعال (برای ماهانه)
     if (type === "MONTHLY") {
-      const ticket = await prisma.userTicket.findUnique({
-        where: { userId: playerId },
-      });
-      if (!ticket || ticket.balance < 1) {
-        throw new Error("Insufficient tickets for Monthly tournament");
-      }
-
-      // بررسی وجود سری فعال
+      // ❌ حذف شرط موجودی بلیط
+      // فقط بررسی وجود سری فعال
       const activeSeries = await prisma.tournamentSeries.findFirst({
         where: {
           playerId,
@@ -271,6 +267,9 @@ export class TournamentMatchmaking {
     console.log(
       `[Matchmaking] Match created: game ${game.id} between ${playerA} and ${playerB}`,
     );
+
+    // ====== ارسال tournament.match_found به هر دو بازیکن ======
+    await this.notifyMatchFound(game.id, playerA, playerB);
   }
 
   // ---------- ساخت بات ----------
@@ -296,7 +295,7 @@ export class TournamentMatchmaking {
     });
 
     // ایجاد بازی با بات (شناسه کاربری ثابت برای بات)
-    const botUserId = 0; // کاربر بات
+    const botUserId = 1; // BOT_USER_ID از statics
     const game = await prisma.games.create({
       data: {
         status: "PENDING",
@@ -352,6 +351,66 @@ export class TournamentMatchmaking {
     console.log(
       `[Matchmaking] Bot match created: game ${game.id} for player ${playerId}`,
     );
+
+    // ====== ارسال tournament.match_found به بازیکن ======
+    await this.notifyMatchFound(game.id, playerId, botUserId);
+  }
+
+  // ---------- ارسال پیام match_found به بازیکن(ها) ----------
+  private async notifyMatchFound(
+    gameId: number,
+    playerA: number,
+    playerB: number,
+  ): Promise<void> {
+    // دریافت اطلاعات هر دو بازیکن
+    const players = await prisma.user.findMany({
+      where: { id: { in: [playerA, playerB] } },
+      select: {
+        id: true,
+        userName: true,
+        avatar: true,
+      },
+    });
+
+    const playerAMap = players.find((p) => p.id === playerA);
+    const playerBMap = players.find((p) => p.id === playerB);
+
+    if (!playerAMap || !playerBMap) {
+      console.error(`[Matchmaking] Player info not found for game ${gameId}`);
+      return;
+    }
+
+    // ارسال به playerA (با اطلاعات opponent = playerB)
+    const socketA = getUserSocket(playerA);
+    if (socketA) {
+      socketA.send({
+        type: "tournament.match_found",
+        payload: onOkSocketResponse({
+          gameId,
+          opponent: {
+            id: playerBMap.id,
+            userName: playerBMap.userName,
+            avatar: playerBMap.avatar ?? "",
+          },
+        }),
+      });
+    }
+
+    // ارسال به playerB (با اطلاعات opponent = playerA)
+    const socketB = getUserSocket(playerB);
+    if (socketB) {
+      socketB.send({
+        type: "tournament.match_found",
+        payload: onOkSocketResponse({
+          gameId,
+          opponent: {
+            id: playerAMap.id,
+            userName: playerAMap.userName,
+            avatar: playerBMap.avatar ?? "",
+          },
+        }),
+      });
+    }
   }
 
   // ---------- لغو صف ----------

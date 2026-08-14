@@ -1070,7 +1070,7 @@ paths:
   /api/tournament/ticket/balance:
     get:
       tags: [Tournament]
-      summary: Get current user's golden ticket balance
+      summary: Get current user's golden ticket balance (legacy)
       security:
         - bearerAuth: []
       responses:
@@ -1086,6 +1086,99 @@ paths:
                     example: 5
         '401':
           description: Not authenticated
+        '500':
+          description: Server error
+
+  /api/tournament/ticket/info:
+    get:
+      tags: [Tournament]
+      summary: Get detailed ticket information
+      description: Returns balance, next recharge time, max balance, and interval in seconds.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ticket info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  balance:
+                    type: integer
+                    example: 3
+                  nextRegenAt:
+                    type: string
+                    format: date-time
+                    example: "2025-01-15T00:00:00.000Z"
+                  remainingSeconds:
+                    type: integer
+                    example: 43200
+                  regenIntervalHours:
+                    type: integer
+                    example: 24
+                  maxBalance:
+                    type: integer
+                    example: 5
+        '401':
+          description: Not authenticated
+        '500':
+          description: Server error
+
+  /api/tournament/weekly/stats:
+    get:
+      tags: [Tournament]
+      summary: Get weekly tournament stats for current user
+      description: Returns total games, Best‑20 score, best games list, and eligibility status.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Weekly stats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalGames:
+                    type: integer
+                    example: 7
+                  bestScore:
+                    type: integer
+                    example: 185
+                  bestGames:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        gameId:
+                          type: integer
+                        result:
+                          $ref: '#/components/schemas/MatchResultType'
+                        totalScore:
+                          type: integer
+                        finishedAt:
+                          type: string
+                          format: date-time
+                  eligibility:
+                    type: object
+                    properties:
+                      requiredGames:
+                        type: integer
+                        example: 5
+                      played:
+                        type: integer
+                        example: 7
+                      remaining:
+                        type: integer
+                        example: 0
+                      isEligible:
+                        type: boolean
+                        example: true
+        '401':
+          description: Not authenticated
+        '404':
+          description: No active weekly season
         '500':
           description: Server error
 

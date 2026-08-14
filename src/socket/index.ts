@@ -29,6 +29,7 @@ import {
   handleTournamentMatchmakingJoin,
   handleTournamentMatchmakingCancel,
 } from "./handlers/tournament";
+import { unregisterUserSocket } from "./socketRegistry";
 
 export function registerSocketHandlers(
   wss: WebSocketServer,
@@ -108,6 +109,7 @@ export function registerSocketHandlers(
       const userId = ctx.userId;
       if (userId) {
         clearWaitingUser(userId);
+        unregisterUserSocket(userId);
       }
       const gameId = rooms.getRoomOfSocket(ctx);
       if (gameId) {
